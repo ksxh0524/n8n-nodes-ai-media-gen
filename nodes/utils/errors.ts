@@ -105,7 +105,7 @@ export function validateCredentials(credentials: any): { valid: boolean; errors:
 		errors.push('API format is required');
 	}
 
-	const validFormats = ['openai', 'gemini', 'bailian'];
+	const validFormats = ['openai', 'gemini', 'bailian', 'replicate', 'huggingface'];
 	if (credentials.apiFormat && !validFormats.includes(credentials.apiFormat)) {
 		errors.push(`API format must be one of: ${validFormats.join(', ')}`);
 	}

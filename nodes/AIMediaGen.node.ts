@@ -25,7 +25,6 @@ import {
 } from './utils/cache';
 import {
 	ResponseNormalizer,
-	NormaliedResponse,
 } from './utils/response';
 import {
 	PerformanceMonitor,
@@ -34,10 +33,6 @@ import {
 import { RateLimiter } from './utils/rateLimiter';
 
 export class AIMediaGen implements INodeType {
-	private cacheManager: CacheManager;
-	private performanceMonitor: PerformanceMonitor;
-	private rateLimiter: RateLimiter;
-
 	description: INodeTypeDescription = {
 		displayName: 'AI Media Generation',
 		name: 'aiMediaGen',
@@ -101,12 +96,6 @@ export class AIMediaGen implements INodeType {
 		],
 	};
 
-	constructor() {
-		this.cacheManager = CacheManager.getInstance();
-		this.performanceMonitor = new PerformanceMonitor();
-		this.rateLimiter = new RateLimiter(10, 60);
-	}
-
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
 		const items = this.getInputData();
 		const results: INodeExecutionData[] = [];
@@ -115,13 +104,14 @@ export class AIMediaGen implements INodeType {
 		const enableCache = credentials.enableCache as boolean ?? true;
 		const cacheTtl = credentials.cacheTtl as number ?? 3600;
 
+		let cacheManager: CacheManager | undefined;
 		if (enableCache) {
-			this.cacheManager = CacheManager.getInstance(new MemoryCache({ maxSize: 200, defaultTtl: cacheTtl }));
+			cacheManager = CacheManager.getInstance(new MemoryCache({ maxSize: 200, defaultTtl: cacheTtl }));
 		}
 
 		for (const _item of items) {
 			try {
-				const result = await this.executeGeneration(this, enableCache, cacheTtl);
+				const result = await executeGeneration(this, cacheManager, enableCache, cacheTtl);
 				results.push(result);
 			} catch (error) {
 				this.logger?.error('Media generation failed', {
@@ -136,7 +126,8 @@ export class AIMediaGen implements INodeType {
 				const errorResponse = ResponseNormalizer.normalizeError(
 					error as Error,
 					apiFormat,
-					model
+					model,
+					mediaType
 				);
 
 				results.push({
@@ -147,19 +138,21 @@ export class AIMediaGen implements INodeType {
 
 		return [this.helpers.constructExecutionMetaData(results, { itemData: { item: 0 } })];
 	}
+}
 
-	private async executeGeneration(
-		context: IExecuteFunctions,
-		enableCache: boolean,
-		cacheTtl: number
-	): Promise<INodeExecutionData> {
+async function executeGeneration(
+	context: IExecuteFunctions,
+	cacheManager: CacheManager | undefined,
+	enableCache: boolean,
+	cacheTtl: number
+): Promise<INodeExecutionData> {
 		const model = context.getNodeParameter('model', 0) as string;
 		const prompt = context.getNodeParameter('prompt', 0) as string;
 		const additionalParamsJson = context.getNodeParameter('additionalParams', 0) as string;
 		const maxRetries = context.getNodeParameter('maxRetries', 0) as number;
 		const timeout = context.getNodeParameter('timeout', 0) as number;
 
-		context.logger?.info('Starting media generation', { model, enableCache });
+		context.logger?.debug('Starting media generation', { model, enableCache });
 
 		const validation = validateGenerationParams({ model, prompt, additionalParams: additionalParamsJson });
 		if (!validation.valid) {
@@ -197,7 +190,7 @@ export class AIMediaGen implements INodeType {
 		const mediaType = detectMediaType(model);
 		context.logger?.debug('Detected media type', { model, mediaType });
 
-		const endpoint = getEndpoint(apiFormat, mediaType, model);
+		const endpoint = getEndpoint(apiFormat, mediaType, model, apiKey);
 		const headers = getHeaders(apiFormat, apiKey);
 		const body = buildRequestBody(apiFormat, mediaType, model, prompt, additionalParams);
 
@@ -213,23 +206,25 @@ export class AIMediaGen implements INodeType {
 		let success = true;
 		let error: Error | undefined;
 
-		try {
-			await this.rateLimiter.acquire();
+		const rateLimiter = new RateLimiter(10, 60);
 
-			if (enableCache) {
+		try {
+			await rateLimiter.acquire();
+
+			if (enableCache && cacheManager) {
 				const cacheKey = CacheKeyGenerator.forGeneration(apiFormat, model, prompt, additionalParams);
-				const cached = await this.cacheManager.get(cacheKey);
+				const cached = await cacheManager.get(cacheKey);
 
 				if (cached) {
 					context.logger?.info('Cache hit', { cacheKey });
 					response = cached;
 				} else {
-					response = await this.makeApiRequest(context, baseUrl, endpoint, headers, body, timeout, maxRetries);
-					await this.cacheManager.set(cacheKey, response, cacheTtl);
+					response = await makeApiRequest(context, baseUrl, endpoint, headers, body, timeout, maxRetries);
+					await cacheManager.set(cacheKey, response, cacheTtl);
 					context.logger?.info('Cached result', { cacheKey });
 				}
 			} else {
-				response = await this.makeApiRequest(context, baseUrl, endpoint, headers, body, timeout, maxRetries);
+				response = await makeApiRequest(context, baseUrl, endpoint, headers, body, timeout, maxRetries);
 			}
 		} catch (e) {
 			success = false;
@@ -271,27 +266,26 @@ export class AIMediaGen implements INodeType {
 		};
 	}
 
-	private async makeApiRequest(
-		context: IExecuteFunctions,
-		baseUrl: string,
-		endpoint: string,
-		headers: Record<string, string>,
-		body: any,
-		timeout: number,
-		maxRetries: number
-	): Promise<any> {
-		return await withRetry(
-			async () => {
-				return await context.helpers.httpRequest({
-					method: 'POST',
-					url: baseUrl + endpoint,
-					headers,
-					body,
-					json: true,
-					timeout,
-				});
-			},
-			{ maxRetries, initialDelay: 1000, maxDelay: 30000 }
-		);
-	}
+async function makeApiRequest(
+	context: IExecuteFunctions,
+	baseUrl: string,
+	endpoint: string,
+	headers: Record<string, string>,
+	body: any,
+	timeout: number,
+	maxRetries: number
+): Promise<any> {
+	return await withRetry(
+		async () => {
+			return await context.helpers.httpRequest({
+				method: 'POST',
+				url: baseUrl + endpoint,
+				headers,
+				body,
+				json: true,
+				timeout,
+			});
+		},
+		{ maxRetries, initialDelay: 1000, maxDelay: 30000 }
+	);
 }

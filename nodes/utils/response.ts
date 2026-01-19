@@ -13,6 +13,7 @@ export interface NormalizedResponse {
 	};
 	error?: string;
 	errorCode?: string;
+	[key: string]: any;
 }
 
 export class ResponseNormalizer {
@@ -46,7 +47,8 @@ export class ResponseNormalizer {
 	static normalizeError(
 		error: Error,
 		provider: string,
-		model: string
+		model: string,
+		mediaType: 'image' | 'audio' | 'video' = 'image'
 	): NormalizedResponse {
 		return {
 			success: false,
@@ -55,7 +57,7 @@ export class ResponseNormalizer {
 			metadata: {
 				provider,
 				model,
-				mediaType: 'image',
+				mediaType,
 				timestamp: new Date().toISOString(),
 				cached: false,
 			},
@@ -64,7 +66,7 @@ export class ResponseNormalizer {
 
 	private static extractUrl(
 		response: any,
-		mediaType: 'image' | 'audio' | 'video',
+		_mediaType: 'image' | 'audio' | 'video',
 		provider: string
 	): string | undefined {
 		if (!response) return undefined;

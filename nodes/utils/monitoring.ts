@@ -12,7 +12,7 @@ export class PerformanceMonitor {
 	private static metrics: PerformanceMetrics[] = [];
 	private static maxMetrics = 100;
 
-	static startTimer(operation: string): () => number {
+	static startTimer(_operation: string): number {
 		return Date.now();
 	}
 

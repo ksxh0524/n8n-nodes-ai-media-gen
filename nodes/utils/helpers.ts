@@ -31,7 +31,8 @@ export function getDefaultBaseUrl(apiFormat: string): string {
 export function getEndpoint(
 	apiFormat: string,
 	mediaType: MediaType,
-	model: string
+	model: string,
+	apiKey?: string
 ): string {
 	if (apiFormat === 'openai') {
 		if (mediaType === 'image') return '/images/generations';
@@ -40,7 +41,9 @@ export function getEndpoint(
 	}
 
 	if (apiFormat === 'gemini') {
-		return `/models/${model}:predictImage`;
+		const separator = '?';
+		const keyParam = apiKey ? `key=${apiKey}` : '';
+		return `/models/${model}:predictImage${separator}${keyParam}`;
 	}
 
 	if (apiFormat === 'bailian') {

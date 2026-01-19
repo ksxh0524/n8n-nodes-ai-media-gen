@@ -66,7 +66,7 @@ describe('validateCredentials', () => {
 			apiFormat: 'invalid',
 		});
 		expect(result.valid).toBe(false);
-		expect(result.errors).toContain('API format must be one of: openai, gemini, bailian');
+		expect(result.errors).toContain('API format must be one of: openai, gemini, bailian, replicate, huggingface');
 	});
 });
 

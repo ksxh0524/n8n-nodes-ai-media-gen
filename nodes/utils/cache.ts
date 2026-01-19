@@ -1,3 +1,5 @@
+import { createHash } from 'crypto';
+
 export interface ICache {
 	get(key: string): Promise<any | null>;
 	set(key: string, value: any, ttl?: number): Promise<void>;
@@ -123,12 +125,6 @@ export class CacheKeyGenerator {
 	}
 
 	private static hash(str: string): string {
-		let hash = 0;
-		for (let i = 0; i < str.length; i++) {
-			const char = str.charCodeAt(i);
-			hash = ((hash << 5) - hash) + char;
-			hash = hash & hash;
-		}
-		return hash.toString(36);
+		return createHash('sha256').update(str).digest('hex').substring(0, 16);
 	}
 }
