@@ -36,9 +36,9 @@
         "name": "AIMediaGen",
         "displayName": "AI Media Generation",
         "group": ["ai"],
-        "subtitle": "={{$parameter['provider'] + ' - ' + $parameter['model']}}",
-        "description": "Generate images, videos, and audio using various AI models",
-        "icon": "file:../nodes/nodes/AIMediaGen/icon.svg",
+        "subtitle": "={{$parameter.provider + ' - ' + $parameter.operation}}",
+        "description": "Generate images, videos, and audio using OpenAI, Gemini, Bailian, or Doubao",
+        "icon": "file:ai-media-gen.svg",
         "subgroup": "media-generation",
         "defaults": {
           "name": "AI Media Gen"
