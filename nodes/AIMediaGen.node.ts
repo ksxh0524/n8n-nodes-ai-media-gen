@@ -1,6 +1,6 @@
 /**
  * AI Media Generation Node
- * Simple API wrapper - no validation, no error handling, just API calls
+ * Simple API wrapper with 3 credential types and auto media type detection
  */
 
 import {
@@ -24,55 +24,21 @@ export class AIMediaGen implements INodeType {
 		usableAsTool: true,
 		inputs: ['main'],
 		outputs: ['main'],
+		credentials: [
+			{
+				name: 'aiMediaApi',
+				required: true,
+			},
+		],
 		properties: [
-			{
-				displayName: 'Provider',
-				name: 'provider',
-				type: 'options',
-				required: true,
-				default: 'openai',
-				options: [
-					{ name: 'OpenAI', value: 'openai' },
-					{ name: 'Gemini', value: 'gemini' },
-					{ name: 'Bailian (阿里百炼)', value: 'bailian' },
-					{ name: 'Doubao (豆包)', value: 'doubao' },
-				],
-			},
-			{
-				displayName: 'API Key',
-				name: 'apiKey',
-				type: 'string',
-				typeOptions: { password: true },
-				default: '',
-				required: true,
-			},
-			{
-				displayName: 'Base URL',
-				name: 'baseUrl',
-				type: 'string',
-				default: '',
-				required: false,
-				placeholder: 'https://api.openai.com/v1',
-			},
-			{
-				displayName: 'Operation',
-				name: 'operation',
-				type: 'options',
-				required: true,
-				default: 'text2Image',
-				options: [
-					{ name: 'Text to Image', value: 'text2Image' },
-					{ name: 'Text to Audio', value: 'text2Audio' },
-					{ name: 'Text to Video', value: 'text2Video' },
-				],
-			},
 			{
 				displayName: 'Model',
 				name: 'model',
 				type: 'string',
 				default: 'dall-e-3',
 				required: true,
-				description: 'Model name (e.g., dall-e-3, imagen-2.0, wanx-v1, etc.)',
+				description: 'Model name (e.g., dall-e-3, imagen-2.0, wanx-v1, flux-schnell, tts-1, sora)',
+				placeholder: 'dall-e-3',
 			},
 			{
 				displayName: 'Prompt',
@@ -80,31 +46,16 @@ export class AIMediaGen implements INodeType {
 				type: 'string',
 				typeOptions: { rows: 5 },
 				default: '',
-				displayOptions: {
-					show: {
-						operation: ['text2Image', 'text2Video'],
-					},
-				},
+				required: true,
+				description: 'Text prompt for generation',
 			},
 			{
-				displayName: 'Text',
-				name: 'text',
+				displayName: 'Additional Parameters (JSON)',
+				name: 'additionalParams',
 				type: 'string',
-				typeOptions: { rows: 5 },
-				default: '',
-				displayOptions: {
-					show: {
-						operation: ['text2Audio'],
-					},
-				},
-			},
-			{
-				displayName: 'Request Body (JSON)',
-				name: 'requestBody',
-				type: 'string',
-				typeOptions: { rows: 10 },
+				typeOptions: { rows: 8 },
 				default: '{}',
-				description: 'Additional parameters as JSON object',
+				description: 'Additional parameters as JSON object (e.g., {"size": "1024x1024", "n": 1})',
 			},
 		],
 	};
@@ -114,44 +65,52 @@ export class AIMediaGen implements INodeType {
 		const results: INodeExecutionData[] = [];
 
 		for (const _item of items) {
-			const provider = this.getNodeParameter('provider', 0) as string;
-			const apiKey = this.getNodeParameter('apiKey', 0) as string;
-			let baseUrl = this.getNodeParameter('baseUrl', 0) as string;
-			const operation = this.getNodeParameter('operation', 0) as string;
 			const model = this.getNodeParameter('model', 0) as string;
 			const prompt = this.getNodeParameter('prompt', 0) as string;
-			const text = this.getNodeParameter('text', 0) as string;
-			const requestBodyJson = this.getNodeParameter('requestBody', 0) as string;
-
-			// Set default base URLs
-			if (!baseUrl) {
-				baseUrl = getDefaultBaseUrl(provider);
-			}
+			const additionalParamsJson = this.getNodeParameter('additionalParams', 0) as string;
 
 			// Parse additional parameters
 			let additionalParams = {};
 			try {
-				additionalParams = JSON.parse(requestBodyJson || '{}');
+				additionalParams = JSON.parse(additionalParamsJson || '{}');
 			} catch (e) {
-				// Ignore JSON parse errors
+				// Ignore JSON parse errors, use empty object
 			}
 
+			// Get credentials
+			const credentials = await this.getCredentials('aiMediaApi');
+			const apiFormat = credentials.apiFormat as string;
+			const apiKey = credentials.apiKey as string;
+			const baseUrl = credentials.baseUrl as string || getDefaultBaseUrl(apiFormat);
+
+			// Auto-detect media type from model name
+			const mediaType = detectMediaType(model);
+
 			// Build request
-			const endpoint = getEndpoint(provider, operation);
-			const body = buildRequestBody(provider, operation, model, prompt || text, additionalParams);
+			const endpoint = getEndpoint(apiFormat, mediaType, model);
+			const headers = getHeaders(apiFormat, apiKey);
+			const body = buildRequestBody(apiFormat, mediaType, model, prompt, additionalParams);
 
 			// Make API call
 			const response = await this.helpers.httpRequest({
 				method: 'POST',
 				url: baseUrl + endpoint,
-				headers: getHeaders(provider, apiKey),
+				headers,
 				body,
 				json: true,
 			});
 
-			// Return response
+			// Return response with metadata
 			results.push({
-				json: response,
+				json: {
+					...response,
+					_metadata: {
+						apiFormat,
+						model,
+						mediaType,
+						timestamp: new Date().toISOString(),
+					},
+				},
 			});
 		}
 
@@ -159,81 +118,141 @@ export class AIMediaGen implements INodeType {
 	}
 }
 
-function getDefaultBaseUrl(provider: string): string {
+/**
+ * Detect media type from model name
+ */
+function detectMediaType(model: string): 'image' | 'audio' | 'video' {
+	const modelLower = model.toLowerCase();
+
+	// Video models
+	if (modelLower.includes('sora') ||
+		modelLower.includes('video') ||
+		modelLower.includes('svd') ||
+		modelLower.includes('cogvideo')) {
+		return 'video';
+	}
+
+	// Audio models
+	if (modelLower.includes('tts') ||
+		modelLower.includes('audio') ||
+		modelLower.includes('speech') ||
+		modelLower.includes('voice') ||
+		modelLower.includes('sambert')) {
+		return 'audio';
+	}
+
+	// Default to image
+	return 'image';
+}
+
+/**
+ * Get default base URL for API format
+ */
+function getDefaultBaseUrl(apiFormat: string): string {
 	const defaults: Record<string, string> = {
 		openai: 'https://api.openai.com/v1',
 		gemini: 'https://generativelanguage.googleapis.com/v1beta',
 		bailian: 'https://dashscope.aliyuncs.com/api/v1',
-		doubao: 'https://ark.cn-beijing.volces.com/api/v3',
 	};
-	return defaults[provider] || '';
+	return defaults[apiFormat] || '';
 }
 
-function getEndpoint(provider: string, operation: string): string {
-	if (provider === 'openai') {
-		if (operation === 'text2Image') return '/images/generations';
-		if (operation === 'text2Audio') return '/audio/speech';
-		if (operation === 'text2Video') return '/videos/generations';
+/**
+ * Get API endpoint based on API format and media type
+ */
+function getEndpoint(apiFormat: string, mediaType: 'image' | 'audio' | 'video', model: string): string {
+	if (apiFormat === 'openai') {
+		if (mediaType === 'image') return '/images/generations';
+		if (mediaType === 'audio') return '/audio/speech';
+		if (mediaType === 'video') return '/videos/generations';
 	}
-	if (provider === 'gemini') {
-		return '/models/imagen-2.0:predictImage';
+
+	if (apiFormat === 'gemini') {
+		// Gemini uses different endpoint format with model name
+		return `/models/${model}:predictImage`;
 	}
-	if (provider === 'bailian') {
-		if (operation === 'text2Image') return '/services/aigc/text2image/image-synthesis';
+
+	if (apiFormat === 'bailian') {
+		if (mediaType === 'image') return '/services/aigc/text2image/image-synthesis';
+		if (mediaType === 'audio') return '/services/aigc/text2speech/synthesis';
+		if (mediaType === 'video') return '/services/aigc/text2video/video-synthesis';
 	}
-	if (provider === 'doubao') {
-		if (operation === 'text2Image') return '/images/generations';
-		if (operation === 'text2Audio') return '/audio/speech';
-	}
+
 	return '';
 }
 
-function getHeaders(provider: string, apiKey: string): Record<string, string> {
-	if (provider === 'gemini') {
-		return { 'Content-Type': 'application/json' };
+/**
+ * Get request headers for API format
+ */
+function getHeaders(apiFormat: string, apiKey: string): Record<string, string> {
+	if (apiFormat === 'gemini') {
+		return {
+			'Content-Type': 'application/json',
+		};
 	}
+
 	return {
 		'Content-Type': 'application/json',
 		'Authorization': `Bearer ${apiKey}`,
 	};
 }
 
-function buildRequestBody(provider: string, operation: string, model: string, text: string, additional: any): any {
-	if (provider === 'openai') {
-		if (operation === 'text2Image') {
-			return {
-				model,
-				prompt: text,
-				...additional,
-			};
+/**
+ * Build request body based on API format and media type
+ */
+function buildRequestBody(
+	apiFormat: string,
+	mediaType: 'image' | 'audio' | 'video',
+	model: string,
+	prompt: string,
+	additional: any
+): any {
+	if (apiFormat === 'openai') {
+		const base: any = { model };
+
+		if (mediaType === 'image') {
+			base.prompt = prompt;
+		} else if (mediaType === 'audio') {
+			base.input = prompt;
+		} else if (mediaType === 'video') {
+			base.prompt = prompt;
 		}
-		if (operation === 'text2Audio') {
-			return {
-				model,
-				input: text,
-				...additional,
-			};
-		}
+
+		return { ...base, ...additional };
 	}
-	if (provider === 'gemini') {
+
+	if (apiFormat === 'gemini') {
 		return {
-			prompt: { text },
+			prompt: { text: prompt },
 			...additional,
 		};
 	}
-	if (provider === 'bailian') {
-		return {
-			model,
-			input: { prompt: text },
-			parameters: additional,
-		};
+
+	if (apiFormat === 'bailian') {
+		if (mediaType === 'image') {
+			return {
+				model,
+				input: { prompt },
+				parameters: additional,
+			};
+		}
+
+		if (mediaType === 'audio') {
+			return {
+				model,
+				input: { text: prompt },
+				parameters: additional,
+			};
+		}
+
+		if (mediaType === 'video') {
+			return {
+				model,
+				input: { prompt },
+				parameters: additional,
+			};
+		}
 	}
-	if (provider === 'doubao') {
-		return {
-			model,
-			prompt: text,
-			...additional,
-		};
-	}
-	return { model, prompt: text, ...additional };
+
+	return { model, prompt, ...additional };
 }

@@ -1,0 +1,1 @@
+export { aiMediaApi } from './aiMediaApi.credentials';
