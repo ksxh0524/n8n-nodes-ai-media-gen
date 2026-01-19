@@ -30,7 +30,9 @@
   "types": "dist/index.d.ts",
   "n8n": {
     "n8nVersionCompat": ">=1.0.0",
-    "credentials": [],
+    "credentials": [
+      "aiMediaApi"
+    ],
     "nodes": [
       {
         "name": "AIMediaGen",
@@ -46,7 +48,9 @@
         "inputs": ["main"],
         "outputs": ["main"],
         "usableAsTool": true,
-        "credentials": []
+        "credentials": [
+          "aiMediaApi"
+        ]
       }
     ]
   },

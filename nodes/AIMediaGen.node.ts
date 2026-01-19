@@ -1,16 +1,43 @@
-/**
- * AI Media Generation Node
- * Simple API wrapper with 3 credential types and auto media type detection
- */
-
 import {
 	INodeType,
 	INodeTypeDescription,
 	INodeExecutionData,
 	IExecuteFunctions,
 } from 'n8n-workflow';
+import {
+	MediaGenError,
+	ERROR_CODES,
+	withRetry,
+	validateCredentials,
+	validateGenerationParams,
+} from './utils/errors';
+import {
+	detectMediaType,
+	getDefaultBaseUrl,
+	getEndpoint,
+	getHeaders,
+	buildRequestBody,
+} from './utils/helpers';
+import {
+	CacheManager,
+	CacheKeyGenerator,
+	MemoryCache,
+} from './utils/cache';
+import {
+	ResponseNormalizer,
+	NormaliedResponse,
+} from './utils/response';
+import {
+	PerformanceMonitor,
+	PerformanceMetrics,
+} from './utils/monitoring';
+import { RateLimiter } from './utils/rateLimiter';
 
 export class AIMediaGen implements INodeType {
+	private cacheManager: CacheManager;
+	private performanceMonitor: PerformanceMonitor;
+	private rateLimiter: RateLimiter;
+
 	description: INodeTypeDescription = {
 		displayName: 'AI Media Generation',
 		name: 'aiMediaGen',
@@ -57,202 +84,214 @@ export class AIMediaGen implements INodeType {
 				default: '{}',
 				description: 'Additional parameters as JSON object (e.g., {"size": "1024x1024", "n": 1})',
 			},
+			{
+				displayName: 'Max Retries',
+				name: 'maxRetries',
+				type: 'number',
+				default: 3,
+				description: 'Maximum number of retry attempts for failed requests',
+			},
+			{
+				displayName: 'Timeout (ms)',
+				name: 'timeout',
+				type: 'number',
+				default: 60000,
+				description: 'Request timeout in milliseconds',
+			},
 		],
 	};
+
+	constructor() {
+		this.cacheManager = CacheManager.getInstance();
+		this.performanceMonitor = new PerformanceMonitor();
+		this.rateLimiter = new RateLimiter(10, 60);
+	}
 
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
 		const items = this.getInputData();
 		const results: INodeExecutionData[] = [];
 
+		const credentials = await this.getCredentials('aiMediaApi');
+		const enableCache = credentials.enableCache as boolean ?? true;
+		const cacheTtl = credentials.cacheTtl as number ?? 3600;
+
+		if (enableCache) {
+			this.cacheManager = CacheManager.getInstance(new MemoryCache({ maxSize: 200, defaultTtl: cacheTtl }));
+		}
+
 		for (const _item of items) {
-			const model = this.getNodeParameter('model', 0) as string;
-			const prompt = this.getNodeParameter('prompt', 0) as string;
-			const additionalParamsJson = this.getNodeParameter('additionalParams', 0) as string;
-
-			// Parse additional parameters
-			let additionalParams = {};
 			try {
-				additionalParams = JSON.parse(additionalParamsJson || '{}');
-			} catch (e) {
-				// Ignore JSON parse errors, use empty object
+				const result = await this.executeGeneration(this, enableCache, cacheTtl);
+				results.push(result);
+			} catch (error) {
+				this.logger?.error('Media generation failed', {
+					error: error instanceof Error ? error.message : String(error),
+					model: this.getNodeParameter('model', 0) as string,
+				});
+
+				const apiFormat = credentials.apiFormat as string;
+				const model = this.getNodeParameter('model', 0) as string;
+				const mediaType = detectMediaType(model);
+
+				const errorResponse = ResponseNormalizer.normalizeError(
+					error as Error,
+					apiFormat,
+					model
+				);
+
+				results.push({
+					json: errorResponse,
+				});
 			}
-
-			// Get credentials
-			const credentials = await this.getCredentials('aiMediaApi');
-			const apiFormat = credentials.apiFormat as string;
-			const apiKey = credentials.apiKey as string;
-			const baseUrl = credentials.baseUrl as string || getDefaultBaseUrl(apiFormat);
-
-			// Auto-detect media type from model name
-			const mediaType = detectMediaType(model);
-
-			// Build request
-			const endpoint = getEndpoint(apiFormat, mediaType, model);
-			const headers = getHeaders(apiFormat, apiKey);
-			const body = buildRequestBody(apiFormat, mediaType, model, prompt, additionalParams);
-
-			// Make API call
-			const response = await this.helpers.httpRequest({
-				method: 'POST',
-				url: baseUrl + endpoint,
-				headers,
-				body,
-				json: true,
-			});
-
-			// Return response with metadata
-			results.push({
-				json: {
-					...response,
-					_metadata: {
-						apiFormat,
-						model,
-						mediaType,
-						timestamp: new Date().toISOString(),
-					},
-				},
-			});
 		}
 
 		return [this.helpers.constructExecutionMetaData(results, { itemData: { item: 0 } })];
 	}
-}
 
-/**
- * Detect media type from model name
- */
-function detectMediaType(model: string): 'image' | 'audio' | 'video' {
-	const modelLower = model.toLowerCase();
+	private async executeGeneration(
+		context: IExecuteFunctions,
+		enableCache: boolean,
+		cacheTtl: number
+	): Promise<INodeExecutionData> {
+		const model = context.getNodeParameter('model', 0) as string;
+		const prompt = context.getNodeParameter('prompt', 0) as string;
+		const additionalParamsJson = context.getNodeParameter('additionalParams', 0) as string;
+		const maxRetries = context.getNodeParameter('maxRetries', 0) as number;
+		const timeout = context.getNodeParameter('timeout', 0) as number;
 
-	// Video models
-	if (modelLower.includes('sora') ||
-		modelLower.includes('video') ||
-		modelLower.includes('svd') ||
-		modelLower.includes('cogvideo')) {
-		return 'video';
-	}
+		context.logger?.info('Starting media generation', { model, enableCache });
 
-	// Audio models
-	if (modelLower.includes('tts') ||
-		modelLower.includes('audio') ||
-		modelLower.includes('speech') ||
-		modelLower.includes('voice') ||
-		modelLower.includes('sambert')) {
-		return 'audio';
-	}
+		const validation = validateGenerationParams({ model, prompt, additionalParams: additionalParamsJson });
+		if (!validation.valid) {
+			throw new MediaGenError(
+				`Invalid parameters: ${validation.errors.join(', ')}`,
+				ERROR_CODES.INVALID_PARAMS,
+				{ errors: validation.errors }
+			);
+		}
 
-	// Default to image
-	return 'image';
-}
+		let additionalParams = {};
+		try {
+			additionalParams = JSON.parse(additionalParamsJson || '{}');
+		} catch (e) {
+			throw new MediaGenError(
+				'Additional parameters must be valid JSON',
+				ERROR_CODES.INVALID_PARAMS
+			);
+		}
 
-/**
- * Get default base URL for API format
- */
-function getDefaultBaseUrl(apiFormat: string): string {
-	const defaults: Record<string, string> = {
-		openai: 'https://api.openai.com/v1',
-		gemini: 'https://generativelanguage.googleapis.com/v1beta',
-		bailian: 'https://dashscope.aliyuncs.com/api/v1',
-	};
-	return defaults[apiFormat] || '';
-}
+		const credentials = await context.getCredentials('aiMediaApi');
+		const credValidation = validateCredentials(credentials);
+		if (!credValidation.valid) {
+			throw new MediaGenError(
+				`Invalid credentials: ${credValidation.errors.join(', ')}`,
+				ERROR_CODES.INVALID_API_KEY,
+				{ errors: credValidation.errors }
+			);
+		}
 
-/**
- * Get API endpoint based on API format and media type
- */
-function getEndpoint(apiFormat: string, mediaType: 'image' | 'audio' | 'video', model: string): string {
-	if (apiFormat === 'openai') {
-		if (mediaType === 'image') return '/images/generations';
-		if (mediaType === 'audio') return '/audio/speech';
-		if (mediaType === 'video') return '/videos/generations';
-	}
+		const apiFormat = credentials.apiFormat as string;
+		const apiKey = credentials.apiKey as string;
+		const baseUrl = credentials.baseUrl as string || getDefaultBaseUrl(apiFormat);
 
-	if (apiFormat === 'gemini') {
-		// Gemini uses different endpoint format with model name
-		return `/models/${model}:predictImage`;
-	}
+		const mediaType = detectMediaType(model);
+		context.logger?.debug('Detected media type', { model, mediaType });
 
-	if (apiFormat === 'bailian') {
-		if (mediaType === 'image') return '/services/aigc/text2image/image-synthesis';
-		if (mediaType === 'audio') return '/services/aigc/text2speech/synthesis';
-		if (mediaType === 'video') return '/services/aigc/text2video/video-synthesis';
-	}
+		const endpoint = getEndpoint(apiFormat, mediaType, model);
+		const headers = getHeaders(apiFormat, apiKey);
+		const body = buildRequestBody(apiFormat, mediaType, model, prompt, additionalParams);
 
-	return '';
-}
+		context.logger?.debug('Making API request', {
+			endpoint,
+			mediaType,
+			apiFormat,
+		});
 
-/**
- * Get request headers for API format
- */
-function getHeaders(apiFormat: string, apiKey: string): Record<string, string> {
-	if (apiFormat === 'gemini') {
+		const startTime = PerformanceMonitor.startTimer('generation');
+
+		let response: any;
+		let success = true;
+		let error: Error | undefined;
+
+		try {
+			await this.rateLimiter.acquire();
+
+			if (enableCache) {
+				const cacheKey = CacheKeyGenerator.forGeneration(apiFormat, model, prompt, additionalParams);
+				const cached = await this.cacheManager.get(cacheKey);
+
+				if (cached) {
+					context.logger?.info('Cache hit', { cacheKey });
+					response = cached;
+				} else {
+					response = await this.makeApiRequest(context, baseUrl, endpoint, headers, body, timeout, maxRetries);
+					await this.cacheManager.set(cacheKey, response, cacheTtl);
+					context.logger?.info('Cached result', { cacheKey });
+				}
+			} else {
+				response = await this.makeApiRequest(context, baseUrl, endpoint, headers, body, timeout, maxRetries);
+			}
+		} catch (e) {
+			success = false;
+			error = e as Error;
+			throw e;
+		} finally {
+			const duration = PerformanceMonitor.endTimer(startTime);
+
+			const metric: PerformanceMetrics = {
+				provider: apiFormat,
+				model,
+				mediaType,
+				duration,
+				success,
+				timestamp: new Date().toISOString(),
+				error: error?.message,
+			};
+
+			PerformanceMonitor.recordMetric(metric);
+
+			context.logger?.info('Generation completed', {
+				model,
+				mediaType,
+				duration,
+				success,
+			});
+		}
+
+		const normaliedResponse = ResponseNormalizer.normalize(
+			response,
+			mediaType,
+			apiFormat,
+			model,
+			enableCache
+		);
+
 		return {
-			'Content-Type': 'application/json',
+			json: normaliedResponse,
 		};
 	}
 
-	return {
-		'Content-Type': 'application/json',
-		'Authorization': `Bearer ${apiKey}`,
-	};
-}
-
-/**
- * Build request body based on API format and media type
- */
-function buildRequestBody(
-	apiFormat: string,
-	mediaType: 'image' | 'audio' | 'video',
-	model: string,
-	prompt: string,
-	additional: any
-): any {
-	if (apiFormat === 'openai') {
-		const base: any = { model };
-
-		if (mediaType === 'image') {
-			base.prompt = prompt;
-		} else if (mediaType === 'audio') {
-			base.input = prompt;
-		} else if (mediaType === 'video') {
-			base.prompt = prompt;
-		}
-
-		return { ...base, ...additional };
+	private async makeApiRequest(
+		context: IExecuteFunctions,
+		baseUrl: string,
+		endpoint: string,
+		headers: Record<string, string>,
+		body: any,
+		timeout: number,
+		maxRetries: number
+	): Promise<any> {
+		return await withRetry(
+			async () => {
+				return await context.helpers.httpRequest({
+					method: 'POST',
+					url: baseUrl + endpoint,
+					headers,
+					body,
+					json: true,
+					timeout,
+				});
+			},
+			{ maxRetries, initialDelay: 1000, maxDelay: 30000 }
+		);
 	}
-
-	if (apiFormat === 'gemini') {
-		return {
-			prompt: { text: prompt },
-			...additional,
-		};
-	}
-
-	if (apiFormat === 'bailian') {
-		if (mediaType === 'image') {
-			return {
-				model,
-				input: { prompt },
-				parameters: additional,
-			};
-		}
-
-		if (mediaType === 'audio') {
-			return {
-				model,
-				input: { text: prompt },
-				parameters: additional,
-			};
-		}
-
-		if (mediaType === 'video') {
-			return {
-				model,
-				input: { prompt },
-				parameters: additional,
-			};
-		}
-	}
-
-	return { model, prompt, ...additional };
 }

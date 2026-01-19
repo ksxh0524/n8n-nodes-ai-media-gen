@@ -9,7 +9,7 @@ export const aiMediaApi = {
 			type: 'options',
 			options: [
 				{
-					name: 'OpenAI Compatible',
+					name: 'OpenAI',
 					value: 'openai',
 					description: 'OpenAI API format (Authorization: Bearer <key>)',
 				},
@@ -22,6 +22,16 @@ export const aiMediaApi = {
 					name: 'Bailian (阿里百炼)',
 					value: 'bailian',
 					description: 'Alibaba Bailian API format (Authorization: Bearer <key>)',
+				},
+				{
+					name: 'Replicate',
+					value: 'replicate',
+					description: 'Replicate API format (Authorization: Bearer <key>)',
+				},
+				{
+					name: 'Hugging Face',
+					value: 'huggingface',
+					description: 'Hugging Face API format (Authorization: Bearer <key>)',
 				},
 			],
 			default: 'openai',
@@ -47,6 +57,26 @@ export const aiMediaApi = {
 			required: false,
 			placeholder: 'https://api.openai.com/v1',
 			description: 'Custom base URL (optional, uses provider default if empty)',
+		},
+		{
+			displayName: 'Enable Caching',
+			name: 'enableCache',
+			type: 'boolean',
+			default: true,
+			description: 'Enable result caching to reduce API calls',
+		},
+		{
+			displayName: 'Cache TTL (seconds)',
+			name: 'cacheTtl',
+			type: 'number',
+			default: 3600,
+			description: 'Cache time-to-live in seconds (default: 3600 = 1 hour)',
+			displayOptions: {
+				showWhen: {
+					field: 'enableCache',
+					value: true,
+				},
+			},
 		},
 	],
 };
