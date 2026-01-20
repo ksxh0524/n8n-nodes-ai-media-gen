@@ -72,65 +72,89 @@ export class ResponseNormalizer {
 		if (!response) return undefined;
 
 		switch (provider) {
-			case 'openai':
-				if ((response as Record<string, unknown>).data?.[0]?.url) {
-					return (response as Record<string, unknown>).data[0].url as string;
-				}
-				break;
-
-			case 'gemini':
-				if ((response as Record<string, unknown>).image) {
-					return (response as Record<string, unknown>).image as string;
-				}
-				break;
-
-			case 'bailian':
-				if ((response as Record<string, unknown>).output?.url) {
-					return (response as Record<string, unknown>).output.url as string;
-				}
-				if ((response as Record<string, unknown>).output?.audio_url) {
-					return (response as Record<string, unknown>).output.audio_url as string;
-				}
-				if ((response as Record<string, unknown>).output?.video_url) {
-					return (response as Record<string, unknown>).output.video_url as string;
-				}
-				break;
-
-			case 'replicate':
-				if ((response as Record<string, unknown>).output) {
-					if (typeof (response as Record<string, unknown>).output === 'string') {
-						return (response as Record<string, unknown>).output as string;
-					}
-					if (Array.isArray((response as Record<string, unknown>).output) && (response as Record<string, unknown>).output.length > 0) {
-						return (response as Record<string, unknown>).output[0] as string;
+			case 'openai': {
+				const openaiResponse = response as Record<string, unknown>;
+				if (Array.isArray(openaiResponse.data) && openaiResponse.data.length > 0) {
+					const firstItem = openaiResponse.data[0] as Record<string, unknown>;
+					if (typeof firstItem.url === 'string') {
+						return firstItem.url;
 					}
 				}
 				break;
+			}
 
-			case 'huggingface':
+			case 'gemini': {
+				const geminiResponse = response as Record<string, unknown>;
+				if (typeof geminiResponse.image === 'string') {
+					return geminiResponse.image;
+				}
+				break;
+			}
+
+			case 'bailian': {
+				const bailianResponse = response as Record<string, unknown>;
+				const output = bailianResponse.output as Record<string, unknown> | undefined;
+				if (output) {
+					if (typeof output.url === 'string') {
+						return output.url;
+					}
+					if (typeof output.audio_url === 'string') {
+						return output.audio_url;
+					}
+					if (typeof output.video_url === 'string') {
+						return output.video_url;
+					}
+				}
+				break;
+			}
+
+			case 'replicate': {
+				const replicateResponse = response as Record<string, unknown>;
+				const output = replicateResponse.output as unknown;
+				if (typeof output === 'string') {
+					return output;
+				}
+				if (Array.isArray(output) && output.length > 0) {
+					const firstItem = output[0];
+					if (typeof firstItem === 'string') {
+						return firstItem;
+					}
+				}
+				break;
+			}
+
+			case 'huggingface': {
 				if (typeof response === 'string') {
 					return response;
 				}
-				if ((response as Record<string, unknown>).url) {
-					return (response as Record<string, unknown>).url as string;
+				const hfResponse = response as Record<string, unknown>;
+				if (typeof hfResponse.url === 'string') {
+					return hfResponse.url;
 				}
-				if ((response as Record<string, unknown>).image) {
-					if (typeof (response as Record<string, unknown>).image === 'string') {
-						return (response as Record<string, unknown>).image as string;
-					}
-					if ((response as Record<string, unknown>).image?.url) {
-						return (response as Record<string, unknown>).image.url as string;
+				const image = hfResponse.image as unknown;
+				if (typeof image === 'string') {
+					return image;
+				}
+				if (image && typeof image === 'object' && image !== null) {
+					const imageObj = image as Record<string, unknown>;
+					if (typeof imageObj.url === 'string') {
+						return imageObj.url;
 					}
 				}
 				if (Array.isArray(response) && response.length > 0) {
-					if (typeof response[0] === 'string') {
-						return response[0];
+					const firstItem = response[0];
+					if (typeof firstItem === 'string') {
+						return firstItem;
 					}
-					if ((response[0] as Record<string, unknown>).url) {
-						return (response[0] as Record<string, unknown>).url as string;
+					if (typeof firstItem === 'object' && firstItem !== null) {
+						const firstItemObj = firstItem as Record<string, unknown>;
+						if (typeof firstItemObj.url === 'string') {
+							return firstItemObj.url;
+						}
 					}
 				}
 				break;
+			}
 		}
 
 		return undefined;

@@ -31,25 +31,99 @@
   "n8n": {
     "n8nVersionCompat": ">=1.0.0",
     "credentials": [
-      "aiMediaApi"
+      "nanoBanana",
+      "openai",
+      "qwen"
     ],
     "nodes": [
       {
-        "name": "AIMediaGen",
-        "displayName": "AI Media Generation",
+        "name": "NanoBanana",
+        "displayName": "Nano Banana",
         "group": ["ai"],
-        "subtitle": "={{$parameter.provider + ' - ' + $parameter.operation}}",
-        "description": "Generate images, videos, and audio using OpenAI, Gemini, Bailian, or Doubao",
+        "subtitle": "={{$parameter.model}}",
+        "description": "Generate images using Nano Banana",
         "icon": "file:ai-media-gen.svg",
         "subgroup": "media-generation",
         "defaults": {
-          "name": "AI Media Gen"
+          "name": "Nano Banana"
         },
         "inputs": ["main"],
         "outputs": ["main"],
         "usableAsTool": true,
         "credentials": [
-          "aiMediaApi"
+          "nanoBanana"
+        ]
+      },
+      {
+        "name": "Sora",
+        "displayName": "Sora",
+        "group": ["ai"],
+        "subtitle": "={{$parameter.model}}",
+        "description": "Generate videos using OpenAI Sora",
+        "icon": "file:ai-media-gen.svg",
+        "subgroup": "media-generation",
+        "defaults": {
+          "name": "Sora"
+        },
+        "inputs": ["main"],
+        "outputs": ["main"],
+        "usableAsTool": true,
+        "credentials": [
+          "openai"
+        ]
+      },
+      {
+        "name": "ZImage",
+        "displayName": "Z-Image",
+        "group": ["ai"],
+        "subtitle": "={{$parameter.model}}",
+        "description": "Generate images using OpenAI Z-Image",
+        "icon": "file:ai-media-gen.svg",
+        "subgroup": "media-generation",
+        "defaults": {
+          "name": "Z-Image"
+        },
+        "inputs": ["main"],
+        "outputs": ["main"],
+        "usableAsTool": true,
+        "credentials": [
+          "openai"
+        ]
+      },
+      {
+        "name": "Qwen",
+        "displayName": "Qwen",
+        "group": ["ai"],
+        "subtitle": "={{$parameter.model}}",
+        "description": "Generate images, edit images, and generate videos using Qwen",
+        "icon": "file:ai-media-gen.svg",
+        "subgroup": "media-generation",
+        "defaults": {
+          "name": "Qwen"
+        },
+        "inputs": ["main"],
+        "outputs": ["main"],
+        "usableAsTool": true,
+        "credentials": [
+          "qwen"
+        ]
+      },
+      {
+        "name": "Doubao",
+        "displayName": "Doubao",
+        "group": ["ai"],
+        "subtitle": "={{$parameter.model}}",
+        "description": "Generate images and videos using Doubao",
+        "icon": "file:ai-media-gen.svg",
+        "subgroup": "media-generation",
+        "defaults": {
+          "name": "Doubao"
+        },
+        "inputs": ["main"],
+        "outputs": ["main"],
+        "usableAsTool": true,
+        "credentials": [
+          "qwen"
         ]
       }
     ]

@@ -1,10 +1,18 @@
 /**
  * n8n-nodes-ai-media-gen
- * Exports the AI Media Generation node
+ * Exports all AI Media Generation nodes
  */
 
-import { AIMediaGen } from './AIMediaGen.node';
+import { NanoBanana } from './NanoBanana.node';
+import { Sora } from './Sora.node';
+import { ZImage } from './ZImage.node';
+import { Qwen } from './Qwen.node';
+import { Doubao } from './Doubao.node';
 
 export const nodeClasses = [
-  AIMediaGen,
+	NanoBanana,
+	Sora,
+	ZImage,
+	Qwen,
+	Doubao,
 ];
