@@ -4,16 +4,19 @@ import {
 	INodeExecutionData,
 	IExecuteFunctions,
 } from 'n8n-workflow';
-import { openai } from '../credentials/OpenAI.credentials';
-import { OpenAIProvider } from '../providers/OpenAIProvider';
-import { ConfigManager } from '../utils/configManager';
+
+const MODELS = [
+	{ name: 'Sora 2', value: 'sora-2' },
+	{ name: 'Sors 2 Pro', value: 'sors-2-pro' },
+	{ name: 'Veo 3.1', value: 'veo-3.1' },
+];
 
 export class Sora implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'Sora',
 		name: 'sora',
 		icon: 'file:ai-media-gen.svg',
-		subgroup: 'media-generation',
+		description: 'Generate videos using OpenAI Sora',
 		version: 1.0,
 		defaults: {
 			name: 'Sora',
@@ -32,24 +35,8 @@ export class Sora implements INodeType {
 				name: 'model',
 				type: 'options',
 				required: true,
-				options: ConfigManager.getNodeModels('Sora').map((model) => ({
-					name: model.id,
-					value: model.id,
-					description: model.name,
-				})),
+				options: MODELS,
 				default: 'sora-2',
-			},
-			{
-				displayName: 'Custom Model',
-				name: 'customModel',
-				type: 'string',
-				placeholder: 'Enter custom model name',
-			},
-			{
-				displayName: 'Add to Config',
-				name: 'addToConfig',
-				type: 'string',
-				placeholder: 'Enter model name to add to config (optional)',
 			},
 			{
 				displayName: 'Prompt',
@@ -57,6 +44,7 @@ export class Sora implements INodeType {
 				type: 'string',
 				typeOptions: { rows: 5 },
 				required: true,
+				default: '',
 				description: 'Text prompt for generation',
 			},
 			{
@@ -67,20 +55,6 @@ export class Sora implements INodeType {
 				default: '{}',
 				description: 'Additional parameters as JSON object',
 			},
-			{
-				displayName: 'Max Retries',
-				name: 'maxRetries',
-				type: 'number',
-				default: 3,
-				description: 'Maximum number of retry attempts',
-			},
-			{
-				displayName: 'Timeout (ms)',
-				name: 'timeout',
-				type: 'number',
-				default: 60000,
-				description: 'Request timeout in milliseconds',
-			},
 		],
 	};
 
@@ -88,27 +62,11 @@ export class Sora implements INodeType {
 		const items = this.getInputData();
 		const results: INodeExecutionData[] = [];
 
-		const credentials = await this.getCredentials('openai');
-		OpenAIProvider.setApiKey(credentials.apiKey);
-
 		for (let i = 0; i < items.length; i++) {
 			try {
 				const model = this.getNodeParameter('model', i) as string;
 				const prompt = this.getNodeParameter('prompt', i) as string;
 				const additionalParamsJson = this.getNodeParameter('additionalParams', i) as string;
-				const addToConfig = this.getNodeParameter('addToConfig', i) as string;
-				const maxRetries = this.getNodeParameter('maxRetries', i) as number;
-				const timeout = this.getNodeParameter('timeout', i) as number;
-
-				let actualModel = model;
-				if (model === 'custom') {
-					actualModel = this.getNodeParameter('customModel', i) as string;
-				}
-
-				if (addToConfig) {
-					ConfigManager.addCustomModel('Sora', addToConfig);
-					this.logger?.info('Added custom model to config', { model: addToConfig });
-				}
 
 				let additionalParams: Record<string, unknown> = {};
 				if (additionalParamsJson) {
@@ -119,18 +77,24 @@ export class Sora implements INodeType {
 					}
 				}
 
-				this.logger?.info('Starting video generation', { model: actualModel, prompt });
+				this.logger?.info('Starting video generation', { model, prompt });
 
-				const response = await OpenAIProvider.generateVideo({
-					model: actualModel,
-					prompt,
-					params: additionalParams,
+				const response = await this.helpers.httpRequest({
+					method: 'POST',
+					url: 'https://api.openai.com/v1/videos/generations',
+					body: {
+						model,
+						prompt,
+						...additionalParams,
+					},
+					headers: {
+						'Content-Type': 'application/json',
+						'Authorization': `Bearer ${(await this.getCredentials('openai')).apiKey}`,
+					},
 				});
 
-				const normalizedResponse = OpenAIProvider.normalizeResponse(response);
-
 				results.push({
-					json: normalizedResponse,
+					json: response,
 				});
 			} catch (error) {
 				this.logger?.error('Video generation failed', {
