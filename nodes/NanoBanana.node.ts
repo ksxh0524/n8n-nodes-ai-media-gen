@@ -4,12 +4,14 @@ import {
 	INodeExecutionData,
 	IExecuteFunctions,
 } from 'n8n-workflow';
-import { NanoBananaCredentials } from '../credentials/NanoBanana.credentials';
+import { nanoBanana } from '../credentials/NanoBanana.credentials';
+import { openai } from '../credentials/OpenAI.credentials';
 import { NanoBananaProvider } from '../providers/NanoBananaProvider';
+import { OpenAIProvider } from '../providers/OpenAIProvider';
 import { ConfigManager } from '../utils/configManager';
 
 export class NanoBanana implements INodeType {
-	description: {
+	description: INodeTypeDescription = {
 		displayName: 'Nano Banana',
 		name: 'nano_banana',
 		icon: 'file:ai-media-gen.svg',
@@ -43,24 +45,12 @@ export class NanoBanana implements INodeType {
 				displayName: 'Custom Model',
 				name: 'customModel',
 				type: 'string',
-				displayOptions: {
-					showWhen: {
-						field: 'model',
-						value: 'custom',
-					},
-				},
 				placeholder: 'Enter custom model name',
 			},
 			{
 				displayName: 'Add to Config',
 				name: 'addToConfig',
 				type: 'string',
-				displayOptions: {
-					showWhen: {
-						field: 'model',
-						value: 'custom',
-					},
-				},
 				placeholder: 'Enter model name to add to config (optional)',
 			},
 			{

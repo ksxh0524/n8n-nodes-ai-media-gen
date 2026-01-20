@@ -89,7 +89,7 @@ export class OpenAIProvider {
 		return await response.json();
 	}
 
-	static normalizeResponse(response: unknown): OpenAIResponse {
+	static normalizeResponse(response: unknown): any {
 		if (response && typeof response === 'object') {
 			const data = response as Record<string, unknown>;
 			

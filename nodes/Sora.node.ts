@@ -4,12 +4,12 @@ import {
 	INodeExecutionData,
 	IExecuteFunctions,
 } from 'n8n-workflow';
-import { OpenAICredentials } from '../credentials/OpenAI.credentials';
+import { openai } from '../credentials/OpenAI.credentials';
 import { OpenAIProvider } from '../providers/OpenAIProvider';
 import { ConfigManager } from '../utils/configManager';
 
 export class Sora implements INodeType {
-	description: {
+	description: INodeTypeDescription = {
 		displayName: 'Sora',
 		name: 'sora',
 		icon: 'file:ai-media-gen.svg',
@@ -43,24 +43,12 @@ export class Sora implements INodeType {
 				displayName: 'Custom Model',
 				name: 'customModel',
 				type: 'string',
-				displayOptions: {
-					showWhen: {
-						field: 'model',
-						value: 'custom',
-					},
-				},
 				placeholder: 'Enter custom model name',
 			},
 			{
 				displayName: 'Add to Config',
 				name: 'addToConfig',
 				type: 'string',
-				displayOptions: {
-					showWhen: {
-						field: 'model',
-						value: 'custom',
-					},
-				},
 				placeholder: 'Enter model name to add to config (optional)',
 			},
 			{

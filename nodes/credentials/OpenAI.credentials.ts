@@ -1,8 +1,7 @@
 import {
 	ICredentialType,
-	NodeProperties,
-	ICredentialDataFunctions,
 	INodeProperties,
+	ICredentialTestFunctions,
 } from 'n8n-workflow';
 
 export class OpenAICredentials implements ICredentialType {
@@ -10,7 +9,7 @@ export class OpenAICredentials implements ICredentialType {
 		return 'OpenAI';
 	}
 
-	static getProperties(): NodeProperties {
+	static getProperties(): INodeProperties {
 		return {
 			displayName: 'API Key',
 			name: 'apiKey',
@@ -25,9 +24,9 @@ export class OpenAICredentials implements ICredentialType {
 	}
 
 	static async getCredentials(
-		nodeCredentialData: ICredentialDataFunctions,
+		nodeCredentialData: ICredentialTestFunctions,
 	): Promise<{ apiKey: string }> {
-		const apiKey = await nodeCredentialData.getNodeCredentials('apiKey');
+		const apiKey = await nodeCredentialData.getNodeCredentials?.('apiKey');
 		return {
 			apiKey: apiKey as string,
 		};

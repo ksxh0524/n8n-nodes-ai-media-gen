@@ -26,6 +26,8 @@ export class ConfigManager {
 			models: {
 				nano_banana: { name: 'Nano Banana', default: true },
 				nano_banana_pro: { name: 'Nano Banana Pro' },
+				'z-image-turbo': { name: 'Z-Image Turbo' },
+				'qwen-image': { name: 'Qwen Image' },
 			},
 		},
 		Sora: {
@@ -34,30 +36,6 @@ export class ConfigManager {
 				'sora-2': { name: 'Sora 2', default: true },
 				'sors-2-pro': { name: 'Sors 2 Pro' },
 				'veo-3.1': { name: 'Veo 3.1' },
-			},
-		},
-		'Z-Image': {
-			name: 'Z-Image',
-			models: {
-				'z-image-turbo': { name: 'Z-Image Turbo', default: true },
-			},
-		},
-		Qwen: {
-			name: 'Qwen',
-			operations: ['generate', 'edit'],
-			models: {
-				'qwen-image': { name: 'Qwen Image', default: true },
-				'qwen-image-edit': { name: 'Qwen Image Edit' },
-				'wanx-v1': { name: 'Image Generate' },
-				'wanx-video-v1': { name: 'Video Generate' },
-			},
-		},
-		Doubao: {
-			name: 'Doubao',
-			operations: ['generate', 'video'],
-			models: {
-				'wanx-v1': { name: 'Image Generate', default: true },
-				'wanx-video-v1': { name: 'Video Generate' },
 			},
 		},
 	};

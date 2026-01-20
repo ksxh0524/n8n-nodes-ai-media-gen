@@ -1,35 +1,23 @@
-import {
-	ICredentialType,
-	NodeProperties,
-	ICredentialDataFunctions,
-	INodeProperties,
-} from 'n8n-workflow';
+export const nanoBanana = {
+	displayName: 'Nano Banana',
+	name: 'apiKey',
+	type: 'string',
+	typeOptions: {
+		password: true,
+	},
+	required: true,
+	default: '',
+	description: 'Nano Banana API Key',
+};
 
-export class NanoBananaCredentials implements ICredentialType {
-	static getDisplayName(): string {
-		return 'Nano Banana';
-	}
-
-	static getProperties(): NodeProperties {
-		return {
-			displayName: 'API Key',
-			name: 'apiKey',
-			type: 'string',
-			typeOptions: {
-				password: true,
-			},
-			required: true,
-			default: '',
-			description: 'Nano Banana API Key',
-		};
-	}
-
-	static async getCredentials(
-		nodeCredentialData: ICredentialDataFunctions,
-	): Promise<{ apiKey: string }> {
-		const apiKey = await nodeCredentialData.getNodeCredentials('apiKey');
-		return {
-			apiKey: apiKey as string,
-		};
-	}
-}
+export const openai = {
+	displayName: 'API Key',
+	name: 'apiKey',
+	type: 'string',
+	typeOptions: {
+		password: true,
+	},
+	required: true,
+	default: '',
+	description: 'OpenAI API Key (used by Sora and Z-Image nodes)',
+};
