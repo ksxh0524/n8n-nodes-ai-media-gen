@@ -57,7 +57,6 @@ export class AIMediaGen implements INodeType {
 				displayName: 'Model',
 				name: 'model',
 				type: 'string',
-				default: 'dall-e-3',
 				required: true,
 				description: 'Model name (e.g., dall-e-3, imagen-2.0, wanx-v1, flux-schnell, tts-1, sora)',
 				placeholder: 'dall-e-3',
@@ -106,10 +105,10 @@ export class AIMediaGen implements INodeType {
 
 		let cacheManager: CacheManager | undefined;
 		if (enableCache) {
-			cacheManager = CacheManager.getInstance(new MemoryCache({ maxSize: 200, defaultTtl: cacheTtl }));
+			cacheManager = new CacheManager(new MemoryCache({ maxSize: 200, defaultTtl: cacheTtl }));
 		}
 
-		for (const _item of items) {
+		for (let i = 0; i < items.length; i++) {
 			try {
 				const result = await executeGeneration(this, cacheManager, enableCache, cacheTtl);
 				results.push(result);
@@ -119,7 +118,7 @@ export class AIMediaGen implements INodeType {
 					model: this.getNodeParameter('model', 0) as string,
 				});
 
-				const apiFormat = credentials.apiFormat as string;
+				const apiFormat = credentials?.apiFormat as string || 'unknown';
 				const model = this.getNodeParameter('model', 0) as string;
 				const mediaType = detectMediaType(model);
 
@@ -202,11 +201,11 @@ async function executeGeneration(
 
 		const startTime = PerformanceMonitor.startTimer('generation');
 
-		let response: any;
+		let response: unknown;
 		let success = true;
 		let error: Error | undefined;
 
-		const rateLimiter = new RateLimiter(10, 60);
+		const rateLimiter = RateLimiter.getInstance({ rate: 10, capacity: 60, key: apiFormat });
 
 		try {
 			await rateLimiter.acquire();
@@ -253,7 +252,7 @@ async function executeGeneration(
 			});
 		}
 
-		const normaliedResponse = ResponseNormalizer.normalize(
+		const normalizedResponse = ResponseNormalizer.normalize(
 			response,
 			mediaType,
 			apiFormat,
@@ -262,7 +261,7 @@ async function executeGeneration(
 		);
 
 		return {
-			json: normaliedResponse,
+			json: normalizedResponse,
 		};
 	}
 
@@ -271,10 +270,10 @@ async function makeApiRequest(
 	baseUrl: string,
 	endpoint: string,
 	headers: Record<string, string>,
-	body: any,
+	body: unknown,
 	timeout: number,
 	maxRetries: number
-): Promise<any> {
+): Promise<unknown> {
 	return await withRetry(
 		async () => {
 			return await context.helpers.httpRequest({

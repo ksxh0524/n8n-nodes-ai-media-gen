@@ -6,7 +6,7 @@ describe('CacheManager', () => {
 
 	beforeEach(() => {
 		memoryCache = new MemoryCache({ maxSize: 10, defaultTtl: 60 });
-		cacheManager = CacheManager.getInstance(memoryCache);
+		cacheManager = new CacheManager(memoryCache);
 	});
 
 	afterEach(async () => {
@@ -117,6 +117,6 @@ describe('CacheKeyGenerator', () => {
 
 	test('should generate hash using SHA256', () => {
 		const key = CacheKeyGenerator.forGeneration('openai', 'dall-e-3', 'test prompt', {});
-		expect(key).toMatch(/^gen:openai:dall-e-3:[a-f0-9]{16}:[a-f0-9]{16}$/);
+		expect(key).toMatch(/^gen:openai:dall-e-3:[a-f0-9]{32}:[a-f0-9]{32}$/);
 	});
 });

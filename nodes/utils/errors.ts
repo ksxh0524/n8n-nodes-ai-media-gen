@@ -1,8 +1,10 @@
+import type { ApiFormat, IGenerationParams, IRetryOptions } from './types';
+
 export class MediaGenError extends Error {
 	constructor(
 		message: string,
 		public code: string,
-		public details?: any
+		public details?: unknown
 	) {
 		super(message);
 		this.name = 'MediaGenError';
@@ -50,12 +52,7 @@ export function sleep(ms: number): Promise<void> {
 
 export async function withRetry<T>(
 	fn: () => Promise<T>,
-	options: {
-		maxRetries?: number;
-		initialDelay?: number;
-		maxDelay?: number;
-		backoffMultiplier?: number;
-	} = {}
+	options: IRetryOptions = {}
 ): Promise<T> {
 	const {
 		maxRetries = 3,
@@ -89,24 +86,26 @@ export async function withRetry<T>(
 	throw lastError;
 }
 
-export function validateCredentials(credentials: any): { valid: boolean; errors: string[] } {
+export function validateCredentials(credentials: unknown): { valid: boolean; errors: string[] } {
 	const errors: string[] = [];
 
-	if (!credentials) {
+	if (!credentials || typeof credentials !== 'object') {
 		errors.push('Credentials are required');
 		return { valid: false, errors };
 	}
 
-	if (!credentials.apiKey || typeof credentials.apiKey !== 'string' || credentials.apiKey.trim() === '') {
+	const creds = credentials as Record<string, unknown>;
+
+	if (!creds.apiKey || typeof creds.apiKey !== 'string' || creds.apiKey.trim() === '') {
 		errors.push('API key is required and must be a non-empty string');
 	}
 
-	if (!credentials.apiFormat || typeof credentials.apiFormat !== 'string') {
+	if (!creds.apiFormat || typeof creds.apiFormat !== 'string') {
 		errors.push('API format is required');
 	}
 
-	const validFormats = ['openai', 'gemini', 'bailian', 'replicate', 'huggingface'];
-	if (credentials.apiFormat && !validFormats.includes(credentials.apiFormat)) {
+	const validFormats: ApiFormat[] = ['openai', 'gemini', 'bailian', 'replicate', 'huggingface'];
+	if (creds.apiFormat && !validFormats.includes(creds.apiFormat as ApiFormat)) {
 		errors.push(`API format must be one of: ${validFormats.join(', ')}`);
 	}
 
@@ -116,11 +115,7 @@ export function validateCredentials(credentials: any): { valid: boolean; errors:
 	};
 }
 
-export function validateGenerationParams(params: {
-	model?: string;
-	prompt?: string;
-	additionalParams?: string;
-}): { valid: boolean; errors: string[] } {
+export function validateGenerationParams(params: IGenerationParams): { valid: boolean; errors: string[] } {
 	const errors: string[] = [];
 
 	if (!params.model || typeof params.model !== 'string' || params.model.trim() === '') {

@@ -2,7 +2,7 @@ export interface NormalizedResponse {
 	success: boolean;
 	url?: string;
 	mimeType?: string;
-	data?: any;
+	data?: unknown;
 	metadata: {
 		provider: string;
 		model: string;
@@ -13,12 +13,12 @@ export interface NormalizedResponse {
 	};
 	error?: string;
 	errorCode?: string;
-	[key: string]: any;
+	[key: string]: unknown;
 }
 
 export class ResponseNormalizer {
 	static normalize(
-		response: any,
+		response: unknown,
 		mediaType: 'image' | 'audio' | 'video',
 		provider: string,
 		model: string,
@@ -65,7 +65,7 @@ export class ResponseNormalizer {
 	}
 
 	private static extractUrl(
-		response: any,
+		response: unknown,
 		_mediaType: 'image' | 'audio' | 'video',
 		provider: string
 	): string | undefined {
@@ -73,38 +73,62 @@ export class ResponseNormalizer {
 
 		switch (provider) {
 			case 'openai':
-				if (response.data?.[0]?.url) {
-					return response.data[0].url;
+				if ((response as Record<string, unknown>).data?.[0]?.url) {
+					return (response as Record<string, unknown>).data[0].url as string;
 				}
 				break;
 
 			case 'gemini':
-				if (response.image) {
-					return response.image;
+				if ((response as Record<string, unknown>).image) {
+					return (response as Record<string, unknown>).image as string;
 				}
 				break;
 
 			case 'bailian':
-				if (response.output?.url) {
-					return response.output.url;
+				if ((response as Record<string, unknown>).output?.url) {
+					return (response as Record<string, unknown>).output.url as string;
 				}
-				if (response.output?.audio_url) {
-					return response.output.audio_url;
+				if ((response as Record<string, unknown>).output?.audio_url) {
+					return (response as Record<string, unknown>).output.audio_url as string;
 				}
-				if (response.output?.video_url) {
-					return response.output.video_url;
+				if ((response as Record<string, unknown>).output?.video_url) {
+					return (response as Record<string, unknown>).output.video_url as string;
 				}
 				break;
 
 			case 'replicate':
-				if (response.output) {
-					return response.output;
+				if ((response as Record<string, unknown>).output) {
+					if (typeof (response as Record<string, unknown>).output === 'string') {
+						return (response as Record<string, unknown>).output as string;
+					}
+					if (Array.isArray((response as Record<string, unknown>).output) && (response as Record<string, unknown>).output.length > 0) {
+						return (response as Record<string, unknown>).output[0] as string;
+					}
 				}
 				break;
 
 			case 'huggingface':
 				if (typeof response === 'string') {
 					return response;
+				}
+				if ((response as Record<string, unknown>).url) {
+					return (response as Record<string, unknown>).url as string;
+				}
+				if ((response as Record<string, unknown>).image) {
+					if (typeof (response as Record<string, unknown>).image === 'string') {
+						return (response as Record<string, unknown>).image as string;
+					}
+					if ((response as Record<string, unknown>).image?.url) {
+						return (response as Record<string, unknown>).image.url as string;
+					}
+				}
+				if (Array.isArray(response) && response.length > 0) {
+					if (typeof response[0] === 'string') {
+						return response[0];
+					}
+					if ((response[0] as Record<string, unknown>).url) {
+						return (response[0] as Record<string, unknown>).url as string;
+					}
 				}
 				break;
 		}

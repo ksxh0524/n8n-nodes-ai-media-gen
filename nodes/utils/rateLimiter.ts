@@ -1,14 +1,44 @@
+import type { IRateLimiterOptions } from './types';
+
 export class RateLimiter {
+	private static instances: Map<string, RateLimiter> = new Map();
 	private tokens: number;
 	private lastRefill: number;
 	private capacity: number;
 	private rate: number;
+	private key: string;
 
-	constructor(rate: number, capacity: number = 10) {
+	constructor(rate: number, capacity: number = 10, key: string = 'default') {
 		this.rate = rate;
 		this.capacity = capacity;
 		this.tokens = capacity;
 		this.lastRefill = Date.now();
+		this.key = key;
+	}
+
+	static getInstance(options: IRateLimiterOptions): RateLimiter {
+		const { rate, capacity = 10, key = 'default' } = options;
+		const instanceKey = `${key}:${rate}:${capacity}`;
+		
+		if (!RateLimiter.instances.has(instanceKey)) {
+			RateLimiter.instances.set(instanceKey, new RateLimiter(rate, capacity, key));
+		}
+		
+		return RateLimiter.instances.get(instanceKey)!;
+	}
+
+	static clearInstance(key: string = 'default'): void {
+		const keysToDelete: string[] = [];
+		for (const [instanceKey] of RateLimiter.instances) {
+			if (instanceKey.startsWith(`${key}:`)) {
+				keysToDelete.push(instanceKey);
+			}
+		}
+		keysToDelete.forEach(k => RateLimiter.instances.delete(k));
+	}
+
+	static clearAllInstances(): void {
+		RateLimiter.instances.clear();
 	}
 
 	async acquire(): Promise<void> {
@@ -50,5 +80,9 @@ export class RateLimiter {
 	reset(): void {
 		this.tokens = this.capacity;
 		this.lastRefill = Date.now();
+	}
+
+	getKey(): string {
+		return this.key;
 	}
 }

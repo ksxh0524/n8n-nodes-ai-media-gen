@@ -1,33 +1,25 @@
 import { createHash } from 'crypto';
+import type { ICacheOptions } from './types';
 
 export interface ICache {
-	get(key: string): Promise<any | null>;
-	set(key: string, value: any, ttl?: number): Promise<void>;
+	get(key: string): Promise<unknown | null>;
+	set(key: string, value: unknown, ttl?: number): Promise<void>;
 	delete(key: string): Promise<void>;
 	clear(): Promise<void>;
 }
 
 export class CacheManager {
-	private static instance: CacheManager;
 	private cache: ICache;
 
-	private constructor(cache: ICache) {
-		this.cache = cache;
+	constructor(cache?: ICache) {
+		this.cache = cache || new MemoryCache();
 	}
 
-	static getInstance(cache?: ICache): CacheManager {
-		if (!CacheManager.instance) {
-			const cacheInstance = cache || new MemoryCache();
-			CacheManager.instance = new CacheManager(cacheInstance);
-		}
-		return CacheManager.instance;
-	}
-
-	async get(key: string): Promise<any | null> {
+	async get(key: string): Promise<unknown | null> {
 		return await this.cache.get(key);
 	}
 
-	async set(key: string, value: any, ttl: number = 3600): Promise<void> {
+	async set(key: string, value: unknown, ttl: number = 3600): Promise<void> {
 		await this.cache.set(key, value, ttl);
 	}
 
@@ -41,10 +33,10 @@ export class CacheManager {
 }
 
 class MemoryCacheEntry {
-	value: any;
+	value: unknown;
 	expiry: number;
 
-	constructor(value: any, ttl: number) {
+	constructor(value: unknown, ttl: number) {
 		this.value = value;
 		this.expiry = Date.now() + ttl * 1000;
 	}
@@ -59,7 +51,7 @@ export class MemoryCache implements ICache {
 	private maxSize = 100;
 	private ttl = 3600;
 
-	constructor(options?: { maxSize?: number; defaultTtl?: number }) {
+	constructor(options?: ICacheOptions) {
 		if (options?.maxSize) {
 			this.maxSize = options.maxSize;
 		}
@@ -68,7 +60,7 @@ export class MemoryCache implements ICache {
 		}
 	}
 
-	async get(key: string): Promise<any | null> {
+	async get(key: string): Promise<unknown | null> {
 		const entry = this.cache.get(key);
 		if (!entry || entry.isExpired()) {
 			if (entry && entry.isExpired()) {
@@ -79,7 +71,7 @@ export class MemoryCache implements ICache {
 		return entry.value;
 	}
 
-	async set(key: string, value: any, ttl?: number): Promise<void> {
+	async set(key: string, value: unknown, ttl?: number): Promise<void> {
 		const actualTtl = ttl ?? this.ttl;
 		const entry = new MemoryCacheEntry(value, actualTtl);
 
@@ -114,17 +106,17 @@ export class MemoryCache implements ICache {
 }
 
 export class CacheKeyGenerator {
-	static forGeneration(apiFormat: string, model: string, prompt: string, params: any): string {
+	static forGeneration(apiFormat: string, model: string, prompt: string, params: Record<string, unknown>): string {
 		const paramsStr = JSON.stringify(params || {});
 		return `gen:${apiFormat}:${model}:${this.hash(prompt)}:${this.hash(paramsStr)}`;
 	}
 
-	static forApiRequest(apiFormat: string, endpoint: string, body: any): string {
+	static forApiRequest(apiFormat: string, endpoint: string, body: Record<string, unknown>): string {
 		const bodyStr = JSON.stringify(body || {});
 		return `api:${apiFormat}:${endpoint}:${this.hash(bodyStr)}`;
 	}
 
 	private static hash(str: string): string {
-		return createHash('sha256').update(str).digest('hex').substring(0, 16);
+		return createHash('sha256').update(str).digest('hex').substring(0, 32);
 	}
 }

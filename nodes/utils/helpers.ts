@@ -1,3 +1,5 @@
+import type { ApiFormat, IAdditionalParams } from './types';
+
 export const MEDIA_TYPE_PATTERNS = {
 	video: /^(sora|video|svd|cogvideo|wanx-video)/i,
 	audio: /^(tts|audio|speech|voice|sambert|cosyvoice)/i,
@@ -17,8 +19,8 @@ export function detectMediaType(model: string): MediaType {
 	return 'image';
 }
 
-export function getDefaultBaseUrl(apiFormat: string): string {
-	const defaults: Record<string, string> = {
+export function getDefaultBaseUrl(apiFormat: ApiFormat): string {
+	const defaults: Record<ApiFormat, string> = {
 		openai: 'https://api.openai.com/v1',
 		gemini: 'https://generativelanguage.googleapis.com/v1beta',
 		bailian: 'https://dashscope.aliyuncs.com/api/v1',
@@ -29,7 +31,7 @@ export function getDefaultBaseUrl(apiFormat: string): string {
 }
 
 export function getEndpoint(
-	apiFormat: string,
+	apiFormat: ApiFormat,
 	mediaType: MediaType,
 	model: string,
 	apiKey?: string
@@ -63,7 +65,7 @@ export function getEndpoint(
 	return '';
 }
 
-export function getHeaders(apiFormat: string, apiKey: string): Record<string, string> {
+export function getHeaders(apiFormat: ApiFormat, apiKey: string): Record<string, string> {
 	if (apiFormat === 'gemini') {
 		return {
 			'Content-Type': 'application/json',
@@ -84,14 +86,14 @@ export function getHeaders(apiFormat: string, apiKey: string): Record<string, st
 }
 
 export function buildRequestBody(
-	apiFormat: string,
+	apiFormat: ApiFormat,
 	mediaType: MediaType,
 	model: string,
 	prompt: string,
-	additional: any
-): any {
+	additional: IAdditionalParams
+): unknown {
 	if (apiFormat === 'openai') {
-		const base: any = { model };
+		const base: Record<string, unknown> = { model };
 
 		if (mediaType === 'image') {
 			base.prompt = prompt;

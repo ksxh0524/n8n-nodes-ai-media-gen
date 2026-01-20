@@ -1,3 +1,5 @@
+import type { IMonitoringFilter, IMonitoringStats } from './types';
+
 export interface PerformanceMetrics {
 	provider: string;
 	model: string;
@@ -28,11 +30,7 @@ export class PerformanceMonitor {
 		}
 	}
 
-	static getMetrics(filter?: {
-		provider?: string;
-		model?: string;
-		mediaType?: 'image' | 'audio' | 'video';
-	}): PerformanceMetrics[] {
+	static getMetrics(filter?: IMonitoringFilter): PerformanceMetrics[] {
 		let filtered = PerformanceMonitor.metrics;
 
 		if (filter?.provider) {
@@ -48,18 +46,7 @@ export class PerformanceMonitor {
 		return filtered;
 	}
 
-	static getStats(filter?: {
-		provider?: string;
-		model?: string;
-		mediaType?: 'image' | 'audio' | 'video';
-	}): {
-		avgDuration: number;
-		minDuration: number;
-		maxDuration: number;
-		successRate: number;
-		totalRequests: number;
-		errorCount: number;
-	} {
+	static getStats(filter?: IMonitoringFilter): IMonitoringStats {
 		const metrics = PerformanceMonitor.getMetrics(filter);
 
 		if (metrics.length === 0) {

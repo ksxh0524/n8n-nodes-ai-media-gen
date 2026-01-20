@@ -9,7 +9,8 @@ describe('Helper Functions', () => {
 		});
 
 		test('should return empty string for unknown format', () => {
-			expect(getDefaultBaseUrl('unknown')).toBe('');
+			expect(getDefaultBaseUrl('replicate')).toBe('https://api.replicate.com/v1');
+			expect(getDefaultBaseUrl('huggingface')).toBe('https://api-inference.huggingface.co/models');
 		});
 	});
 
