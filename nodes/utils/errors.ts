@@ -30,6 +30,10 @@ export class MediaGenError extends Error {
 			TIMEOUT: 'Request timed out',
 			INVALID_PARAMS: 'Invalid parameters provided',
 			API_ERROR: 'API error occurred',
+			INVALID_IMAGE_INPUT: 'Invalid image input provided',
+			IMAGE_TOO_LARGE: 'Image file size exceeds the maximum allowed limit',
+			UNSUPPORTED_FORMAT: 'Image format is not supported',
+			IMAGE_PROCESSING_FAILED: 'Image processing operation failed',
 		};
 		return messages[this.code] || this.message;
 	}
@@ -44,6 +48,11 @@ export const ERROR_CODES = {
 	INVALID_PARAMS: 'INVALID_PARAMS',
 	API_ERROR: 'API_ERROR',
 	SERVICE_UNAVAILABLE: 'SERVICE_UNAVAILABLE',
+	// Image processing related error codes
+	INVALID_IMAGE_INPUT: 'INVALID_IMAGE_INPUT',
+	IMAGE_TOO_LARGE: 'IMAGE_TOO_LARGE',
+	UNSUPPORTED_FORMAT: 'UNSUPPORTED_FORMAT',
+	IMAGE_PROCESSING_FAILED: 'IMAGE_PROCESSING_FAILED',
 } as const;
 
 export function sleep(ms: number): Promise<void> {

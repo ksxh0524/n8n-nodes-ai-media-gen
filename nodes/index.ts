@@ -3,10 +3,8 @@
  * Exports all AI Media Generation nodes
  */
 
-import { NanoBanana } from './NanoBanana.node';
-import { Sora } from './Sora.node';
+import { AIMediaGen } from './AIMediaGen.node';
 
 export const nodeClasses = [
-	NanoBanana,
-	Sora,
+	AIMediaGen,
 ];

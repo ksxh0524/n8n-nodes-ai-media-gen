@@ -1,1 +1,1 @@
-export { NanoBanana, OpenAI } from './NanoBanana.credentials';
+export { aiMediaApi } from './aiMediaApi.credentials';
