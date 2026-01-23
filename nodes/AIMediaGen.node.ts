@@ -79,7 +79,7 @@ export class AIMediaGen implements INodeType {
 				options: API_FORMATS,
 				default: 'openai',
 				required: true,
-				description: 'Select the API provider to use',
+				description: 'Select API provider to use',
 			},
 			{
 				displayName: 'Model',
@@ -126,7 +126,6 @@ export class AIMediaGen implements INodeType {
 					},
 				},
 			},
-			// Image processing options
 			{
 				displayName: 'Resize Width',
 				name: 'resizeWidth',
@@ -296,11 +295,293 @@ export class AIMediaGen implements INodeType {
 		],
 	};
 
+	private static async processImage(
+		context: IExecuteFunctions,
+		item: INodeExecutionData,
+		itemIndex: number,
+		performanceMonitor: PerformanceMonitor
+	): Promise<INodeExecutionData> {
+		const binaryPropertyName = context.getNodeParameter('binaryPropertyName', itemIndex) as string;
+		const resizeWidth = context.getNodeParameter('resizeWidth', itemIndex) as number;
+		const resizeHeight = context.getNodeParameter('resizeHeight', itemIndex) as number;
+		const resizeFit = context.getNodeParameter('resizeFit', itemIndex) as string;
+		const convertFormat = context.getNodeParameter('convertFormat', itemIndex) as string;
+		const outputQuality = context.getNodeParameter('outputQuality', itemIndex) as number;
+
+		if (!item.binary || Object.keys(item.binary).length === 0) {
+			throw new NodeOperationError(
+				context.getNode(),
+				'No binary data found in input. Please provide an image in binary data.',
+				{ itemIndex }
+			);
+		}
+
+		const binaryKey = binaryPropertyName || Object.keys(item.binary)[0];
+
+		if (!item.binary[binaryKey]) {
+			throw new NodeOperationError(
+				context.getNode(),
+				`Binary property '${binaryKey}' not found in input`,
+				{ itemIndex }
+			);
+		}
+
+		const timerId = performanceMonitor.startTimer('imageProcess');
+		const processor = new ImageProcessor();
+
+		try {
+			const binaryData = context.helpers.assertBinaryData(itemIndex, binaryKey);
+			const buffer = await context.helpers.getBinaryDataBuffer(itemIndex, binaryKey) as Buffer;
+
+			await processor.loadImage({
+				type: 'binary',
+				data: buffer,
+				fileName: binaryData.fileName,
+			});
+
+			const originalMetadata = await processor.getMetadata();
+
+			if (resizeWidth > 0 || resizeHeight > 0) {
+				await processor.resize({
+					width: resizeWidth > 0 ? resizeWidth : originalMetadata.width,
+					height: resizeHeight > 0 ? resizeHeight : originalMetadata.height,
+					fit: resizeFit as any,
+				});
+			}
+
+			await processor.convert({
+				format: convertFormat as any,
+				compressOptions: { quality: outputQuality },
+			});
+
+			const outputBuffer = await processor.toBuffer();
+			const finalMetadata = await ImageProcessor.getMetadataFromBuffer(outputBuffer);
+
+			const outputBinary = await processor.toN8nBinary(
+				binaryData.fileName || `processed_image.${convertFormat}`
+			);
+
+			const elapsed = performanceMonitor.endTimer(timerId);
+
+			performanceMonitor.recordMetric({
+				timestamp: Date.now().toString(),
+				provider: 'imageProcessor',
+				model: convertFormat,
+				mediaType: 'image',
+				duration: elapsed,
+				success: true,
+				fromCache: false,
+			});
+
+			context.logger?.info('Image processed successfully', {
+				originalSize: `${originalMetadata.width}x${originalMetadata.height}`,
+				finalSize: `${finalMetadata.width}x${finalMetadata.height}`,
+				format: convertFormat,
+				duration: elapsed,
+			});
+
+			return {
+				json: {
+					success: true,
+					_metadata: {
+						operation: 'process',
+						resource: 'image',
+						timestamp: new Date().toISOString(),
+						duration: elapsed,
+						originalMetadata,
+						finalMetadata,
+					},
+				},
+				binary: {
+					data: outputBinary,
+				},
+			};
+		} catch (error) {
+			const elapsed = performanceMonitor.endTimer(timerId);
+
+			performanceMonitor.recordMetric({
+				timestamp: Date.now().toString(),
+				provider: 'imageProcessor',
+				model: convertFormat,
+				mediaType: 'image',
+				duration: elapsed,
+				success: false,
+				fromCache: false,
+			});
+
+			if (error instanceof MediaGenError) {
+				context.logger?.error('Image processing failed', {
+					errorCode: error.code,
+					message: error.message,
+				});
+			}
+
+			return {
+				json: {
+					success: false,
+					error: error instanceof Error ? error.message : String(error),
+					errorCode: error instanceof MediaGenError ? error.code : 'UNKNOWN',
+					_metadata: {
+						operation: 'process',
+						resource: 'image',
+						timestamp: new Date().toISOString(),
+						duration: elapsed,
+					},
+				},
+			};
+		} finally {
+			processor.destroy();
+		}
+	}
+
+	private static async generateMedia(
+		context: IExecuteFunctions,
+		itemIndex: number,
+		apiFormat: ApiFormat,
+		mediaType: MediaType,
+		resource: MediaType,
+		operation: string,
+		credentials: { apiKey: string },
+		cacheManager: CacheManager,
+		performanceMonitor: PerformanceMonitor,
+		enableCache: boolean
+	): Promise<INodeExecutionData> {
+		const model = context.getNodeParameter('model', itemIndex) as string;
+		const prompt = context.getNodeParameter('prompt', itemIndex) as string;
+		const additionalParamsJson = context.getNodeParameter('additionalParams', itemIndex) as string;
+
+		const maxRetries = context.getNodeParameter('options.maxRetries', itemIndex) as number;
+		const timeout = context.getNodeParameter('options.timeout', itemIndex) as number;
+		const cacheTtl = context.getNodeParameter('options.cacheTtl', itemIndex) as number;
+		const customBaseUrl = context.getNodeParameter('options.baseUrl', itemIndex) as string;
+
+		let additionalParams: Record<string, unknown> = {} as Record<string, unknown>;
+		if (additionalParamsJson && additionalParamsJson.trim() !== '{}') {
+			try {
+				additionalParams = JSON.parse(additionalParamsJson) as Record<string, unknown>;
+			} catch (error) {
+				throw new NodeOperationError(
+					context.getNode(),
+					'Additional parameters must be valid JSON',
+					{ itemIndex }
+				);
+			}
+		}
+
+		const validation = validateGenerationParams({
+			model,
+			prompt,
+			additionalParams: additionalParamsJson,
+		});
+		if (!validation.valid) {
+			throw new NodeOperationError(
+				context.getNode(),
+				validation.errors.join(', '),
+				{ itemIndex }
+			);
+		}
+
+		context.logger?.info('Media type detection', {
+			model,
+			detectedType: mediaType,
+		});
+
+		const timerId = performanceMonitor.startTimer('generation');
+
+		let responseData: Record<string, unknown> = {} as Record<string, unknown>;
+		let fromCache = false;
+		let cacheKey: string | undefined;
+
+		if (enableCache) {
+			cacheKey = CacheKeyGenerator.forGeneration(
+				apiFormat,
+				model,
+				prompt,
+				additionalParams
+			);
+			const cached = await cacheManager.get(cacheKey);
+
+			if (cached) {
+				responseData = cached as Record<string, unknown>;
+				fromCache = true;
+				context.logger?.info('Cache hit', { cacheKey });
+			} else {
+				context.logger?.info('Cache miss', { cacheKey });
+			}
+		}
+
+		if (!fromCache) {
+			const baseUrl = customBaseUrl || getDefaultBaseUrl(apiFormat);
+			const endpoint = getEndpoint(apiFormat, mediaType, model);
+
+			responseData = await withRetry(
+				async () => {
+					return await context.helpers.httpRequest({
+						method: 'POST',
+						url: `${baseUrl}${endpoint}`,
+						body: buildRequestBody(
+							apiFormat,
+							mediaType,
+							model,
+							prompt,
+							additionalParams
+						) as Record<string, unknown>,
+						headers: {
+							...getHeaders(apiFormat, credentials.apiKey as string),
+							...(apiFormat === 'gemini' ? {} : {}),
+						},
+						timeout,
+						json: true,
+					});
+				},
+				{ maxRetries }
+			) as Record<string, unknown>;
+
+			if (enableCache && cacheKey) {
+				await cacheManager.set(cacheKey, responseData, cacheTtl);
+			}
+		}
+
+		const elapsed = performanceMonitor.endTimer(timerId);
+
+		performanceMonitor.recordMetric({
+			timestamp: Date.now(),
+			provider: apiFormat,
+			model,
+			mediaType,
+			duration: elapsed,
+			success: true,
+			fromCache,
+		} as any);
+
+		context.logger?.info('Generation successful', {
+			model,
+			mediaType,
+			duration: elapsed,
+			cached: fromCache,
+		});
+
+		return {
+			json: {
+				...(responseData as Record<string, unknown>),
+				_metadata: {
+					provider: apiFormat,
+					model,
+					mediaType,
+					resource,
+					operation,
+					timestamp: new Date().toISOString(),
+					cached: fromCache,
+					duration: elapsed,
+				},
+			},
+		};
+	}
+
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
 		const items = this.getInputData();
 		const results: INodeExecutionData[] = [];
 
-		// Check if we need credentials (only for generation operation)
 		const needsCredentials = items.some((_, i) => {
 			const operation = this.getNodeParameter('operation', i) as string;
 			return operation === 'generate';
@@ -320,326 +601,39 @@ export class AIMediaGen implements INodeType {
 			}
 		}
 
-		// Initialize cache and monitoring
 		const enableCache = this.getNodeParameter('options.enableCache', 0) as boolean;
 		const cacheManager = new CacheManager();
 		const performanceMonitor = new PerformanceMonitor();
 
 		for (let i = 0; i < items.length; i++) {
 			try {
-				// Get parameters
 				const resource = this.getNodeParameter('resource', i) as MediaType;
 				const operation = this.getNodeParameter('operation', i) as string;
 				const apiFormat = this.getNodeParameter('apiFormat', i) as ApiFormat;
 
-				// Handle image processing operation
 				if (operation === 'process' && resource === 'image') {
-					// Process the image inline
-					const item = items[i];
-
-					// Check if item has binary data
-					if (!item.binary || Object.keys(item.binary).length === 0) {
-						throw new NodeOperationError(
-							this.getNode(),
-							'No binary data found in input. Please provide an image in the binary data.',
-							{ itemIndex: i }
-						);
-					}
-
-					// Get processing parameters
-					const binaryPropertyName = this.getNodeParameter('binaryPropertyName', i) as string;
-					const resizeWidth = this.getNodeParameter('resizeWidth', i) as number;
-					const resizeHeight = this.getNodeParameter('resizeHeight', i) as number;
-					const resizeFit = this.getNodeParameter('resizeFit', i) as string;
-					const convertFormat = this.getNodeParameter('convertFormat', i) as string;
-					const outputQuality = this.getNodeParameter('outputQuality', i) as number;
-
-					// Get binary data key (first binary key if not specified)
-					const binaryKey = binaryPropertyName || Object.keys(item.binary)[0];
-
-					if (!item.binary[binaryKey]) {
-						throw new NodeOperationError(
-							this.getNode(),
-							`Binary property '${binaryKey}' not found in input`,
-							{ itemIndex: i }
-						);
-					}
-
-					// Start performance monitoring
-					const timerId = performanceMonitor.startTimer('imageProcess');
-
-					// Create processor outside try block to ensure cleanup
-					const processor = new ImageProcessor();
-
-					try {
-						// Get binary data buffer
-						const binaryData = this.helpers.assertBinaryData(i, binaryKey);
-						const buffer = await this.helpers.getBinaryDataBuffer(i, binaryKey) as Buffer;
-
-						// Load image into processor
-						await processor.loadImage({
-							type: 'binary',
-							data: buffer,
-							fileName: binaryData.fileName,
-						});
-
-						// Get original metadata
-						const originalMetadata = await processor.getMetadata();
-
-						// Apply resize if dimensions are specified
-						if (resizeWidth > 0 || resizeHeight > 0) {
-							await processor.resize({
-								width: resizeWidth > 0 ? resizeWidth : originalMetadata.width,
-								height: resizeHeight > 0 ? resizeHeight : originalMetadata.height,
-								fit: resizeFit as any,
-							});
-						}
-
-						// Convert format and apply quality
-						await processor.convert({
-							format: convertFormat as any,
-							compressOptions: { quality: outputQuality },
-						});
-
-						// Get output buffer for correct metadata
-						const outputBuffer = await processor.toBuffer();
-
-						// Get final metadata from output buffer
-						const finalMetadata = await ImageProcessor.getMetadataFromBuffer(outputBuffer);
-
-						// Output as n8n binary format
-						const outputBinary = await processor.toN8nBinary(
-							binaryData.fileName || `processed_image.${convertFormat}`
-						);
-
-						// Record performance
-						const elapsed = performanceMonitor.endTimer(timerId);
-
-						// Record metrics
-						performanceMonitor.recordMetric({
-							timestamp: Date.now().toString(),
-							provider: 'imageProcessor',
-							model: convertFormat,
-							mediaType: 'image',
-							duration: elapsed,
-							success: true,
-							fromCache: false,
-						});
-
-						// Return result with processed binary data
-						results.push({
-							json: {
-								success: true,
-								_metadata: {
-									operation: 'process',
-									resource: 'image',
-									timestamp: new Date().toISOString(),
-									duration: elapsed,
-									originalMetadata,
-									finalMetadata,
-								},
-							},
-							binary: {
-								data: outputBinary,
-							},
-						});
-
-						this.logger?.info('Image processed successfully', {
-							originalSize: `${originalMetadata.width}x${originalMetadata.height}`,
-							finalSize: `${finalMetadata.width}x${finalMetadata.height}`,
-							format: convertFormat,
-							duration: elapsed,
-						});
-					} catch (error) {
-						const elapsed = performanceMonitor.endTimer(timerId);
-
-						// Record error metrics
-						performanceMonitor.recordMetric({
-							timestamp: Date.now().toString(),
-							provider: 'imageProcessor',
-							model: convertFormat,
-							mediaType: 'image',
-							duration: elapsed,
-							success: false,
-							fromCache: false,
-						});
-
-						if (error instanceof MediaGenError) {
-							this.logger?.error('Image processing failed', {
-								errorCode: error.code,
-								message: error.message,
-							});
-						}
-
-						results.push({
-							json: {
-								success: false,
-								error: error instanceof Error ? error.message : String(error),
-								errorCode: error instanceof MediaGenError ? error.code : 'UNKNOWN',
-								_metadata: {
-									operation: 'process',
-									resource: 'image',
-									timestamp: new Date().toISOString(),
-									duration: elapsed,
-								},
-							},
-						});
-
-						if (this.continueOnFail()) {
-							continue;
-						}
-						throw error;
-					} finally {
-						// Always clean up resources
-						processor.destroy();
-					}
-
+					const result = await AIMediaGen.processImage(this, items[i], i, performanceMonitor);
+					results.push(result);
 					continue;
 				}
 
-				// Original generation operation
-				const model = this.getNodeParameter('model', i) as string;
-				const prompt = this.getNodeParameter('prompt', i) as string;
-				const additionalParamsJson = this.getNodeParameter('additionalParams', i) as string;
+				const mediaType = resource || detectMediaType(this.getNodeParameter('model', i) as string);
 
-				// Get options
-				const maxRetries = this.getNodeParameter('options.maxRetries', i) as number;
-				const timeout = this.getNodeParameter('options.timeout', i) as number;
-				const cacheTtl = this.getNodeParameter('options.cacheTtl', i) as number;
-				const customBaseUrl = this.getNodeParameter('options.baseUrl', i) as string;
-
-				// Parse additional parameters
-				let additionalParams: Record<string, unknown> = {} as Record<string, unknown>;
-				if (additionalParamsJson && additionalParamsJson.trim() !== '{}') {
-					try {
-						additionalParams = JSON.parse(additionalParamsJson) as Record<string, unknown>;
-					} catch (error) {
-						throw new NodeOperationError(
-							this.getNode(),
-							'Additional parameters must be valid JSON',
-							{ itemIndex: i }
-						);
-					}
-				}
-
-				// Validate parameters
-				const validation = validateGenerationParams({
-					model,
-					prompt,
-					additionalParams: additionalParamsJson,
-				});
-				if (!validation.valid) {
-					throw new NodeOperationError(
-						this.getNode(),
-						validation.errors.join(', '),
-						{ itemIndex: i }
-					);
-				}
-
-				// Detect media type if not explicitly set
-				const mediaType = resource || detectMediaType(model);
-				this.logger?.info('Media type detection', {
-					model,
-					detectedType: mediaType,
-				});
-
-				// Start performance monitoring
-				const timerId = performanceMonitor.startTimer('generation');
-
-				// Check cache
-				let responseData: Record<string, unknown> = {} as Record<string, unknown>;
-				let fromCache = false;
-				let cacheKey: string | undefined;
-
-				if (enableCache) {
-					cacheKey = CacheKeyGenerator.forGeneration(
-						apiFormat,
-						model,
-						prompt,
-						additionalParams
-					);
-					const cached = await cacheManager.get(cacheKey);
-
-					if (cached) {
-						responseData = cached as Record<string, unknown>;
-						fromCache = true;
-						this.logger?.info('Cache hit', { cacheKey });
-					} else {
-						this.logger?.info('Cache miss', { cacheKey });
-					}
-				}
-
-				// Make API request if not from cache
-				if (!fromCache) {
-					const baseUrl = customBaseUrl || getDefaultBaseUrl(apiFormat);
-					const endpoint = getEndpoint(apiFormat, mediaType, model);
-
-					responseData = await withRetry(
-						async () => {
-							return await this.helpers.httpRequest({
-								method: 'POST',
-								url: `${baseUrl}${endpoint}`,
-								body: buildRequestBody(
-									apiFormat,
-									mediaType,
-									model,
-									prompt,
-									additionalParams
-								) as Record<string, unknown>,
-								headers: {
-									...getHeaders(apiFormat, credentials!.apiKey as string),
-									...(apiFormat === 'gemini' ? {} : {}),
-								},
-								timeout,
-								json: true,
-							});
-						},
-						{ maxRetries }
-					) as Record<string, unknown>;
-
-					// Store in cache
-					if (enableCache && cacheKey) {
-						await cacheManager.set(cacheKey, responseData, cacheTtl);
-					}
-				}
-
-				// Record performance
-				const elapsed = performanceMonitor.endTimer(timerId);
-				performanceMonitor.recordMetric({
-					timestamp: Date.now(),
-					provider: apiFormat,
-					model,
+				const result = await AIMediaGen.generateMedia(
+					this,
+					i,
+					apiFormat,
 					mediaType,
-					duration: elapsed,
-					success: true,
-					fromCache,
-				} as any);
+					resource,
+					operation,
+					credentials as { apiKey: string },
+					cacheManager,
+					performanceMonitor,
+					enableCache
+				);
 
-				// Return result with metadata
-				results.push({
-					json: {
-						...(responseData as Record<string, unknown>),
-						_metadata: {
-							provider: apiFormat,
-							model,
-							mediaType,
-							resource,
-							operation,
-							timestamp: new Date().toISOString(),
-							cached: fromCache,
-							duration: elapsed,
-						},
-					},
-				});
-
-				this.logger?.info('Generation successful', {
-					model,
-					mediaType,
-					duration: elapsed,
-					cached: fromCache,
-				});
+				results.push(result);
 			} catch (error) {
-				// Handle errors
 				if (error instanceof MediaGenError) {
 					this.logger?.error('Media generation failed', {
 						errorCode: error.code,
@@ -648,7 +642,6 @@ export class AIMediaGen implements INodeType {
 					});
 				}
 
-				// Return error response
 				results.push({
 					json: {
 						success: false,
@@ -660,7 +653,6 @@ export class AIMediaGen implements INodeType {
 					},
 				});
 
-				// Re-throw if n8n should handle it
 				if (this.continueOnFail()) {
 					continue;
 				}
