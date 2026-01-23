@@ -40,8 +40,8 @@ describe('CacheManager', () => {
 	});
 
 	test('should respect TTL', async () => {
-		await cacheManager.set('key1', { value: 'test' }, 1);
-		await new Promise(resolve => setTimeout(resolve, 1100));
+		await cacheManager.set('key1', { value: 'test' }, 0.001);
+		await new Promise(resolve => setTimeout(resolve, 10));
 		const result = await cacheManager.get('key1');
 		expect(result).toBeNull();
 	});

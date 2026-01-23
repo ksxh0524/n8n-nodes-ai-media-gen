@@ -109,6 +109,7 @@ export interface N8nBinaryData {
 	fileName?: string;
 	fileExtension?: string;
 	fileSize?: string;
+	[key: string]: string | number | undefined;
 }
 
 /**

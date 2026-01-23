@@ -5,7 +5,7 @@ import {
 	IExecuteFunctions,
 	NodeOperationError,
 } from 'n8n-workflow';
-import { MediaGenError, withRetry, validateGenerationParams } from './utils/errors';
+import { MediaGenError, withRetry, validateGenerationParams, validateCredentials } from './utils/errors';
 import { detectMediaType, getDefaultBaseUrl, getEndpoint, getHeaders, buildRequestBody } from './utils/helpers';
 import { CacheManager, CacheKeyGenerator } from './utils/cache';
 import { PerformanceMonitor } from './utils/monitoring';
@@ -309,11 +309,21 @@ export class AIMediaGen implements INodeType {
 		let credentials;
 		if (needsCredentials) {
 			credentials = await this.getCredentials('aiMediaApi');
+
+			const validation = validateCredentials(credentials);
+			if (!validation.valid) {
+				throw new NodeOperationError(
+					this.getNode(),
+					`Invalid credentials: ${validation.errors.join(', ')}`,
+					{ itemIndex: 0 }
+				);
+			}
 		}
 
 		// Initialize cache and monitoring
 		const enableCache = this.getNodeParameter('options.enableCache', 0) as boolean;
 		const cacheManager = new CacheManager();
+		const performanceMonitor = new PerformanceMonitor();
 
 		for (let i = 0; i < items.length; i++) {
 			try {
@@ -356,7 +366,7 @@ export class AIMediaGen implements INodeType {
 					}
 
 					// Start performance monitoring
-					const timerId = PerformanceMonitor.startTimer('imageProcess');
+					const timerId = performanceMonitor.startTimer('imageProcess');
 
 					// Create processor outside try block to ensure cleanup
 					const processor = new ImageProcessor();
@@ -403,18 +413,18 @@ export class AIMediaGen implements INodeType {
 						);
 
 						// Record performance
-						const elapsed = PerformanceMonitor.endTimer(timerId);
+						const elapsed = performanceMonitor.endTimer(timerId);
 
 						// Record metrics
-						PerformanceMonitor.recordMetric({
-							timestamp: Date.now(),
+						performanceMonitor.recordMetric({
+							timestamp: Date.now().toString(),
 							provider: 'imageProcessor',
 							model: convertFormat,
-							mediaType: 'image' as MediaType,
+							mediaType: 'image',
 							duration: elapsed,
 							success: true,
 							fromCache: false,
-						} as any);
+						});
 
 						// Return result with processed binary data
 						results.push({
@@ -430,7 +440,7 @@ export class AIMediaGen implements INodeType {
 								},
 							},
 							binary: {
-								data: outputBinary as any,
+								data: outputBinary,
 							},
 						});
 
@@ -441,18 +451,18 @@ export class AIMediaGen implements INodeType {
 							duration: elapsed,
 						});
 					} catch (error) {
-						const elapsed = PerformanceMonitor.endTimer(timerId);
+						const elapsed = performanceMonitor.endTimer(timerId);
 
 						// Record error metrics
-						PerformanceMonitor.recordMetric({
-							timestamp: Date.now(),
+						performanceMonitor.recordMetric({
+							timestamp: Date.now().toString(),
 							provider: 'imageProcessor',
 							model: convertFormat,
-							mediaType: 'image' as MediaType,
+							mediaType: 'image',
 							duration: elapsed,
 							success: false,
 							fromCache: false,
-						} as any);
+						});
 
 						if (error instanceof MediaGenError) {
 							this.logger?.error('Image processing failed', {
@@ -534,14 +544,15 @@ export class AIMediaGen implements INodeType {
 				});
 
 				// Start performance monitoring
-				const timerId = PerformanceMonitor.startTimer('generation');
+				const timerId = performanceMonitor.startTimer('generation');
 
 				// Check cache
 				let responseData: Record<string, unknown> = {} as Record<string, unknown>;
 				let fromCache = false;
+				let cacheKey: string | undefined;
 
 				if (enableCache) {
-					const cacheKey = CacheKeyGenerator.forGeneration(
+					cacheKey = CacheKeyGenerator.forGeneration(
 						apiFormat,
 						model,
 						prompt,
@@ -587,20 +598,14 @@ export class AIMediaGen implements INodeType {
 					) as Record<string, unknown>;
 
 					// Store in cache
-					if (enableCache) {
-						const cacheKey = CacheKeyGenerator.forGeneration(
-							apiFormat,
-							model,
-							prompt,
-							additionalParams
-						);
+					if (enableCache && cacheKey) {
 						await cacheManager.set(cacheKey, responseData, cacheTtl);
 					}
 				}
 
 				// Record performance
-				const elapsed = PerformanceMonitor.endTimer(timerId);
-				PerformanceMonitor.recordMetric({
+				const elapsed = performanceMonitor.endTimer(timerId);
+				performanceMonitor.recordMetric({
 					timestamp: Date.now(),
 					provider: apiFormat,
 					model,

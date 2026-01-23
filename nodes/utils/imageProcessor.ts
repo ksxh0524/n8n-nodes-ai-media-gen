@@ -108,32 +108,42 @@ export class ImageProcessor {
 	 */
 	private async loadFromUrl(url: string): Promise<Buffer> {
 		try {
-			const response = await fetch(url, {
-				signal: AbortSignal.timeout(this.timeout),
-			});
+			const controller = new AbortController();
+			const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 
-			if (!response.ok) {
-				throw new MediaGenError(
-					`Failed to fetch image from URL: ${response.statusText} (${response.status})`,
-					ERROR_CODES.NETWORK_ERROR
-				);
+			try {
+				const response = await fetch(url, {
+					signal: controller.signal,
+				});
+
+				clearTimeout(timeoutId);
+
+				if (!response.ok) {
+					throw new MediaGenError(
+						`Failed to fetch image from URL: ${response.statusText} (${response.status})`,
+						ERROR_CODES.NETWORK_ERROR
+					);
+				}
+
+				const contentType = response.headers.get('content-type');
+				if (contentType && !SUPPORTED_MIME_TYPES.has(contentType)) {
+					throw new MediaGenError(
+						`Unsupported content type: ${contentType}`,
+						ERROR_CODES.UNSUPPORTED_FORMAT
+					);
+				}
+
+				const arrayBuffer = await response.arrayBuffer();
+				return Buffer.from(arrayBuffer);
+			} catch (error) {
+				clearTimeout(timeoutId);
+				throw error;
 			}
-
-			const contentType = response.headers.get('content-type');
-			if (contentType && !SUPPORTED_MIME_TYPES.has(contentType)) {
-				throw new MediaGenError(
-					`Unsupported content type: ${contentType}`,
-					ERROR_CODES.UNSUPPORTED_FORMAT
-				);
-			}
-
-			const arrayBuffer = await response.arrayBuffer();
-			return Buffer.from(arrayBuffer);
 		} catch (error) {
 			if (error instanceof MediaGenError) {
 				throw error;
 			}
-			if (error instanceof TypeError && error.message.includes('timeout')) {
+			if (error instanceof Error && error.name === 'AbortError') {
 				throw new MediaGenError(
 					`Request timeout: Failed to load image within ${this.timeout}ms`,
 					ERROR_CODES.TIMEOUT
@@ -230,7 +240,6 @@ export class ImageProcessor {
 				width: metadata.width || 0,
 				height: metadata.height || 0,
 				channels: metadata.channels || 0,
-				prefixed: (metadata as any).prefixed,
 				hasAlpha: metadata.hasAlpha || false,
 				hasProfile: metadata.hasProfile || false,
 				isProgressive: metadata.isProgressive || false,
@@ -238,7 +247,6 @@ export class ImageProcessor {
 				orientation: metadata.orientation,
 				density: metadata.density,
 				chromaSubsampling: metadata.chromaSubsampling,
-				isLinear: (metadata as any).isLinear,
 			};
 		} catch (error) {
 			throw new MediaGenError(
@@ -260,7 +268,6 @@ export class ImageProcessor {
 				width: metadata.width || 0,
 				height: metadata.height || 0,
 				channels: metadata.channels || 0,
-				prefixed: (metadata as any).prefixed,
 				hasAlpha: metadata.hasAlpha || false,
 				hasProfile: metadata.hasProfile || false,
 				isProgressive: metadata.isProgressive || false,
@@ -268,7 +275,6 @@ export class ImageProcessor {
 				orientation: metadata.orientation,
 				density: metadata.density,
 				chromaSubsampling: metadata.chromaSubsampling,
-				isLinear: (metadata as any).isLinear,
 			};
 		} catch (error) {
 			throw new MediaGenError(

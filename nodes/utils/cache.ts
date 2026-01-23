@@ -32,32 +32,34 @@ export class CacheManager {
 	}
 }
 
-class MemoryCacheEntry {
+export class MemoryCacheEntry {
 	value: unknown;
 	expiry: number;
+	lastAccessed: number;
 
 	constructor(value: unknown, ttl: number) {
 		this.value = value;
 		this.expiry = Date.now() + ttl * 1000;
+		this.lastAccessed = Date.now();
 	}
 
 	isExpired(): boolean {
 		return Date.now() > this.expiry;
 	}
+
+	access(): void {
+		this.lastAccessed = Date.now();
+	}
 }
 
 export class MemoryCache implements ICache {
 	private cache = new Map<string, MemoryCacheEntry>();
-	private maxSize = 100;
-	private ttl = 3600;
+	private maxSize: number;
+	private ttl: number;
 
 	constructor(options?: ICacheOptions) {
-		if (options?.maxSize) {
-			this.maxSize = options.maxSize;
-		}
-		if (options?.defaultTtl) {
-			this.ttl = options.defaultTtl;
-		}
+		this.maxSize = options?.maxSize ?? 200;
+		this.ttl = options?.defaultTtl ?? 3600;
 	}
 
 	async get(key: string): Promise<unknown | null> {
@@ -68,6 +70,7 @@ export class MemoryCache implements ICache {
 			}
 			return null;
 		}
+		entry.access();
 		return entry.value;
 	}
 
@@ -91,7 +94,7 @@ export class MemoryCache implements ICache {
 	private evictIfNeeded(): void {
 		if (this.cache.size > this.maxSize) {
 			const entries = Array.from(this.cache.entries());
-			entries.sort((a, b) => a[1].expiry - b[1].expiry);
+			entries.sort((a, b) => a[1].lastAccessed - b[1].lastAccessed);
 
 			const toRemove = entries.slice(0, this.cache.size - this.maxSize);
 			for (const [key] of toRemove) {

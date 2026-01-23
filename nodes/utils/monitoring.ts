@@ -7,31 +7,36 @@ export interface PerformanceMetrics {
 	duration: number;
 	success: boolean;
 	timestamp: string;
+	fromCache: boolean;
 	error?: string;
 }
 
 export class PerformanceMonitor {
-	private static metrics: PerformanceMetrics[] = [];
-	private static maxMetrics = 100;
+	private metrics: PerformanceMetrics[] = [];
+	private maxMetrics: number;
 
-	static startTimer(_operation: string): number {
+	constructor(maxMetrics: number = 100) {
+		this.maxMetrics = maxMetrics;
+	}
+
+	startTimer(_operation: string): number {
 		return Date.now();
 	}
 
-	static endTimer(startTime: number): number {
+	endTimer(startTime: number): number {
 		return Date.now() - startTime;
 	}
 
-	static recordMetric(metric: PerformanceMetrics): void {
-		PerformanceMonitor.metrics.push(metric);
+	recordMetric(metric: PerformanceMetrics): void {
+		this.metrics.push(metric);
 
-		if (PerformanceMonitor.metrics.length > PerformanceMonitor.maxMetrics) {
-			PerformanceMonitor.metrics.shift();
+		if (this.metrics.length > this.maxMetrics) {
+			this.metrics.shift();
 		}
 	}
 
-	static getMetrics(filter?: IMonitoringFilter): PerformanceMetrics[] {
-		let filtered = PerformanceMonitor.metrics;
+	getMetrics(filter?: IMonitoringFilter): PerformanceMetrics[] {
+		let filtered = this.metrics;
 
 		if (filter?.provider) {
 			filtered = filtered.filter(m => m.provider === filter.provider);
@@ -46,8 +51,8 @@ export class PerformanceMonitor {
 		return filtered;
 	}
 
-	static getStats(filter?: IMonitoringFilter): IMonitoringStats {
-		const metrics = PerformanceMonitor.getMetrics(filter);
+	getStats(filter?: IMonitoringFilter): IMonitoringStats {
+		const metrics = this.getMetrics(filter);
 
 		if (metrics.length === 0) {
 			return {
@@ -74,15 +79,15 @@ export class PerformanceMonitor {
 		};
 	}
 
-	static clear(): void {
-		PerformanceMonitor.metrics = [];
+	clear(): void {
+		this.metrics = [];
 	}
 
-	static getSlowRequests(threshold: number = 10000): PerformanceMetrics[] {
-		return PerformanceMonitor.metrics.filter(m => m.duration > threshold);
+	getSlowRequests(threshold: number = 10000): PerformanceMetrics[] {
+		return this.metrics.filter(m => m.duration > threshold);
 	}
 
-	static getFailedRequests(): PerformanceMetrics[] {
-		return PerformanceMonitor.metrics.filter(m => !m.success);
+	getFailedRequests(): PerformanceMetrics[] {
+		return this.metrics.filter(m => !m.success);
 	}
 }
