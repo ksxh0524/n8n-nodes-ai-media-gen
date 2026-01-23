@@ -1,5 +1,6 @@
 import { createHash } from 'crypto';
 import type { ICacheOptions } from './types';
+import * as CONSTANTS from './constants';
 
 export interface ICache {
 	get(key: string): Promise<unknown | null>;
@@ -19,7 +20,7 @@ export class CacheManager {
 		return await this.cache.get(key);
 	}
 
-	async set(key: string, value: unknown, ttl: number = 3600): Promise<void> {
+	async set(key: string, value: unknown, ttl: number = CONSTANTS.DEFAULTS.CACHE_TTL_SECONDS): Promise<void> {
 		await this.cache.set(key, value, ttl);
 	}
 
@@ -58,8 +59,8 @@ export class MemoryCache implements ICache {
 	private ttl: number;
 
 	constructor(options?: ICacheOptions) {
-		this.maxSize = options?.maxSize ?? 200;
-		this.ttl = options?.defaultTtl ?? 3600;
+		this.maxSize = options?.maxSize ?? CONSTANTS.CACHE.DEFAULT_MAX_SIZE;
+		this.ttl = options?.defaultTtl ?? CONSTANTS.DEFAULTS.CACHE_TTL_SECONDS;
 	}
 
 	async get(key: string): Promise<unknown | null> {
@@ -120,6 +121,6 @@ export class CacheKeyGenerator {
 	}
 
 	private static hash(str: string): string {
-		return createHash('sha256').update(str).digest('hex').substring(0, 32);
+		return createHash('sha256').update(str).digest('hex').substring(0, CONSTANTS.HASH.LENGTH);
 	}
 }

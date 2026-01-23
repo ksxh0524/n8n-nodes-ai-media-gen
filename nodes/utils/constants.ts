@@ -71,6 +71,7 @@ export const TIMEOUT = {
 export const CACHE = {
 	MIN_TTL_SECONDS: 60,
 	MAX_TTL_SECONDS: 86400,
+	DEFAULT_MAX_SIZE: 200,
 } as const;
 
 /**
@@ -78,4 +79,11 @@ export const CACHE = {
  */
 export const INDICES = {
 	FIRST_ITEM: 0,
+} as const;
+
+/**
+ * Hash configuration
+ */
+export const HASH = {
+	LENGTH: 32,
 } as const;
