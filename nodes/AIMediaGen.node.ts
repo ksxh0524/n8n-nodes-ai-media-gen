@@ -11,6 +11,7 @@ import { CacheManager, CacheKeyGenerator } from './utils/cache';
 import { PerformanceMonitor } from './utils/monitoring';
 import { ImageProcessor } from './utils/imageProcessor';
 import type { ApiFormat, MediaType } from './utils/types';
+import * as CONSTANTS from './utils/constants';
 
 const API_FORMATS: Array<{ name: string; value: ApiFormat }> = [
 	{ name: 'OpenAI', value: 'openai' },
@@ -45,7 +46,7 @@ export class AIMediaGen implements INodeType {
 		name: 'aiMediaGen',
 		icon: 'file:ai-media-gen.svg',
 		description: 'Generate images, videos, and audio using multiple AI providers',
-		version: 1.0,
+		version: CONSTANTS.NODE_VERSION,
 		group: ['ai' as any],
 		defaults: {
 			name: 'AI Media Generation',
@@ -113,7 +114,7 @@ export class AIMediaGen implements INodeType {
 				name: 'prompt',
 				type: 'string',
 				typeOptions: {
-					rows: 5,
+					rows: CONSTANTS.UI.TEXT_AREA_ROWS.PROMPT,
 				},
 				default: '',
 				required: true,
@@ -129,7 +130,7 @@ export class AIMediaGen implements INodeType {
 				name: 'additionalParams',
 				type: 'string',
 				typeOptions: {
-					rows: 8,
+					rows: CONSTANTS.UI.TEXT_AREA_ROWS.ADDITIONAL_PARAMS,
 				},
 				default: '{}',
 				description: 'Additional parameters as JSON object (e.g., {"size": "1024x1024", "n": 1})',
@@ -144,10 +145,10 @@ export class AIMediaGen implements INodeType {
 				name: 'resizeWidth',
 				type: 'number',
 				typeOptions: {
-					minValue: 0,
-					maxValue: 65535,
+					minValue: CONSTANTS.IMAGE_PROCESSING.MIN_WIDTH,
+					maxValue: CONSTANTS.IMAGE_PROCESSING.MAX_WIDTH,
 				},
-				default: 0,
+				default: CONSTANTS.DEFAULTS.KEEP_ORIGINAL_SIZE,
 				description: 'Width to resize image to (0 to keep original)',
 				displayOptions: {
 					show: {
@@ -161,10 +162,10 @@ export class AIMediaGen implements INodeType {
 				name: 'resizeHeight',
 				type: 'number',
 				typeOptions: {
-					minValue: 0,
-					maxValue: 65535,
+					minValue: CONSTANTS.IMAGE_PROCESSING.MIN_HEIGHT,
+					maxValue: CONSTANTS.IMAGE_PROCESSING.MAX_HEIGHT,
 				},
-				default: 0,
+				default: CONSTANTS.DEFAULTS.KEEP_ORIGINAL_SIZE,
 				description: 'Height to resize image to (0 to keep original)',
 				displayOptions: {
 					show: {
@@ -219,10 +220,10 @@ export class AIMediaGen implements INodeType {
 				name: 'outputQuality',
 				type: 'number',
 				typeOptions: {
-					minValue: 1,
-					maxValue: 100,
+					minValue: CONSTANTS.QUALITY.MIN,
+					maxValue: CONSTANTS.QUALITY.MAX,
 				},
-				default: 85,
+				default: CONSTANTS.DEFAULTS.QUALITY,
 				description: 'Output image quality (1-100)',
 				displayOptions: {
 					show: {
@@ -256,10 +257,10 @@ export class AIMediaGen implements INodeType {
 						name: 'maxRetries',
 						type: 'number',
 						typeOptions: {
-							minValue: 0,
-							maxValue: 10,
+							minValue: CONSTANTS.RETRY.MIN,
+							maxValue: CONSTANTS.RETRY.MAX,
 						},
-						default: 3,
+						default: CONSTANTS.DEFAULTS.MAX_RETRIES,
 						description: 'Maximum number of retry attempts for failed requests',
 					},
 					{
@@ -267,10 +268,10 @@ export class AIMediaGen implements INodeType {
 						name: 'timeout',
 						type: 'number',
 						typeOptions: {
-							minValue: 1000,
-							maxValue: 600000,
+							minValue: CONSTANTS.TIMEOUT.MIN_MS,
+							maxValue: CONSTANTS.TIMEOUT.MAX_MS,
 						},
-						default: 60000,
+						default: CONSTANTS.DEFAULTS.TIMEOUT_MS,
 						description: 'Request timeout in milliseconds',
 					},
 					{
@@ -285,10 +286,10 @@ export class AIMediaGen implements INodeType {
 						name: 'cacheTtl',
 						type: 'number',
 						typeOptions: {
-							minValue: 60,
-							maxValue: 86400,
+							minValue: CONSTANTS.CACHE.MIN_TTL_SECONDS,
+							maxValue: CONSTANTS.CACHE.MAX_TTL_SECONDS,
 						},
-						default: 3600,
+						default: CONSTANTS.DEFAULTS.CACHE_TTL_SECONDS,
 						description: 'Cache time-to-live in seconds',
 						displayOptions: {
 							show: {
@@ -369,7 +370,7 @@ export class AIMediaGen implements INodeType {
 			);
 		}
 
-		const binaryKey = binaryPropertyName || Object.keys(item.binary)[0];
+		const binaryKey = binaryPropertyName || Object.keys(item.binary)[CONSTANTS.INDICES.FIRST_ITEM];
 
 		if (!item.binary[binaryKey]) {
 			throw new NodeOperationError(
@@ -664,12 +665,12 @@ export class AIMediaGen implements INodeType {
 				throw new NodeOperationError(
 					this.getNode(),
 					`Invalid credentials: ${validation.errors.join(', ')}`,
-					{ itemIndex: 0 }
+					{ itemIndex: CONSTANTS.INDICES.FIRST_ITEM }
 				);
 			}
 		}
 
-		const enableCache = this.getNodeParameter('options.enableCache', 0) as boolean;
+		const enableCache = this.getNodeParameter('options.enableCache', CONSTANTS.INDICES.FIRST_ITEM) as boolean;
 		const cacheManager = new CacheManager();
 		const performanceMonitor = new PerformanceMonitor();
 
