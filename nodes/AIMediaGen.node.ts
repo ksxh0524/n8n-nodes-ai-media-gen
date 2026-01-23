@@ -295,6 +295,26 @@ export class AIMediaGen implements INodeType {
 		],
 	};
 
+	private static recordPerformanceMetric(
+		performanceMonitor: PerformanceMonitor,
+		provider: string,
+		model: string,
+		mediaType: MediaType,
+		duration: number,
+		success: boolean,
+		fromCache: boolean
+	): void {
+		performanceMonitor.recordMetric({
+			timestamp: Date.now().toString(),
+			provider,
+			model,
+			mediaType,
+			duration,
+			success,
+			fromCache,
+		});
+	}
+
 	private static async processImage(
 		context: IExecuteFunctions,
 		item: INodeExecutionData,
@@ -363,15 +383,15 @@ export class AIMediaGen implements INodeType {
 
 			const elapsed = performanceMonitor.endTimer(timerId);
 
-			performanceMonitor.recordMetric({
-				timestamp: Date.now().toString(),
-				provider: 'imageProcessor',
-				model: convertFormat,
-				mediaType: 'image',
-				duration: elapsed,
-				success: true,
-				fromCache: false,
-			});
+			AIMediaGen.recordPerformanceMetric(
+				performanceMonitor,
+				'imageProcessor',
+				convertFormat,
+				'image' as MediaType,
+				elapsed,
+				true,
+				false
+			);
 
 			context.logger?.info('Image processed successfully', {
 				originalSize: `${originalMetadata.width}x${originalMetadata.height}`,
@@ -399,15 +419,15 @@ export class AIMediaGen implements INodeType {
 		} catch (error) {
 			const elapsed = performanceMonitor.endTimer(timerId);
 
-			performanceMonitor.recordMetric({
-				timestamp: Date.now().toString(),
-				provider: 'imageProcessor',
-				model: convertFormat,
-				mediaType: 'image',
-				duration: elapsed,
-				success: false,
-				fromCache: false,
-			});
+			AIMediaGen.recordPerformanceMetric(
+				performanceMonitor,
+				'imageProcessor',
+				convertFormat,
+				'image' as MediaType,
+				elapsed,
+				false,
+				false
+			);
 
 			if (error instanceof MediaGenError) {
 				context.logger?.error('Image processing failed', {
@@ -544,15 +564,15 @@ export class AIMediaGen implements INodeType {
 
 		const elapsed = performanceMonitor.endTimer(timerId);
 
-		performanceMonitor.recordMetric({
-			timestamp: Date.now(),
-			provider: apiFormat,
+		AIMediaGen.recordPerformanceMetric(
+			performanceMonitor,
+			apiFormat,
 			model,
 			mediaType,
-			duration: elapsed,
-			success: true,
-			fromCache,
-		} as any);
+			elapsed,
+			true,
+			fromCache
+		);
 
 		context.logger?.info('Generation successful', {
 			model,
