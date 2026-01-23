@@ -26,6 +26,19 @@ const RESOURCES = [
 	{ name: 'Audio', value: 'audio' },
 ];
 
+/**
+ * AI Media Generation Node for n8n
+ * 
+ * This node provides functionality to generate and process media (images, videos, audio)
+ * using multiple AI providers including OpenAI, Google Gemini, Alibaba Bailian, Replicate, and Hugging Face.
+ * 
+ * Features:
+ * - Generate images, videos, and audio using AI models
+ * - Process images (resize, format conversion, quality adjustment)
+ * - Built-in caching to reduce API calls
+ * - Performance monitoring and metrics
+ * - Comprehensive error handling
+ */
 export class AIMediaGen implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'AI Media Generation',
@@ -295,6 +308,17 @@ export class AIMediaGen implements INodeType {
 		],
 	};
 
+	/**
+	 * Records performance metrics for media generation/processing operations
+	 * 
+	 * @param performanceMonitor - The performance monitor instance
+	 * @param provider - The provider name (e.g., 'openai', 'imageProcessor')
+	 * @param model - The model name or format
+	 * @param mediaType - The media type ('image', 'audio', 'video')
+	 * @param duration - The operation duration in milliseconds
+	 * @param success - Whether the operation was successful
+	 * @param fromCache - Whether the result came from cache
+	 */
 	private static recordPerformanceMetric(
 		performanceMonitor: PerformanceMonitor,
 		provider: string,
@@ -315,6 +339,15 @@ export class AIMediaGen implements INodeType {
 		});
 	}
 
+	/**
+	 * Processes an image by resizing and converting it to the specified format
+	 * 
+	 * @param context - The n8n execution context
+	 * @param item - The input item containing binary image data
+	 * @param itemIndex - The index of the current item
+	 * @param performanceMonitor - The performance monitor instance
+	 * @returns The processed image result with binary data
+	 */
 	private static async processImage(
 		context: IExecuteFunctions,
 		item: INodeExecutionData,
@@ -454,6 +487,21 @@ export class AIMediaGen implements INodeType {
 		}
 	}
 
+	/**
+	 * Generates media content using AI providers with caching support
+	 * 
+	 * @param context - The n8n execution context
+	 * @param itemIndex - The index of current item
+	 * @param apiFormat - The API format/provider to use
+	 * @param mediaType - The type of media to generate
+	 * @param resource - The resource type (image, video, audio)
+	 * @param operation - The operation type (generate, process)
+	 * @param credentials - API credentials with apiKey
+	 * @param cacheManager - The cache manager instance
+	 * @param performanceMonitor - The performance monitor instance
+	 * @param enableCache - Whether caching is enabled
+	 * @returns The generated media result
+	 */
 	private static async generateMedia(
 		context: IExecuteFunctions,
 		itemIndex: number,
