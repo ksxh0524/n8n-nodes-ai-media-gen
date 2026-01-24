@@ -17,7 +17,7 @@ A simple and extensible n8n node for AI media generation (images, videos, audio)
 ## Installation
 
 ```bash
-cd /Users/liuyang/codes/n8n/projets/n8n-service/custom-nodes/n8n-nodes-ai-media-gen
+cd /path/to/n8n-nodes-ai-media-gen
 npm install
 npm run build
 ```

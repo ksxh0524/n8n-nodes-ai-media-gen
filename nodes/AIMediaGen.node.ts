@@ -6,7 +6,7 @@ import {
 	NodeOperationError,
 } from 'n8n-workflow';
 import { MediaGenError, withRetry, validateGenerationParams, validateCredentials } from './utils/errors';
-import { detectMediaType, getDefaultBaseUrl, getEndpoint, getHeaders, buildRequestBody } from './utils/helpers';
+import { detectMediaType, getDefaultBaseUrl, getEndpoint, getHeaders, buildRequestBody, sanitizeForLogging, detectDangerousContent } from './utils/helpers';
 import { CacheManager, CacheKeyGenerator } from './utils/cache';
 import { PerformanceMonitor } from './utils/monitoring';
 import { ImageProcessor } from './utils/imageProcessor';
@@ -47,7 +47,7 @@ export class AIMediaGen implements INodeType {
 		icon: 'file:ai-media-gen.svg',
 		description: 'Generate images, videos, and audio using multiple AI providers',
 		version: CONSTANTS.NODE_VERSION,
-		group: ['ai' as any],
+		group: ['ai'],
 		defaults: {
 			name: 'AI Media Generation',
 		},
@@ -397,14 +397,14 @@ export class AIMediaGen implements INodeType {
 
 			if (resizeWidth > 0 || resizeHeight > 0) {
 				await processor.resize({
-					width: resizeWidth > 0 ? resizeWidth : originalMetadata.width,
-					height: resizeHeight > 0 ? resizeHeight : originalMetadata.height,
-					fit: resizeFit as any,
-				});
+				width: resizeWidth > 0 ? resizeWidth : originalMetadata.width,
+				height: resizeHeight > 0 ? resizeHeight : originalMetadata.height,
+				fit: resizeFit,
+			});
 			}
 
 			await processor.convert({
-				format: convertFormat as any,
+				format: convertFormat,
 				compressOptions: { quality: outputQuality },
 			});
 
@@ -421,18 +421,18 @@ export class AIMediaGen implements INodeType {
 				performanceMonitor,
 				'imageProcessor',
 				convertFormat,
-				'image' as MediaType,
+				'image',
 				elapsed,
 				true,
 				false
 			);
 
 			context.logger?.info('Image processed successfully', {
-				originalSize: `${originalMetadata.width}x${originalMetadata.height}`,
-				finalSize: `${finalMetadata.width}x${finalMetadata.height}`,
-				format: convertFormat,
-				duration: elapsed,
-			});
+			originalSize: `${originalMetadata.width}x${originalMetadata.height}`,
+			finalSize: `${finalMetadata.width}x${finalMetadata.height}`,
+			format: convertFormat,
+			duration: elapsed,
+		});
 
 			return {
 				json: {
@@ -457,7 +457,7 @@ export class AIMediaGen implements INodeType {
 				performanceMonitor,
 				'imageProcessor',
 				convertFormat,
-				'image' as MediaType,
+				'image',
 				elapsed,
 				false,
 				false
@@ -550,10 +550,18 @@ export class AIMediaGen implements INodeType {
 			);
 		}
 
-		context.logger?.info('Media type detection', {
+		if (detectDangerousContent(prompt)) {
+			throw new NodeOperationError(
+				context.getNode(),
+				'Prompt contains potentially dangerous content and cannot be processed',
+				{ itemIndex }
+			);
+		}
+
+		context.logger?.info('Media type detection', sanitizeForLogging({
 			model,
 			detectedType: mediaType,
-		});
+		}));
 
 		const timerId = performanceMonitor.startTimer('generation');
 
@@ -573,7 +581,8 @@ export class AIMediaGen implements INodeType {
 			if (cached) {
 				responseData = cached as Record<string, unknown>;
 				fromCache = true;
-				context.logger?.info('Cache hit', { cacheKey });
+				const cacheSize = JSON.stringify(cached).length;
+				context.logger?.info('Cache hit', { cacheKey, cacheSize });
 			} else {
 				context.logger?.info('Cache miss', { cacheKey });
 			}
@@ -623,12 +632,12 @@ export class AIMediaGen implements INodeType {
 			fromCache
 		);
 
-		context.logger?.info('Generation successful', {
+		context.logger?.info('Generation successful', sanitizeForLogging({
 			model,
 			mediaType,
 			duration: elapsed,
 			cached: fromCache,
-		});
+		}));
 
 		return {
 			json: {
@@ -704,11 +713,11 @@ export class AIMediaGen implements INodeType {
 				results.push(result);
 			} catch (error) {
 				if (error instanceof MediaGenError) {
-					this.logger?.error('Media generation failed', {
+					this.logger?.error('Media generation failed', sanitizeForLogging({
 						errorCode: error.code,
 						message: error.message,
 						details: error.details,
-					});
+					}));
 				}
 
 				results.push({

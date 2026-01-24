@@ -11,6 +11,18 @@ export const SENSITIVE_PATTERNS = [
 	/secret/i,
 	/token/i,
 	/password/i,
+	/authorization/i,
+	/bearer/i,
+] as const;
+
+export const DANGEROUS_PATTERNS = [
+	/<script/i,
+	/javascript:/i,
+	/onerror=/i,
+	/onload=/i,
+	/eval\(/i,
+	/document\./i,
+	/window\./i,
 ] as const;
 
 export function sanitizeForLogging(obj: unknown): unknown {
@@ -25,6 +37,10 @@ export function sanitizeForLogging(obj: unknown): unknown {
 		}
 	}
 	return sanitized;
+}
+
+export function detectDangerousContent(input: string): boolean {
+	return DANGEROUS_PATTERNS.some(pattern => pattern.test(input));
 }
 
 export function validateAndSanitizeInput(input: {

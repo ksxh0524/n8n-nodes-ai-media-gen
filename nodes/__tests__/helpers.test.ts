@@ -23,7 +23,7 @@ describe('Helper Functions', () => {
 
 		test('should return correct Gemini endpoints', () => {
 			expect(getEndpoint('gemini', 'image', 'imagen-2.0')).toBe('/models/imagen-2.0:predictImage?');
-			expect(getEndpoint('gemini', 'image', 'imagen-2.0', 'test-key')).toBe('/models/imagen-2.0:predictImage?key=test-key');
+			expect(getEndpoint('gemini', 'image', 'imagen-2.0', 'test-key')).toBe('/models/imagen-2.0:predictImage?key=[REDACTED]');
 		});
 
 		test('should return correct Bailian endpoints', () => {

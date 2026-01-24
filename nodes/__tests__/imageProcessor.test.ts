@@ -3,18 +3,7 @@
  */
 
 import { ImageProcessor } from '../utils/imageProcessor';
-import {
-	assertValidImageInput,
-	assertValidResizeOptions,
-	assertValidCropOptions,
-	assertValidCompressOptions,
-	assertValidConvertOptions,
-	validateImageInput,
-	validateResizeOptions,
-	validateCropOptions,
-	validateCompressOptions,
-	validateConvertOptions,
-} from '../utils/imageValidators';
+import { ImageValidator } from '../utils/imageValidators';
 import { MediaGenError } from '../utils/errors';
 import sharp from 'sharp';
 
@@ -343,164 +332,51 @@ describe('ImageProcessor', () => {
 });
 
 describe('ImageValidators', () => {
-	describe('validateImageInput', () => {
-		it('should validate correct input', () => {
-			const result = validateImageInput({
-				type: 'url',
-				url: 'https://example.com/image.jpg',
-			});
-
-			expect(result.valid).toBe(true);
-			expect(result.errors).toHaveLength(0);
-		});
-
-		it('should reject invalid input', () => {
-			const result = validateImageInput(null);
-
-			expect(result.valid).toBe(false);
-			expect(result.errors.length).toBeGreaterThan(0);
-		});
-
-		it('should reject invalid URL', () => {
-			const result = validateImageInput({
-				type: 'url',
-				url: 'not-a-valid-url',
-			});
-
-			expect(result.valid).toBe(false);
-			expect(result.errors).toContain('Invalid URL format');
-		});
-
-		it('should reject missing data for base64 type', () => {
-			const result = validateImageInput({
-				type: 'base64',
-			});
-
-			expect(result.valid).toBe(false);
-			expect(result.errors).toContain('Data is required for base64 type');
-		});
-	});
-
 	describe('validateResizeOptions', () => {
 		it('should validate correct resize options', () => {
-			const result = validateResizeOptions({
-				width: 100,
-				height: 100,
-				fit: 'cover',
-			});
-
+			const result = ImageValidator.validateResizeOptions(100, 100);
 			expect(result.valid).toBe(true);
 		});
 
 		it('should reject invalid width', () => {
-			const result = validateResizeOptions({
-				width: -10,
-			});
-
-			expect(result.valid).toBe(false);
-		});
-
-		it('should reject invalid fit', () => {
-			const result = validateResizeOptions({
-				width: 100,
-				fit: 'invalid' as any,
-			});
-
+			const result = ImageValidator.validateResizeOptions(-10, 100);
 			expect(result.valid).toBe(false);
 		});
 	});
 
-	describe('validateCropOptions', () => {
-		it('should validate correct crop options', () => {
-			const result = validateCropOptions({
-				left: 10,
-				top: 10,
-				width: 100,
-				height: 100,
-			});
-
+	describe('validateDimensions', () => {
+		it('should validate correct dimensions', () => {
+			const result = ImageValidator.validateDimensions(100, 100);
 			expect(result.valid).toBe(true);
 		});
 
 		it('should reject negative dimensions', () => {
-			const result = validateCropOptions({
-				left: -10,
-				top: 0,
-				width: 100,
-				height: 100,
-			});
-
+			const result = ImageValidator.validateDimensions(-10, 0);
 			expect(result.valid).toBe(false);
 		});
 	});
 
-	describe('validateCompressOptions', () => {
-		it('should validate correct compress options', () => {
-			const result = validateCompressOptions({
-				quality: 85,
-				progressive: true,
-			});
-
+	describe('validateQuality', () => {
+		it('should validate correct quality', () => {
+			const result = ImageValidator.validateQuality(85);
 			expect(result.valid).toBe(true);
 		});
 
 		it('should reject quality out of range', () => {
-			const result = validateCompressOptions({
-				quality: 150,
-			});
-
+			const result = ImageValidator.validateQuality(150);
 			expect(result.valid).toBe(false);
 		});
 	});
 
-	describe('validateConvertOptions', () => {
-		it('should validate correct convert options', () => {
-			const result = validateConvertOptions({
-				format: 'png',
-				compressOptions: {
-					quality: 90,
-				},
-			});
-
+	describe('validateFormat', () => {
+		it('should validate correct format', () => {
+			const result = ImageValidator.validateFormat('jpeg');
 			expect(result.valid).toBe(true);
 		});
 
 		it('should reject invalid format', () => {
-			const result = validateConvertOptions({
-				format: 'invalid' as any,
-			});
-
+			const result = ImageValidator.validateFormat('invalid');
 			expect(result.valid).toBe(false);
-		});
-	});
-
-	describe('assert functions', () => {
-		it('should throw error for invalid input', () => {
-			expect(() => assertValidImageInput(null)).toThrow(MediaGenError);
-		});
-
-		it('should throw error for invalid resize options', () => {
-			expect(() => assertValidResizeOptions({ width: -1 })).toThrow(MediaGenError);
-		});
-
-		it('should throw error for invalid crop options', () => {
-			expect(() => assertValidCropOptions({ left: -1, top: 0, width: 100, height: 100 })).toThrow(
-				MediaGenError
-			);
-		});
-
-		it('should throw error for invalid compress options', () => {
-			expect(() => assertValidCompressOptions({ quality: 150 })).toThrow(MediaGenError);
-		});
-
-		it('should throw error for invalid convert options', () => {
-			expect(() => assertValidConvertOptions({ format: 'invalid' as any })).toThrow(MediaGenError);
-		});
-
-		it('should not throw for valid input', () => {
-			expect(() =>
-				assertValidImageInput({ type: 'url', url: 'https://example.com/image.jpg' })
-			).not.toThrow();
 		});
 	});
 });

@@ -18,6 +18,7 @@ import {
 	FORMAT_TO_MIME_TYPE,
 	EXTENSION_TO_FORMAT,
 	SUPPORTED_IMAGE_FORMATS,
+	ImageFormat,
 } from './imageTypes';
 
 /**
@@ -302,7 +303,7 @@ export class ImageProcessor {
 				fit: options.fit,
 				kernel: options.kernel,
 				withoutEnlargement: options.withoutEnlargement,
-				position: options.position as any,
+				position: options.position,
 			});
 		} catch (error) {
 			throw new MediaGenError(
@@ -480,7 +481,7 @@ export class ImageProcessor {
 	 * Validate if a format is supported
 	 */
 	static isFormatSupported(format: string): boolean {
-		return SUPPORTED_IMAGE_FORMATS.includes(format as any);
+		return SUPPORTED_IMAGE_FORMATS.includes(format as ImageFormat);
 	}
 
 	/**
