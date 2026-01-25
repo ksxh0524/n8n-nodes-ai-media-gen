@@ -31,7 +31,10 @@
   "n8n": {
     "n8nVersionCompat": ">=1.0.0",
     "credentials": [
-      "aiMediaApi"
+      "aiMediaApi",
+      "openAiApi",
+      "nanoBananaApi",
+      "modelScopeApi"
     ],
     "nodes": [
       {
@@ -40,8 +43,8 @@
         "group": [
           "ai"
         ],
-        "subtitle": "={{$parameter.resource}}/{{$parameter.apiFormat}}",
-        "description": "Generate images, videos, and audio using multiple AI providers",
+        "subtitle": "={{$parameter.action}}",
+        "description": "Generate and process media using AI models and local processing",
         "icon": "file:ai-media-gen.svg",
         "subgroup": "media-generation",
         "defaults": {
@@ -55,7 +58,10 @@
         ],
         "usableAsTool": true,
         "credentials": [
-          "aiMediaApi"
+          "aiMediaApi",
+          "openAiApi",
+          "nanoBananaApi",
+          "modelScopeApi"
         ]
       }
     ]

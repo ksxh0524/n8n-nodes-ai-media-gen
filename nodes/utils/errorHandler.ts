@@ -1,10 +1,10 @@
-import { NodeOperationError, INode, ILogger } from 'n8n-workflow';
+import { NodeOperationError, INode, Logger } from 'n8n-workflow';
 import { MediaGenError } from './errors';
 
 export interface ErrorHandlerOptions {
 	node: INode;
 	itemIndex: number;
-	logger?: ILogger;
+	logger?: Logger;
 	context?: Record<string, unknown>;
 }
 
@@ -62,19 +62,19 @@ export class ErrorHandler {
 		return nodeError;
 	}
 
-	static logSuccess(logger: ILogger | undefined, operation: string, data: Record<string, unknown>): void {
+	static logSuccess(logger: Logger | undefined, operation: string, data: Record<string, unknown>): void {
 		if (logger) {
 			logger.info(`${operation} successful`, data);
 		}
 	}
 
-	static logInfo(logger: ILogger | undefined, message: string, data?: Record<string, unknown>): void {
+	static logInfo(logger: Logger | undefined, message: string, data?: Record<string, unknown>): void {
 		if (logger) {
 			logger.info(message, data);
 		}
 	}
 
-	static logDebug(logger: ILogger | undefined, message: string, data?: Record<string, unknown>): void {
+	static logDebug(logger: Logger | undefined, message: string, data?: Record<string, unknown>): void {
 		if (logger) {
 			logger.debug(message, data);
 		}

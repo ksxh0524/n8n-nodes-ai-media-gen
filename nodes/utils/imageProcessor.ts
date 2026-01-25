@@ -13,6 +13,14 @@ import type {
 	ConvertOptions,
 	N8nBinaryData,
 	ImageProcessorOptions,
+	FilterOptions,
+	WatermarkOptions,
+	ExtendedCompressOptions,
+	RotateOptions,
+	FlipOptions,
+	AdjustOptions,
+	BlurOptions,
+	SharpenOptions,
 } from './imageTypes';
 import {
 	FORMAT_TO_MIME_TYPE,
@@ -496,6 +504,342 @@ export class ImageProcessor {
 	 */
 	static getSupportedMimeTypes(): typeof SUPPORTED_MIME_TYPES {
 		return SUPPORTED_MIME_TYPES;
+	}
+
+	/**
+	 * Apply filter to image
+	 */
+	async filter(options: FilterOptions): Promise<void> {
+		if (!this.image) {
+			throw new MediaGenError(
+				'No image loaded. Call loadImage() first.',
+				ERROR_CODES.IMAGE_PROCESSING_FAILED
+			);
+		}
+
+		try {
+			switch (options.type) {
+				case 'blur':
+					this.image = this.image.blur(options.sigma || 3);
+					break;
+				case 'sharpen':
+					this.image = this.image.sharpen(options.sigma || 1, options.flat, options.jagged);
+					break;
+				case 'brightness':
+					this.image = this.image.modulate({
+						brightness: options.value || 1,
+					});
+					break;
+				case 'contrast':
+					this.image = this.image.linear(options.value || 1);
+					break;
+				case 'saturation':
+					this.image = this.image.modulate({
+						saturation: options.value || 1,
+					});
+					break;
+				case 'grayscale':
+					this.image = this.image.grayscale();
+					break;
+				case 'sepia':
+					this.image = this.image.modulate({
+						brightness: 1.1,
+						saturation: 0.8,
+					}).tint({ r: 255, g: 240, b: 196 });
+					break;
+				case 'invert':
+					this.image = this.image.negate();
+					break;
+				case 'normalize':
+					this.image = this.image.normalise();
+					break;
+				case 'modulate':
+					this.image = this.image.modulate({
+						brightness: options.value || 1,
+						saturation: options.value || 1,
+					});
+					break;
+				default:
+					throw new MediaGenError(
+						`Unsupported filter type: ${options.type}`,
+						ERROR_CODES.INVALID_PARAMS
+					);
+			}
+		} catch (error) {
+			if (error instanceof MediaGenError) {
+				throw error;
+			}
+			throw new MediaGenError(
+				`Failed to apply filter: ${error instanceof Error ? error.message : String(error)}`,
+				ERROR_CODES.IMAGE_PROCESSING_FAILED
+			);
+		}
+	}
+
+	/**
+	 * Add watermark to image
+	 */
+	async watermark(options: WatermarkOptions): Promise<void> {
+		if (!this.image) {
+			throw new MediaGenError(
+				'No image loaded. Call loadImage() first.',
+				ERROR_CODES.IMAGE_PROCESSING_FAILED
+			);
+		}
+
+		try {
+			let watermarkBuffer: Buffer;
+
+			if (typeof options.image === 'string') {
+				if (options.image.startsWith('data:')) {
+					const base64Data = options.image.split(',')[1];
+					watermarkBuffer = Buffer.from(base64Data, 'base64');
+				} else {
+					const response = await fetch(options.image);
+					const arrayBuffer = await response.arrayBuffer();
+					watermarkBuffer = Buffer.from(arrayBuffer);
+				}
+			} else {
+				watermarkBuffer = options.image;
+			}
+
+			const watermark = sharp(watermarkBuffer);
+			const watermarkMetadata = await watermark.metadata();
+			const mainMetadata = await this.image.metadata();
+
+			const scale = options.scale || 0.2;
+			const padding = options.padding || 20;
+
+			const watermarkWidth = Math.floor(mainMetadata.width! * scale);
+			const watermarkHeight = Math.floor((watermarkMetadata.height! / watermarkMetadata.width!) * watermarkWidth);
+
+			const resizedWatermark = watermark.resize(watermarkWidth, watermarkHeight);
+
+			const position = options.position || 'bottom-right';
+			let left: number;
+			let top: number;
+
+			switch (position) {
+				case 'top-left':
+					left = padding;
+					top = padding;
+					break;
+				case 'top-right':
+					left = mainMetadata.width! - watermarkWidth - padding;
+					top = padding;
+					break;
+				case 'bottom-left':
+					left = padding;
+					top = mainMetadata.height! - watermarkHeight - padding;
+					break;
+				case 'bottom-right':
+					left = mainMetadata.width! - watermarkWidth - padding;
+					top = mainMetadata.height! - watermarkHeight - padding;
+					break;
+				case 'center':
+					left = Math.floor((mainMetadata.width! - watermarkWidth) / 2);
+					top = Math.floor((mainMetadata.height! - watermarkHeight) / 2);
+					break;
+				default:
+					left = mainMetadata.width! - watermarkWidth - padding;
+					top = mainMetadata.height! - watermarkHeight - padding;
+			}
+
+			const watermarkBufferResized = await resizedWatermark.toBuffer();
+			const watermarkLayer = sharp(watermarkBufferResized);
+
+			this.image = this.image.composite([
+				{
+					input: await watermarkLayer.toBuffer(),
+					left,
+					top,
+					blend: 'over',
+				},
+			]);
+		} catch (error) {
+			if (error instanceof MediaGenError) {
+				throw error;
+			}
+			throw new MediaGenError(
+				`Failed to add watermark: ${error instanceof Error ? error.message : String(error)}`,
+				ERROR_CODES.IMAGE_PROCESSING_FAILED
+			);
+		}
+	}
+
+	/**
+	 * Compress image with target size or quality
+	 */
+	async compress(options: ExtendedCompressOptions): Promise<void> {
+		if (!this.image) {
+			throw new MediaGenError(
+				'No image loaded. Call loadImage() first.',
+				ERROR_CODES.IMAGE_PROCESSING_FAILED
+			);
+		}
+
+		try {
+			const targetQuality = options.targetQuality || options.quality || 85;
+			const targetSize = options.targetSize;
+
+			if (targetSize) {
+				let currentBuffer = await this.toBuffer();
+				let currentSize = currentBuffer.length;
+				let quality = targetQuality;
+
+				while (currentSize > targetSize && quality > 10) {
+					this.image = sharp(currentBuffer);
+					await this.convert({
+						format: 'jpeg',
+						compressOptions: { quality },
+					});
+					currentBuffer = await this.toBuffer();
+					currentSize = currentBuffer.length;
+					quality -= 5;
+				}
+
+				if (currentSize > targetSize) {
+					throw new MediaGenError(
+						`Unable to compress image to target size ${targetSize} bytes. Final size: ${currentSize} bytes`,
+						ERROR_CODES.IMAGE_PROCESSING_FAILED
+					);
+				}
+			} else {
+				await this.convert({
+					format: 'jpeg',
+					compressOptions: { quality: targetQuality },
+				});
+			}
+		} catch (error) {
+			if (error instanceof MediaGenError) {
+				throw error;
+			}
+			throw new MediaGenError(
+				`Failed to compress image: ${error instanceof Error ? error.message : String(error)}`,
+				ERROR_CODES.IMAGE_PROCESSING_FAILED
+			);
+		}
+	}
+
+	/**
+	 * Rotate image
+	 */
+	async rotate(options: RotateOptions): Promise<void> {
+		if (!this.image) {
+			throw new MediaGenError(
+				'No image loaded. Call loadImage() first.',
+				ERROR_CODES.IMAGE_PROCESSING_FAILED
+			);
+		}
+
+		try {
+			this.image = this.image.rotate(options.angle, {
+				background: options.background || 'transparent',
+			});
+		} catch (error) {
+			throw new MediaGenError(
+				`Failed to rotate image: ${error instanceof Error ? error.message : String(error)}`,
+				ERROR_CODES.IMAGE_PROCESSING_FAILED
+			);
+		}
+	}
+
+	/**
+	 * Flip image
+	 */
+	async flip(options: FlipOptions): Promise<void> {
+		if (!this.image) {
+			throw new MediaGenError(
+				'No image loaded. Call loadImage() first.',
+				ERROR_CODES.IMAGE_PROCESSING_FAILED
+			);
+		}
+
+		try {
+			if (options.horizontal) {
+				this.image = this.image.flop();
+			}
+			if (options.vertical) {
+				this.image = this.image.flip();
+			}
+		} catch (error) {
+			throw new MediaGenError(
+				`Failed to flip image: ${error instanceof Error ? error.message : String(error)}`,
+				ERROR_CODES.IMAGE_PROCESSING_FAILED
+			);
+		}
+	}
+
+	/**
+	 * Adjust image properties (brightness, contrast, saturation, hue, lightness)
+	 */
+	async adjust(options: AdjustOptions): Promise<void> {
+		if (!this.image) {
+			throw new MediaGenError(
+				'No image loaded. Call loadImage() first.',
+				ERROR_CODES.IMAGE_PROCESSING_FAILED
+			);
+		}
+
+		try {
+			this.image = this.image.modulate({
+				brightness: options.brightness,
+				saturation: options.saturation,
+				hue: options.hue,
+				lightness: options.lightness,
+			});
+
+			if (options.contrast !== undefined) {
+				this.image = this.image.linear(options.contrast);
+			}
+		} catch (error) {
+			throw new MediaGenError(
+				`Failed to adjust image: ${error instanceof Error ? error.message : String(error)}`,
+				ERROR_CODES.IMAGE_PROCESSING_FAILED
+			);
+		}
+	}
+
+	/**
+	 * Blur image
+	 */
+	async blur(options: BlurOptions): Promise<void> {
+		if (!this.image) {
+			throw new MediaGenError(
+				'No image loaded. Call loadImage() first.',
+				ERROR_CODES.IMAGE_PROCESSING_FAILED
+			);
+		}
+
+		try {
+			this.image = this.image.blur(options.sigma || 3);
+		} catch (error) {
+			throw new MediaGenError(
+				`Failed to blur image: ${error instanceof Error ? error.message : String(error)}`,
+				ERROR_CODES.IMAGE_PROCESSING_FAILED
+			);
+		}
+	}
+
+	/**
+	 * Sharpen image
+	 */
+	async sharpen(options: SharpenOptions): Promise<void> {
+		if (!this.image) {
+			throw new MediaGenError(
+				'No image loaded. Call loadImage() first.',
+				ERROR_CODES.IMAGE_PROCESSING_FAILED
+			);
+		}
+
+		try {
+			this.image = this.image.sharpen(options.sigma || 1);
+		} catch (error) {
+			throw new MediaGenError(
+				`Failed to sharpen image: ${error instanceof Error ? error.message : String(error)}`,
+				ERROR_CODES.IMAGE_PROCESSING_FAILED
+			);
+		}
 	}
 
 	/**

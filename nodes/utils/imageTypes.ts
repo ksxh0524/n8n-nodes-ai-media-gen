@@ -25,7 +25,7 @@ export type ResizeKernel =
 /**
  * Input source types for image loading
  */
-export type ImageInputType = 'url' | 'base64' | 'binary' | 'n8n-binary';
+export type ImageInputType = 'url' | 'base64' | 'binary' | 'n8n-binary' | 'buffer';
 
 /**
  * Image input from various sources
@@ -166,3 +166,93 @@ export const MIME_TYPE_TO_FORMAT: Record<string, ImageFormat> = {
 	'image/tiff': 'tiff',
 	'image/avif': 'avif',
 } as const;
+
+/**
+ * Filter types for image processing
+ */
+export type FilterType =
+	| 'blur'
+	| 'sharpen'
+	| 'brightness'
+	| 'contrast'
+	| 'saturation'
+	| 'grayscale'
+	| 'sepia'
+	| 'invert'
+	| 'normalize'
+	| 'modulate';
+
+/**
+ * Filter options
+ */
+export interface FilterOptions {
+	type: FilterType;
+	value?: number;
+	sigma?: number;
+	flat?: number;
+	jagged?: number;
+}
+
+/**
+ * Watermark options
+ */
+export interface WatermarkOptions {
+	image: Buffer | string;
+	position?: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'center';
+	opacity?: number;
+	scale?: number;
+	padding?: number;
+}
+
+/**
+ * Compress options (extended)
+ */
+export interface ExtendedCompressOptions extends CompressOptions {
+	method?: 'auto' | 'jpeg' | 'png' | 'webp';
+	targetSize?: number;
+	targetQuality?: number;
+}
+
+/**
+ * Rotate options
+ */
+export interface RotateOptions {
+	angle: number;
+	background?: string;
+}
+
+/**
+ * Flip options
+ */
+export interface FlipOptions {
+	horizontal?: boolean;
+	vertical?: boolean;
+}
+
+/**
+ * Adjust options (brightness, contrast, etc.)
+ */
+export interface AdjustOptions {
+	brightness?: number;
+	contrast?: number;
+	saturation?: number;
+	hue?: number;
+	lightness?: number;
+}
+
+/**
+ * Blur options
+ */
+export interface BlurOptions {
+	sigma?: number;
+	precise?: boolean;
+}
+
+/**
+ * Sharpen options
+ */
+export interface SharpenOptions {
+	sigma?: number;
+	flat?: boolean;
+	jagged?: boolean;
+}
