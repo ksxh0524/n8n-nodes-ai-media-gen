@@ -20,7 +20,7 @@ import type {
 	VideoProcessorOptions,
 	FrameData,
 	StreamInfo,
-	FormatInfo,
+	FFProbeData,
 } from './videoTypes';
 import {
 	VIDEO_FORMAT_TO_MIME_TYPE,
@@ -309,7 +309,7 @@ export class VideoProcessor {
 				}
 
 				try {
-					const data = JSON.parse(stdout);
+					const data: FFProbeData = JSON.parse(stdout);
 					const streams = data.streams || [];
 
 					const videoStream = streams.find((s: StreamInfo) => s.codec_type === 'video');
@@ -547,7 +547,8 @@ export class VideoProcessor {
 				const frameNumber = match ? parseInt(match[1]) : 0;
 
 				frames.push({
-					buffer,
+					data: buffer.toString('base64'),
+					fileName: file,
 					timestamp: frameNumber / (options.frameRate || 1),
 					frameNumber,
 				});

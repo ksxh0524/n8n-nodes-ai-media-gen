@@ -195,12 +195,12 @@ export class MediaProcessor {
 	/**
 	 * Get media metadata
 	 */
-	getMetadata(): MediaMetadata | undefined {
+	async getMetadata(): Promise<MediaMetadata | undefined> {
 		if (this.mediaType === 'image' && this.imageProcessor) {
-			return this.imageProcessor.getMetadata();
+			return await this.imageProcessor.getMetadata();
 		}
 		if (this.mediaType === 'video' && this.videoProcessor) {
-			return this.videoProcessor.getMetadata();
+			return await this.videoProcessor.getMetadata();
 		}
 		return undefined;
 	}
@@ -217,7 +217,7 @@ export class MediaProcessor {
 			}
 
 			const buffer = await this.toBuffer();
-			const metadata = this.getMetadata();
+			const metadata = await this.getMetadata();
 
 			return {
 				success: true,
@@ -319,10 +319,9 @@ export class MediaProcessor {
 			case 'merge':
 				await this.videoProcessor.merge(operation.options as MergeOptions);
 				break;
-			case 'extractFrames': {
-				const frames = await this.videoProcessor.extractFrames(operation.options as ExtractFramesOptions);
-				return frames as unknown;
-			}
+			case 'extractFrames':
+				await this.videoProcessor.extractFrames(operation.options as ExtractFramesOptions);
+				break;
 			case 'addAudio':
 				await this.videoProcessor.addAudio(operation.options as AddAudioOptions);
 				break;

@@ -28,13 +28,8 @@ import {
 	ImageFormat,
 } from './imageTypes';
 
-interface SharpInstance {
-	// Basic sharp instance interface
-	// This is a minimal interface for type checking
-	destroy(): void;
-}
-
-let sharp: typeof import('sharp') | null = null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let sharp: any = null;
 
 try {
 	sharp = require('sharp');
@@ -64,7 +59,8 @@ const SUPPORTED_MIME_TYPES = new Set<string>(Object.values(FORMAT_TO_MIME_TYPE))
  * ImageProcessor class for handling image operations
  */
 export class ImageProcessor {
-	private image: SharpInstance | null = null;
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	private image: any = null;
 	private maxFileSize: number;
 	private timeout: number;
 	private currentBuffer: Buffer | null = null;

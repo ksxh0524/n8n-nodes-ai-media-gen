@@ -150,6 +150,7 @@ export interface FrameData {
 	data: string;
 	fileName: string;
 	timestamp: number;
+	frameNumber: number;
 }
 
 /**
@@ -170,6 +171,14 @@ export interface FormatInfo {
 	format_name?: string;
 	duration?: string;
 	bit_rate?: string;
+}
+
+/**
+ * FFProbe data
+ */
+export interface FFProbeData {
+	format?: FormatInfo;
+	streams?: StreamInfo[];
 }
 
 /**
