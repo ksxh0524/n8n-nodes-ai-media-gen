@@ -44,7 +44,7 @@ export class AIMediaGen implements INodeType {
 				required: false,
 			},
 			{
-				name: 'nanoBananaApi',
+				name: 'googlePalmApi',
 				required: false,
 			},
 			{

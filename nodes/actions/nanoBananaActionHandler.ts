@@ -16,7 +16,7 @@ export class NanoBananaActionHandler extends BaseActionHandler implements IActio
 	readonly displayName = 'Nano Banana (Image Generation)';
 	readonly description = 'Generate images using Nano Banana AI models (nano-banana, nano-banana-pro, z-image-turbo)';
 	readonly mediaType = 'image' as const;
-	readonly credentialType = 'nanoBananaApi';
+	readonly credentialType = 'googlePalmApi';
 	readonly requiresCredential = true;
 
 	constructor() {
@@ -25,7 +25,7 @@ export class NanoBananaActionHandler extends BaseActionHandler implements IActio
 			'Nano Banana (Image Generation)',
 			'Generate images using Nano Banana AI models (nano-banana, nano-banana-pro, z-image-turbo)',
 			'image',
-			'nanoBananaApi',
+			'googlePalmApi',
 			true
 		);
 	}

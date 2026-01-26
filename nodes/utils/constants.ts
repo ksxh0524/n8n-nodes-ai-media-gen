@@ -112,7 +112,7 @@ export const ACTION_DISPLAY_INFO = {
 		displayName: 'Nano Banana Image Generation',
 		description: 'Generate images using Nano Banana models (nano-banana, nano-banana-pro, z-image-turbo)',
 		mediaType: 'image' as const,
-		credentialType: 'nanoBananaApi' as const,
+		credentialType: 'googlePalmApi' as const,
 	},
 	[ACTIONS.MODEL_SCOPE]: {
 		displayName: 'ModelScope Multi-Model Platform',

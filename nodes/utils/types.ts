@@ -12,7 +12,7 @@ export type MediaType = 'image' | 'audio' | 'video';
 
 export type ActionType = 'sora' | 'nanoBanana' | 'modelScope' | 'processing';
 
-export type CredentialType = 'openAiApi' | 'nanoBananaApi' | 'modelScopeApi' | 'aiMediaApi';
+export type CredentialType = 'openAiApi' | 'googlePalmApi' | 'modelScopeApi' | 'aiMediaApi';
 
 export type OperationType =
 	| 'resize'
