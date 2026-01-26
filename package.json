@@ -33,7 +33,6 @@
     "n8nNodesApiVersion": 1,
     "credentials": [
       "aiMediaApi",
-      "openAiApi",
       "nanoBananaApi",
       "modelScopeApi"
     ],
