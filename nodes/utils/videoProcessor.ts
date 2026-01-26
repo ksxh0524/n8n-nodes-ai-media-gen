@@ -855,8 +855,8 @@ export class VideoProcessor {
 		for (const tempFile of this.tempFiles) {
 			try {
 				await fs.unlink(tempFile);
-			} catch (error) {
-				console.error(`Failed to delete temp file ${tempFile}:`, error);
+			} catch {
+				// Ignore cleanup errors
 			}
 		}
 

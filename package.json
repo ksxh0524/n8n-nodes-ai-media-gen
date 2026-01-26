@@ -5,6 +5,7 @@
   "keywords": [
     "n8n",
     "n8n-node",
+    "n8n-community-node-package",
     "ai",
     "media-generation",
     "image-generation",
@@ -29,7 +30,7 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "n8n": {
-    "n8nVersionCompat": ">=1.0.0",
+    "n8nNodesApiVersion": 1,
     "credentials": [
       "aiMediaApi",
       "openAiApi",
@@ -77,8 +78,7 @@
     "dist"
   ],
   "dependencies": {
-    "n8n-workflow": "^1.0.0",
-    "sharp": "^0.33.5"
+    "n8n-workflow": "^1.0.0"
   },
   "devDependencies": {
     "@types/jest": "^29.5.0",

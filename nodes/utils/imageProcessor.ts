@@ -3,7 +3,6 @@
  * Handles image loading, processing, and conversion operations using sharp
  */
 
-import sharp from 'sharp';
 import { MediaGenError, ERROR_CODES } from './errors';
 import type {
 	ImageInput,
@@ -29,6 +28,27 @@ import {
 	ImageFormat,
 } from './imageTypes';
 
+interface SharpInstance {
+	// Basic sharp instance interface
+	// This is a minimal interface for type checking
+	destroy(): void;
+}
+
+let sharp: typeof import('sharp') | null = null;
+
+try {
+	sharp = require('sharp');
+} catch (error) {
+	sharp = null;
+}
+
+/**
+ * Check if sharp is available
+ */
+export function isSharpAvailable(): boolean {
+	return sharp !== null;
+}
+
 /**
  * Default configuration values
  */
@@ -44,12 +64,18 @@ const SUPPORTED_MIME_TYPES = new Set<string>(Object.values(FORMAT_TO_MIME_TYPE))
  * ImageProcessor class for handling image operations
  */
 export class ImageProcessor {
-	private image: sharp.Sharp | null = null;
+	private image: SharpInstance | null = null;
 	private maxFileSize: number;
 	private timeout: number;
 	private currentBuffer: Buffer | null = null;
 
 	constructor(options: ImageProcessorOptions = {}) {
+		if (!isSharpAvailable()) {
+			throw new MediaGenError(
+				'Sharp library is not available. Please install sharp to use image processing features.',
+				ERROR_CODES.DEPENDENCY_MISSING
+			);
+		}
 		this.maxFileSize = options.maxFileSize ?? DEFAULT_MAX_FILE_SIZE;
 		this.timeout = options.timeout ?? DEFAULT_TIMEOUT;
 	}
@@ -231,8 +257,8 @@ export class ImageProcessor {
 	}
 
 	/**
-	 * Get image metadata from the current sharp instance
-	 * Note: This returns metadata of the original loaded image, not after processing
+	 * Get image metadata from current sharp instance
+	 * Note: This returns metadata of original loaded image, not after processing
 	 */
 	async getMetadata(): Promise<ImageMetadata> {
 		if (!this.image) {
@@ -270,6 +296,12 @@ export class ImageProcessor {
 	 * This is useful for getting metadata of a processed image
 	 */
 	static async getMetadataFromBuffer(buffer: Buffer): Promise<ImageMetadata> {
+		if (!isSharpAvailable()) {
+			throw new MediaGenError(
+				'Sharp library is not available',
+				ERROR_CODES.DEPENDENCY_MISSING
+			);
+		}
 		try {
 			const metadata = await sharp(buffer).metadata();
 			return {
@@ -466,7 +498,7 @@ export class ImageProcessor {
 	}
 
 	/**
-	 * Get the format from file name
+	 * Get format from file name
 	 */
 	static getFormatFromFileName(fileName: string): string {
 		const ext = fileName.toLowerCase().split('.').pop();

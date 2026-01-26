@@ -31,9 +31,10 @@ export class MediaGenError extends Error {
 			INVALID_PARAMS: 'Invalid parameters provided',
 			API_ERROR: 'API error occurred',
 			INVALID_IMAGE_INPUT: 'Invalid image input provided',
-			IMAGE_TOO_LARGE: 'Image file size exceeds the maximum allowed limit',
+			IMAGE_TOO_LARGE: 'Image file size exceeds maximum allowed limit',
 			UNSUPPORTED_FORMAT: 'Image format is not supported',
 			IMAGE_PROCESSING_FAILED: 'Image processing operation failed',
+			DEPENDENCY_MISSING: 'Required dependency is not available',
 		};
 		return messages[this.code] || this.message;
 	}
@@ -53,6 +54,8 @@ export const ERROR_CODES = {
 	IMAGE_TOO_LARGE: 'IMAGE_TOO_LARGE',
 	UNSUPPORTED_FORMAT: 'UNSUPPORTED_FORMAT',
 	IMAGE_PROCESSING_FAILED: 'IMAGE_PROCESSING_FAILED',
+	// Dependency related error codes
+	DEPENDENCY_MISSING: 'DEPENDENCY_MISSING',
 } as const;
 
 export function sleep(ms: number): Promise<void> {
