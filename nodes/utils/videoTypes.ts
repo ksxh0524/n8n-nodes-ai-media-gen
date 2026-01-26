@@ -147,9 +147,29 @@ export interface N8nVideoBinaryData {
  * Frame data
  */
 export interface FrameData {
-	buffer: Buffer;
+	data: string;
+	fileName: string;
 	timestamp: number;
-	frameNumber: number;
+}
+
+/**
+ * FFProbe stream info
+ */
+export interface StreamInfo {
+	codec_type: 'video' | 'audio' | 'subtitle';
+	codec_name?: string;
+	width?: number;
+	height?: number;
+	r_frame_rate?: string;
+}
+
+/**
+ * FFProbe format info
+ */
+export interface FormatInfo {
+	format_name?: string;
+	duration?: string;
+	bit_rate?: string;
 }
 
 /**

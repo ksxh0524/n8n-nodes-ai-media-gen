@@ -18,6 +18,7 @@ import type {
 	AdjustOptions,
 	BlurOptions,
 	SharpenOptions,
+	N8nBinaryData,
 } from './imageTypes';
 import { VideoProcessor } from './videoProcessor';
 import type {
@@ -196,10 +197,10 @@ export class MediaProcessor {
 	 */
 	getMetadata(): MediaMetadata | undefined {
 		if (this.mediaType === 'image' && this.imageProcessor) {
-			return this.imageProcessor.getMetadata() as any;
+			return this.imageProcessor.getMetadata();
 		}
 		if (this.mediaType === 'video' && this.videoProcessor) {
-			return this.videoProcessor.getMetadata() as any;
+			return this.videoProcessor.getMetadata();
 		}
 		return undefined;
 	}
@@ -318,9 +319,10 @@ export class MediaProcessor {
 			case 'merge':
 				await this.videoProcessor.merge(operation.options as MergeOptions);
 				break;
-			case 'extractFrames':
+			case 'extractFrames': {
 				const frames = await this.videoProcessor.extractFrames(operation.options as ExtractFramesOptions);
-				return frames as any;
+				return frames as unknown;
+			}
 			case 'addAudio':
 				await this.videoProcessor.addAudio(operation.options as AddAudioOptions);
 				break;
@@ -389,7 +391,7 @@ export class MediaProcessor {
 	/**
 	 * Output media as n8n binary format
 	 */
-	async toN8nBinary(fileName: string): Promise<any> {
+	async toN8nBinary(fileName: string): Promise<N8nBinaryData | N8nBinaryData[]> {
 		if (this.mediaType === 'image' && this.imageProcessor) {
 			return await this.imageProcessor.toN8nBinary(fileName);
 		}

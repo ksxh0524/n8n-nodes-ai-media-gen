@@ -9,6 +9,8 @@ import { ImageProcessor } from '../utils/imageProcessor';
 import { VideoProcessor } from '../utils/videoProcessor';
 import { MediaGenError, ERROR_CODES } from '../utils/errors';
 import type { IExecuteFunctions } from 'n8n-workflow';
+import type { ResizeFit, ImageFormat, FilterType, WatermarkOptions } from '../utils/imageTypes';
+import type { VideoFormat, VideoCodec } from '../utils/videoTypes';
 
 /**
  * Media Processing Action Handler
@@ -144,7 +146,7 @@ export class MediaProcessingActionHandler extends BaseActionHandler implements I
 				await processor.resize({
 					width,
 					height,
-					fit: (fit as any) || 'cover',
+					fit: (fit as ResizeFit) || 'cover',
 				});
 				break;
 			}
@@ -164,7 +166,7 @@ export class MediaProcessingActionHandler extends BaseActionHandler implements I
 				const quality = this.getParameter<number>(context, itemIndex, 'quality');
 
 				await processor.convert({
-					format: format as any,
+					format: format as ImageFormat,
 					compressOptions: { quality },
 				});
 				break;
@@ -175,7 +177,7 @@ export class MediaProcessingActionHandler extends BaseActionHandler implements I
 				const filterValue = this.getParameter<number>(context, itemIndex, 'filterValue');
 
 				await processor.filter({
-					type: filterType as any,
+					type: filterType as FilterType,
 					value: filterValue,
 				});
 				break;
@@ -187,7 +189,7 @@ export class MediaProcessingActionHandler extends BaseActionHandler implements I
 
 				await processor.watermark({
 					image: watermarkImage,
-					position: watermarkPosition as any,
+					position: watermarkPosition as WatermarkOptions['position'],
 				});
 				break;
 			}
@@ -276,8 +278,8 @@ export class MediaProcessingActionHandler extends BaseActionHandler implements I
 				const videoCodec = this.getParameter<string>(context, itemIndex, 'videoCodec');
 
 				await processor.transcode({
-					format: outputFormat as any,
-					videoCodec: videoCodec as any,
+					format: outputFormat as VideoFormat,
+					videoCodec: videoCodec as VideoCodec,
 				});
 				break;
 			}

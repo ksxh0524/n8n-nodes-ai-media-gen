@@ -11,6 +11,11 @@ import { CacheManager } from './utils/cache';
 import { PerformanceMonitor } from './utils/monitoring';
 import * as CONSTANTS from './utils/constants';
 
+interface ResultMetadata {
+	cached?: boolean;
+	[key: string]: unknown;
+}
+
 const ACTIONS: Array<{ name: string; value: ActionType }> = [
 	{ name: 'Sora (Video Generation)', value: 'sora' },
 	{ name: 'Nano Banana (Image Generation)', value: 'nanoBanana' },
@@ -609,14 +614,14 @@ export class AIMediaGen implements INodeType {
 
 				const elapsed = performanceMonitor.endTimer(timerId);
 
-				performanceMonitor.recordMetric({
+			performanceMonitor.recordMetric({
 					timestamp: Date.now().toString(),
 					provider: action,
 					model: this.getNodeParameter('model', i) as string || 'processing',
 					mediaType: handler.mediaType,
 					duration: elapsed,
 					success: result.json.success as boolean,
-					fromCache: (result.json._metadata as any)?.cached || false,
+					fromCache: (result.json._metadata as ResultMetadata)?.cached || false,
 				});
 
 				this.logger?.info('Action executed', {

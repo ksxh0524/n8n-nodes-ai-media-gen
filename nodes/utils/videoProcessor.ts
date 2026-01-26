@@ -19,6 +19,8 @@ import type {
 	N8nVideoBinaryData,
 	VideoProcessorOptions,
 	FrameData,
+	StreamInfo,
+	FormatInfo,
 } from './videoTypes';
 import {
 	VIDEO_FORMAT_TO_MIME_TYPE,
@@ -310,8 +312,8 @@ export class VideoProcessor {
 					const data = JSON.parse(stdout);
 					const streams = data.streams || [];
 
-					const videoStream = streams.find((s: any) => s.codec_type === 'video');
-					const audioStream = streams.find((s: any) => s.codec_type === 'audio');
+					const videoStream = streams.find((s: StreamInfo) => s.codec_type === 'video');
+					const audioStream = streams.find((s: StreamInfo) => s.codec_type === 'audio');
 
 					resolve({
 						format: data.format?.format_name || 'unknown',
