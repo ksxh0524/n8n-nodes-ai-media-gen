@@ -1,8 +1,10 @@
-export const modelScopeApi = {
-	displayName: 'ModelScope API',
-	name: 'modelScopeApi',
-	documentationUrl: 'https://modelscope.cn/docs',
-	properties: [
+import { ICredentialType, INodeProperties } from 'n8n-workflow';
+
+export class modelScopeApi implements ICredentialType {
+	name = 'modelScopeApi';
+	displayName = 'ModelScope API';
+	documentationUrl = 'https://modelscope.cn/docs';
+	properties: INodeProperties[] = [
 		{
 			displayName: 'API Key',
 			name: 'apiKey',
@@ -53,11 +55,10 @@ export const modelScopeApi = {
 			default: 3600,
 			description: 'Cache time-to-live in seconds (default: 3600 = 1 hour)',
 			displayOptions: {
-				showWhen: {
-					field: 'enableCache',
-					value: true,
+				show: {
+					enableCache: [true],
 				},
 			},
 		},
-	],
-};
+	];
+}

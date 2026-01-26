@@ -1,8 +1,10 @@
-export const nanoBananaApi = {
-	displayName: 'Nano Banana API',
-	name: 'nanoBananaApi',
-	documentationUrl: '',
-	properties: [
+import { ICredentialType, INodeProperties } from 'n8n-workflow';
+
+export class nanoBananaApi implements ICredentialType {
+	name = 'nanoBananaApi';
+	displayName = 'Nano Banana API';
+	documentationUrl = '';
+	properties: INodeProperties[] = [
 		{
 			displayName: 'API Key',
 			name: 'apiKey',
@@ -53,11 +55,10 @@ export const nanoBananaApi = {
 			default: 3600,
 			description: 'Cache time-to-live in seconds (default: 3600 = 1 hour)',
 			displayOptions: {
-				showWhen: {
-					field: 'enableCache',
-					value: true,
+				show: {
+					enableCache: [true],
 				},
 			},
 		},
-	],
-};
+	];
+}

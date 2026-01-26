@@ -1,8 +1,10 @@
-export const aiMediaApi = {
-	displayName: 'AI Media API',
-	name: 'aiMediaApi',
-	documentationUrl: '',
-	properties: [
+import { ICredentialType, INodeProperties } from 'n8n-workflow';
+
+export class aiMediaApi implements ICredentialType {
+	name = 'aiMediaApi';
+	displayName = 'AI Media API';
+	documentationUrl = '';
+	properties: INodeProperties[] = [
 		{
 			displayName: 'API Format',
 			name: 'apiFormat',
@@ -72,11 +74,10 @@ export const aiMediaApi = {
 			default: 3600,
 			description: 'Cache time-to-live in seconds (default: 3600 = 1 hour)',
 			displayOptions: {
-				showWhen: {
-					field: 'enableCache',
-					value: true,
+				show: {
+					enableCache: [true],
 				},
 			},
 		},
-	],
-};
+	];
+}

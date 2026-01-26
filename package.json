@@ -40,9 +40,6 @@
       {
         "name": "AIMediaGen",
         "displayName": "AI Media Generation",
-        "group": [
-          "ai"
-        ],
         "subtitle": "={{$parameter.action}}",
         "description": "Generate and process media using AI models and local processing",
         "icon": "file:ai-media-gen.svg",
