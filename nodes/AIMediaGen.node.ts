@@ -16,7 +16,7 @@ interface ResultMetadata {
 	[key: string]: unknown;
 }
 
-const ACTIONS: Array<{ name: string; value: ActionType }> = [
+const OPERATIONS: Array<{ name: string; value: ActionType }> = [
 	{ name: 'ModelScope', value: 'modelScope' },
 ];
 
@@ -28,7 +28,7 @@ export class AIMediaGen implements INodeType {
 		description: 'Generate and process media using AI models and local processing',
 		version: CONSTANTS.NODE_VERSION,
 		group: ['transform'],
-		subtitle: '={{$parameter.action}}',
+		subtitle: '={{$parameter.operation}}',
 		defaults: {
 			name: 'AI Media Generation',
 		},
@@ -38,21 +38,21 @@ export class AIMediaGen implements INodeType {
 		credentials: [
 			{
 				name: 'modelScopeApi',
-				required: true,
+				required: false,
 			},
 		],
 		properties: [
 			{
-				displayName: 'Action',
-				name: 'action',
+				displayName: 'Operation',
+				name: 'operation',
 				type: 'options',
 				noDataExpression: true,
-				options: ACTIONS,
-				default: '',
-				required: false,
-				description: 'Select the action to perform',
+				options: OPERATIONS,
+				default: 'modelScope',
+				required: true,
+				description: 'Select the operation to perform',
 			},
-			// ModelScope action parameters
+			// ModelScope operation parameters
 			{
 				displayName: 'Model',
 				name: 'model',
@@ -67,7 +67,7 @@ export class AIMediaGen implements INodeType {
 				description: 'Select the ModelScope model',
 				displayOptions: {
 					show: {
-						action: ['modelScope'],
+						operation: ['modelScope'],
 					},
 				},
 			},
@@ -83,7 +83,7 @@ export class AIMediaGen implements INodeType {
 				description: 'Text description of the image to generate or edit',
 				displayOptions: {
 					show: {
-						action: ['modelScope'],
+						operation: ['modelScope'],
 					},
 				},
 			},
@@ -96,7 +96,7 @@ export class AIMediaGen implements INodeType {
 				description: 'URL or base64 of image to edit (only for Qwen-Image-Edit-2511)',
 				displayOptions: {
 					show: {
-						action: ['modelScope'],
+						operation: ['modelScope'],
 						model: ['Qwen-Image-Edit-2511'],
 					},
 				},
@@ -117,7 +117,7 @@ export class AIMediaGen implements INodeType {
 				description: 'Image size',
 				displayOptions: {
 					show: {
-						action: ['modelScope'],
+						operation: ['modelScope'],
 						model: ['Z-Image-Turbo', 'Qwen-Image-2512'],
 					},
 				},
@@ -130,7 +130,7 @@ export class AIMediaGen implements INodeType {
 				description: 'Random seed for reproducibility (0 = random)',
 				displayOptions: {
 					show: {
-						action: ['modelScope'],
+						operation: ['modelScope'],
 					},
 				},
 			},
@@ -146,7 +146,7 @@ export class AIMediaGen implements INodeType {
 				description: 'Number of images to generate (1-4)',
 				displayOptions: {
 					show: {
-						action: ['modelScope'],
+						operation: ['modelScope'],
 						model: ['Z-Image-Turbo', 'Qwen-Image-2512'],
 					},
 				},
@@ -214,20 +214,20 @@ export class AIMediaGen implements INodeType {
 
 		const actionRegistry = ActionRegistry.getInstance();
 
-		// Check if any actions are registered
-		const registeredActions = actionRegistry.getActionNames();
-		if (registeredActions.length === 0) {
-			// Return friendly message when no actions are registered
+		// Check if any operations are registered
+		const registeredOperations = actionRegistry.getActionNames();
+		if (registeredOperations.length === 0) {
+			// Return friendly message when no operations are registered
 			for (let i = 0; i < items.length; i++) {
 				results.push({
 					json: {
 						success: false,
-						error: 'No actions are currently registered. Please add action handlers to use this node.',
-						errorCode: 'NO_ACTIONS_REGISTERED',
+						error: 'No operations are currently registered. Please add operation handlers to use this node.',
+						errorCode: 'NO_OPERATIONS_REGISTERED',
 						_metadata: {
 							timestamp: new Date().toISOString(),
-							note: 'This is an empty template node. Add action handlers to enable functionality.',
-							instructions: 'To add actions, create handler classes in nodes/actions/ and register them in actionRegistry.ts',
+							note: 'This is an empty template node. Add operation handlers to enable functionality.',
+							instructions: 'To add operations, create handler classes in nodes/actions/ and register them in actionRegistry.ts',
 						},
 					},
 				});
@@ -241,13 +241,13 @@ export class AIMediaGen implements INodeType {
 
 		for (let i = 0; i < items.length; i++) {
 			try {
-				const action = this.getNodeParameter('action', i) as ActionType;
-				const handler = actionRegistry.getHandler(action);
+				const operation = this.getNodeParameter('operation', i) as ActionType;
+				const handler = actionRegistry.getHandler(operation);
 
 				if (!handler) {
 					throw new NodeOperationError(
 						this.getNode(),
-						`Unknown action: ${action}. Available actions: ${registeredActions.join(', ')}`,
+						`Unknown operation: ${operation}. Available operations: ${registeredOperations.join(', ')}`,
 						{ itemIndex: i }
 					);
 				}
@@ -260,38 +260,38 @@ export class AIMediaGen implements INodeType {
 					if (!credentials) {
 						throw new NodeOperationError(
 							this.getNode(),
-							`Credentials required for action: ${action}`,
+							`Credentials required for operation: ${operation}`,
 							{ itemIndex: i }
 						);
 					}
 				}
 
-				const timerId = performanceMonitor.startTimer(action);
+				const timerId = performanceMonitor.startTimer(operation);
 
 				let result: INodeExecutionData;
 
-				if (enableCache && action !== 'processing') {
+				if (enableCache && operation !== 'processing') {
 					const model = this.getNodeParameter('model', i) as string || '';
 					const prompt = this.getNodeParameter('prompt', i) as string || '';
 					const promptHash = AIMediaGen.hashString(prompt);
-					const cacheKey = `${action}:${model}:${promptHash}`;
+					const cacheKey = `${operation}:${model}:${promptHash}`;
 					const cached = await cacheManager.get(cacheKey);
 
 					if (cached) {
-						this.logger?.info('Cache hit', { action, cacheKey });
+						this.logger?.info('Cache hit', { operation, cacheKey });
 						result = {
 							json: {
 								success: true,
 								...cached as Record<string, unknown>,
 								_metadata: {
-									action,
+									operation,
 									cached: true,
 									timestamp: new Date().toISOString(),
 								},
 							},
 						};
 					} else {
-						this.logger?.info('Cache miss', { action, cacheKey });
+						this.logger?.info('Cache miss', { operation, cacheKey });
 						result = await handler.execute(this, i, credentials);
 
 						if (result.json.success) {
@@ -306,7 +306,7 @@ export class AIMediaGen implements INodeType {
 
 			performanceMonitor.recordMetric({
 					timestamp: Date.now().toString(),
-					provider: action,
+					provider: operation,
 					model: this.getNodeParameter('model', i) as string || 'processing',
 					mediaType: handler.mediaType,
 					duration: elapsed,
@@ -314,16 +314,16 @@ export class AIMediaGen implements INodeType {
 					fromCache: (result.json._metadata as ResultMetadata)?.cached || false,
 				});
 
-				this.logger?.info('Action executed', {
-					action,
+				this.logger?.info('Operation executed', {
+					operation,
 					duration: elapsed,
 					success: result.json.success,
 				});
 
 				results.push(result);
 			} catch (error) {
-				this.logger?.error('Action failed', {
-					action: this.getNodeParameter('action', i),
+				this.logger?.error('Operation failed', {
+					operation: this.getNodeParameter('operation', i),
 					error: error instanceof Error ? error.message : String(error),
 				});
 
