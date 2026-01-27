@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "tavily": {
+      "command": "/Users/liuyang/.npm-global/bin/tavily-mcp",
+      "args": [],
+      "env": {
+        "TAVILY_API_KEY": "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"
+      }
+    }
+  }
+}
