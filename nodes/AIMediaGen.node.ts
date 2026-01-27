@@ -49,7 +49,7 @@ export class AIMediaGen implements INodeType {
 				type: 'options',
 				noDataExpression: true,
 				options: ACTIONS,
-				default: '',
+				default: 'modelScopeGenerateImage',
 				required: true,
 				description: 'Select the action to perform',
 			},
