@@ -4,7 +4,10 @@
  */
 
 import { type IActionHandler, type ActionType } from './actionHandler';
-import { ModelScopeActionHandler } from '../actions/modelScopeActionHandler';
+import {
+	ModelScopeGenerateImageAction,
+	ModelScopeEditImageAction,
+} from '../actions/modelScopeActions';
 
 /**
  * Action Registry class
@@ -32,8 +35,9 @@ export class ActionRegistry {
 	 * Register default action handlers
 	 */
 	private registerDefaultHandlers(): void {
-		// Register ModelScope action handler
-		this.registerHandler(new ModelScopeActionHandler());
+		// Register ModelScope action handlers
+		this.registerHandler(new ModelScopeGenerateImageAction());
+		this.registerHandler(new ModelScopeEditImageAction());
 	}
 
 	/**
