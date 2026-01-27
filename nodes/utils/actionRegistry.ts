@@ -4,10 +4,7 @@
  */
 
 import { type IActionHandler, type ActionType } from './actionHandler';
-import { SoraActionHandler } from '../actions/soraActionHandler';
-import { NanoBananaActionHandler } from '../actions/nanoBananaActionHandler';
 import { ModelScopeActionHandler } from '../actions/modelScopeActionHandler';
-import { MediaProcessingActionHandler } from '../actions/mediaProcessingActionHandler';
 
 /**
  * Action Registry class
@@ -35,10 +32,8 @@ export class ActionRegistry {
 	 * Register default action handlers
 	 */
 	private registerDefaultHandlers(): void {
-		this.registerHandler(new SoraActionHandler());
-		this.registerHandler(new NanoBananaActionHandler());
+		// Register ModelScope action handler
 		this.registerHandler(new ModelScopeActionHandler());
-		this.registerHandler(new MediaProcessingActionHandler());
 	}
 
 	/**

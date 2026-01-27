@@ -5,9 +5,9 @@
 import type { IExecuteFunctions, INodeExecutionData } from 'n8n-workflow';
 
 /**
- * Action type
+ * Action type - flexible string type to allow any action name
  */
-export type ActionType = 'sora' | 'nanoBanana' | 'modelScope' | 'processing';
+export type ActionType = string;
 
 /**
  * Action type

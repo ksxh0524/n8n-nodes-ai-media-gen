@@ -10,7 +10,8 @@ export type ApiFormat = 'openai' | 'gemini' | 'bailian' | 'replicate' | 'hugging
 
 export type MediaType = 'image' | 'audio' | 'video';
 
-export type ActionType = 'sora' | 'nanoBanana' | 'modelScope' | 'processing';
+// Flexible string type to allow any action name
+export type ActionType = string;
 
 export type CredentialType = 'openAiApi' | 'googlePalmApi' | 'modelScopeApi' | 'aiMediaApi';
 

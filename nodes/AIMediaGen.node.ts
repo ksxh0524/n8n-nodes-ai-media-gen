@@ -17,10 +17,7 @@ interface ResultMetadata {
 }
 
 const ACTIONS: Array<{ name: string; value: ActionType }> = [
-	{ name: 'Sora (Video Generation)', value: 'sora' },
-	{ name: 'Nano Banana (Image Generation)', value: 'nanoBanana' },
-	{ name: 'ModelScope (Multi-Model)', value: 'modelScope' },
-	{ name: 'Media Processing', value: 'processing' },
+	{ name: 'ModelScope', value: 'modelScope' },
 ];
 
 export class AIMediaGen implements INodeType {
@@ -40,16 +37,8 @@ export class AIMediaGen implements INodeType {
 		usableAsTool: true,
 		credentials: [
 			{
-				name: 'openAiApi',
-				required: false,
-			},
-			{
-				name: 'googlePalmApi',
-				required: false,
-			},
-			{
 				name: 'modelScopeApi',
-				required: false,
+				required: true,
 			},
 		],
 		properties: [
@@ -59,21 +48,26 @@ export class AIMediaGen implements INodeType {
 				type: 'options',
 				noDataExpression: true,
 				options: ACTIONS,
-				default: 'sora',
-				required: true,
+				default: '',
+				required: false,
 				description: 'Select the action to perform',
 			},
+			// ModelScope action parameters
 			{
 				displayName: 'Model',
 				name: 'model',
-				type: 'string',
-				default: '',
+				type: 'options',
+				default: 'Z-Image-Turbo',
 				required: true,
-				placeholder: 'e.g., sora-2, nano-banana, qwen-image',
-				description: 'Model name',
+				options: [
+					{ name: 'Z-Image-Turbo', value: 'Z-Image-Turbo' },
+					{ name: 'Qwen-Image-2512', value: 'Qwen-Image-2512' },
+					{ name: 'Qwen-Image-Edit-2511', value: 'Qwen-Image-Edit-2511' },
+				],
+				description: 'Select the ModelScope model',
 				displayOptions: {
 					show: {
-						action: ['sora', 'nanoBanana', 'modelScope'],
+						action: ['modelScope'],
 					},
 				},
 			},
@@ -86,10 +80,10 @@ export class AIMediaGen implements INodeType {
 				},
 				default: '',
 				required: true,
-				description: 'Text prompt for generation',
+				description: 'Text description of the image to generate or edit',
 				displayOptions: {
 					show: {
-						action: ['sora', 'nanoBanana', 'modelScope'],
+						action: ['modelScope'],
 					},
 				},
 			},
@@ -98,12 +92,12 @@ export class AIMediaGen implements INodeType {
 				name: 'editImage',
 				type: 'string',
 				default: '',
-				placeholder: 'https://example.com/image.jpg or base64...',
-				description: 'URL or base64 of image to edit (for edit models)',
+				placeholder: 'https://example.com/image.jpg or data:image/jpeg;base64,...',
+				description: 'URL or base64 of image to edit (only for Qwen-Image-Edit-2511)',
 				displayOptions: {
 					show: {
 						action: ['modelScope'],
-						model: ['qwen-image-edit'],
+						model: ['Qwen-Image-Edit-2511'],
 					},
 				},
 			},
@@ -113,70 +107,18 @@ export class AIMediaGen implements INodeType {
 				type: 'options',
 				default: '1024x1024',
 				options: [
-					{ name: '256x256', value: '256x256' },
 					{ name: '512x512', value: '512x512' },
+					{ name: '768x768', value: '768x768' },
 					{ name: '1024x1024', value: '1024x1024' },
 					{ name: '2048x2048', value: '2048x2048' },
+					{ name: '512x1024', value: '512x1024' },
+					{ name: '1024x512', value: '1024x512' },
 				],
 				description: 'Image size',
 				displayOptions: {
 					show: {
-						action: ['nanoBanana', 'modelScope'],
-					},
-				},
-			},
-			{
-				displayName: 'Duration (seconds)',
-				name: 'duration',
-				type: 'number',
-				default: 10,
-				description: 'Video duration in seconds',
-				displayOptions: {
-					show: {
-						action: ['sora'],
-					},
-				},
-			},
-			{
-				displayName: 'Aspect Ratio',
-				name: 'aspectRatio',
-				type: 'options',
-				default: '16:9',
-				options: [
-					{ name: '16:9 (Landscape)', value: '16:9' },
-					{ name: '9:16 (Portrait)', value: '9:16' },
-					{ name: '1:1 (Square)', value: '1:1' },
-					{ name: '4:3 (Landscape)', value: '4:3' },
-					{ name: '3:4 (Portrait)', value: '3:4' },
-				],
-				description: 'Video aspect ratio',
-				displayOptions: {
-					show: {
-						action: ['sora'],
-					},
-				},
-			},
-			{
-				displayName: 'Quality',
-				name: 'quality',
-				type: 'number',
-				default: 85,
-				description: 'Output quality (1-100)',
-				displayOptions: {
-					show: {
-						action: ['nanoBanana', 'modelScope'],
-					},
-				},
-			},
-			{
-				displayName: 'Number of Images',
-				name: 'numImages',
-				type: 'number',
-				default: 1,
-				description: 'Number of images to generate',
-				displayOptions: {
-					show: {
-						action: ['nanoBanana', 'modelScope'],
+						action: ['modelScope'],
+						model: ['Z-Image-Turbo', 'Qwen-Image-2512'],
 					},
 				},
 			},
@@ -185,300 +127,29 @@ export class AIMediaGen implements INodeType {
 				name: 'seed',
 				type: 'number',
 				default: 0,
-				description: 'Random seed for reproducibility',
+				description: 'Random seed for reproducibility (0 = random)',
 				displayOptions: {
 					show: {
-						action: ['nanoBanana', 'modelScope'],
+						action: ['modelScope'],
 					},
 				},
 			},
 			{
-				displayName: 'Media Type',
-				name: 'mediaType',
-				type: 'options',
-				default: 'image',
-				options: [
-					{ name: 'Image', value: 'image' },
-					{ name: 'Video', value: 'video' },
-				],
-				description: 'Type of media to process',
-				displayOptions: {
-					show: {
-						action: ['processing'],
-					},
-				},
-			},
-			{
-				displayName: 'Operation',
-				name: 'operation',
-				type: 'options',
-				default: 'resize',
-				options: [
-					{ name: 'Resize', value: 'resize' },
-					{ name: 'Crop', value: 'crop' },
-					{ name: 'Convert Format', value: 'convert' },
-					{ name: 'Filter', value: 'filter' },
-					{ name: 'Watermark', value: 'watermark' },
-					{ name: 'Compress', value: 'compress' },
-					{ name: 'Rotate', value: 'rotate' },
-					{ name: 'Flip', value: 'flip' },
-					{ name: 'Adjust', value: 'adjust' },
-					{ name: 'Blur', value: 'blur' },
-					{ name: 'Sharpen', value: 'sharpen' },
-					{ name: 'Transcode', value: 'transcode' },
-					{ name: 'Trim', value: 'trim' },
-					{ name: 'Extract Frames', value: 'extractFrames' },
-					{ name: 'Add Audio', value: 'addAudio' },
-					{ name: 'Extract Audio', value: 'extractAudio' },
-					{ name: 'Resize Video', value: 'resizeVideo' },
-				],
-				description: 'Processing operation to perform',
-				displayOptions: {
-					show: {
-						action: ['processing'],
-					},
-				},
-			},
-			{
-				displayName: 'Binary Property Name',
-				name: 'binaryPropertyName',
-				type: 'string',
-				default: 'data',
-				description: 'Name of the binary property to process from the input',
-				displayOptions: {
-					show: {
-						action: ['processing'],
-					},
-				},
-			},
-			{
-				displayName: 'Width',
-				name: 'width',
-				type: 'number',
-				default: 0,
-				description: 'Target width (0 to keep original)',
-				displayOptions: {
-					show: {
-						action: ['processing'],
-						operation: ['resize'],
-					},
-				},
-			},
-			{
-				displayName: 'Height',
-				name: 'height',
-				type: 'number',
-				default: 0,
-				description: 'Target height (0 to keep original)',
-				displayOptions: {
-					show: {
-						action: ['processing'],
-						operation: ['resize'],
-					},
-				},
-			},
-			{
-				displayName: 'Fit',
-				name: 'fit',
-				type: 'options',
-				default: 'cover',
-				options: [
-					{ name: 'Cover', value: 'cover' },
-					{ name: 'Contain', value: 'contain' },
-					{ name: 'Fill', value: 'fill' },
-					{ name: 'Inside', value: 'inside' },
-					{ name: 'Outside', value: 'outside' },
-				],
-				description: 'How to fit the image when resizing',
-				displayOptions: {
-					show: {
-						action: ['processing'],
-						operation: ['resize'],
-					},
-				},
-			},
-			{
-				displayName: 'Format',
-				name: 'format',
-				type: 'options',
-				default: 'jpeg',
-				options: [
-					{ name: 'JPEG', value: 'jpeg' },
-					{ name: 'PNG', value: 'png' },
-					{ name: 'WebP', value: 'webp' },
-					{ name: 'GIF', value: 'gif' },
-					{ name: 'TIFF', value: 'tiff' },
-					{ name: 'AVIF', value: 'avif' },
-					{ name: 'MP4', value: 'mp4' },
-					{ name: 'WebM', value: 'webm' },
-				],
-				description: 'Target format for conversion',
-				displayOptions: {
-					show: {
-						action: ['processing'],
-						operation: ['convert', 'transcode'],
-					},
-				},
-			},
-			{
-				displayName: 'Filter Type',
-				name: 'filterType',
-				type: 'options',
-				default: 'blur',
-				options: [
-					{ name: 'Blur', value: 'blur' },
-					{ name: 'Sharpen', value: 'sharpen' },
-					{ name: 'Brightness', value: 'brightness' },
-					{ name: 'Contrast', value: 'contrast' },
-					{ name: 'Saturation', value: 'saturation' },
-					{ name: 'Grayscale', value: 'grayscale' },
-					{ name: 'Sepia', value: 'sepia' },
-					{ name: 'Invert', value: 'invert' },
-					{ name: 'Normalize', value: 'normalize' },
-					{ name: 'Modulate', value: 'modulate' },
-				],
-				description: 'Filter type to apply',
-				displayOptions: {
-					show: {
-						action: ['processing'],
-						operation: ['filter', 'adjust'],
-					},
-				},
-			},
-			{
-				displayName: 'Filter Value',
-				name: 'filterValue',
+				displayName: 'Number of Images',
+				name: 'numImages',
 				type: 'number',
 				default: 1,
-				description: 'Filter value (intensity)',
-				displayOptions: {
-					show: {
-						action: ['processing'],
-						operation: ['filter'],
-					},
-				},
-			},
-			{
-				displayName: 'Watermark Image',
-				name: 'watermarkImage',
-				type: 'string',
-				default: '',
-				placeholder: 'https://example.com/watermark.png',
-				description: 'URL or base64 of watermark image',
-				displayOptions: {
-					show: {
-						action: ['processing'],
-						operation: ['watermark'],
-					},
-				},
-			},
-			{
-				displayName: 'Watermark Position',
-				name: 'watermarkPosition',
-				type: 'options',
-				default: 'bottom-right',
-				options: [
-					{ name: 'Top Left', value: 'top-left' },
-					{ name: 'Top Right', value: 'top-right' },
-					{ name: 'Bottom Left', value: 'bottom-left' },
-					{ name: 'Bottom Right', value: 'bottom-right' },
-					{ name: 'Center', value: 'center' },
-				],
-				description: 'Watermark position',
-				displayOptions: {
-					show: {
-						action: ['processing'],
-						operation: ['watermark'],
-					},
-				},
-			},
-			{
-				displayName: 'Angle',
-				name: 'angle',
-				type: 'number',
-				default: 0,
-				description: 'Rotation angle in degrees',
-				displayOptions: {
-					show: {
-						action: ['processing'],
-						operation: ['rotate'],
-					},
-				},
-			},
-			{
-				displayName: 'Flip Horizontal',
-				name: 'flipHorizontal',
-				type: 'boolean',
-				default: false,
-				description: 'Flip horizontally',
-				displayOptions: {
-					show: {
-						action: ['processing'],
-						operation: ['flip'],
-					},
-				},
-			},
-			{
-				displayName: 'Flip Vertical',
-				name: 'flipVertical',
-				type: 'boolean',
-				default: false,
-				description: 'Flip vertically',
-				displayOptions: {
-					show: {
-						action: ['processing'],
-						operation: ['flip'],
-					},
-				},
-			},
-			{
-				displayName: 'Start Time',
-				name: 'startTime',
-				type: 'number',
-				default: 0,
-				description: 'Start time in seconds',
-				displayOptions: {
-					show: {
-						action: ['processing'],
-						operation: ['trim'],
-					},
-				},
-			},
-			{
-				displayName: 'End Time',
-				name: 'endTime',
-				type: 'number',
-				default: 0,
-				description: 'End time in seconds',
-				displayOptions: {
-					show: {
-						action: ['processing'],
-						operation: ['trim'],
-					},
-				},
-			},
-			{
-				displayName: 'Frame Rate',
-				name: 'frameRate',
-				type: 'number',
-				default: 1,
-				description: 'Frame rate for extraction',
-				displayOptions: {
-					show: {
-						action: ['processing'],
-						operation: ['extractFrames'],
-					},
-				},
-			},
-			{
-				displayName: 'Additional Parameters (JSON)',
-				name: 'additionalParams',
-				type: 'string',
 				typeOptions: {
-					rows: CONSTANTS.UI.TEXT_AREA_ROWS.ADDITIONAL_PARAMS,
+					minValue: 1,
+					maxValue: 4,
 				},
-				default: '{}',
-				description: 'Additional parameters as JSON object',
+				description: 'Number of images to generate (1-4)',
+				displayOptions: {
+					show: {
+						action: ['modelScope'],
+						model: ['Z-Image-Turbo', 'Qwen-Image-2512'],
+					},
+				},
 			},
 			{
 				displayName: 'Options',
@@ -542,6 +213,28 @@ export class AIMediaGen implements INodeType {
 		const results: INodeExecutionData[] = [];
 
 		const actionRegistry = ActionRegistry.getInstance();
+
+		// Check if any actions are registered
+		const registeredActions = actionRegistry.getActionNames();
+		if (registeredActions.length === 0) {
+			// Return friendly message when no actions are registered
+			for (let i = 0; i < items.length; i++) {
+				results.push({
+					json: {
+						success: false,
+						error: 'No actions are currently registered. Please add action handlers to use this node.',
+						errorCode: 'NO_ACTIONS_REGISTERED',
+						_metadata: {
+							timestamp: new Date().toISOString(),
+							note: 'This is an empty template node. Add action handlers to enable functionality.',
+							instructions: 'To add actions, create handler classes in nodes/actions/ and register them in actionRegistry.ts',
+						},
+					},
+				});
+			}
+			return [this.helpers.constructExecutionMetaData(results, { itemData: { item: 0 } })];
+		}
+
 		const enableCache = this.getNodeParameter('options.enableCache', CONSTANTS.INDICES.FIRST_ITEM) as boolean;
 		const cacheManager = new CacheManager();
 		const performanceMonitor = new PerformanceMonitor();
@@ -554,7 +247,7 @@ export class AIMediaGen implements INodeType {
 				if (!handler) {
 					throw new NodeOperationError(
 						this.getNode(),
-						`Unknown action: ${action}`,
+						`Unknown action: ${action}. Available actions: ${registeredActions.join(', ')}`,
 						{ itemIndex: i }
 					);
 				}
@@ -580,11 +273,8 @@ export class AIMediaGen implements INodeType {
 				if (enableCache && action !== 'processing') {
 					const model = this.getNodeParameter('model', i) as string || '';
 					const prompt = this.getNodeParameter('prompt', i) as string || '';
-					const additionalParams = this.getNodeParameter('additionalParams', i) as string || '{}';
-					const paramsStr = JSON.stringify(additionalParams || {});
 					const promptHash = AIMediaGen.hashString(prompt);
-					const paramsHash = AIMediaGen.hashString(paramsStr);
-					const cacheKey = `${action}:${model}:${promptHash}:${paramsHash}`;
+					const cacheKey = `${action}:${model}:${promptHash}`;
 					const cached = await cacheManager.get(cacheKey);
 
 					if (cached) {
