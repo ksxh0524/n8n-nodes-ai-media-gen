@@ -31,7 +31,7 @@
   },
   "include": [
     "nodes/**/*",
-    "credentials/**/*"
+    "index.ts"
   ],
   "exclude": [
     "node_modules",

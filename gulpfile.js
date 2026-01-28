@@ -33,7 +33,6 @@ function buildDev() {
 
 function watchFiles() {
   gulp.watch('nodes/**/*.ts', buildDev);
-  gulp.watch('credentials/**/*.ts', buildDev);
 }
 
 exports.build = gulp.series(clean, build);

@@ -30,9 +30,9 @@
     "build": "gulp build",
     "build:dev": "gulp build:dev",
     "dev": "gulp dev",
-    "format": "prettier nodes credentials --write",
-    "lint": "eslint nodes credentials package.json",
-    "lint:fix": "eslint nodes credentials package.json --fix",
+    "format": "prettier nodes --write",
+    "lint": "eslint nodes package.json",
+    "lint:fix": "eslint nodes package.json --fix",
     "prepublishOnly": "npm run build && npm run lint -s",
     "test": "jest"
   },
@@ -42,7 +42,7 @@
   "n8n": {
     "n8nNodesApiVersion": 1,
     "credentials": [
-      "dist/credentials/modelScopeApi.credentials.js"
+      "dist/nodes/credentials/modelScopeApi.credentials.js"
     ],
     "nodes": [
       "dist/nodes/AIMediaGen.js"
@@ -53,6 +53,7 @@
   },
   "devDependencies": {
     "@types/jest": "^29.5.0",
+    "@types/node": "^20.0.0",
     "@typescript-eslint/eslint-plugin": "^6.0.0",
     "@typescript-eslint/parser": "^6.0.0",
     "del": "^6.1.1",
