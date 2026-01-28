@@ -31,10 +31,10 @@ export class AIMediaGen implements INodeType {
 		displayName: 'AI Media Generation',
 		name: 'aiMediaGen',
 		icon: 'file:ai-media-gen.svg',
-		description: 'Generate and process media using AI models',
+		description: 'Generate and edit images using ModelScope AI models',
 		version: CONSTANTS.NODE_VERSION,
 		group: ['transform'],
-		subtitle: '={{$parameter.resource}}: {{$parameter.action}}',
+		subtitle: '={{$parameter.model}}',
 		defaults: {
 			name: 'AI Media Generation',
 		},
@@ -49,46 +49,31 @@ export class AIMediaGen implements INodeType {
 		],
 		properties: [
 			{
-				displayName: 'Resource',
-				name: 'resource',
-				type: 'options',
-				noDataExpression: true,
-				options: [
-					{ name: 'ModelScope', value: 'modelScope' },
-				],
-				default: 'modelScope',
-				required: true,
-				description: 'AI resource to use',
-			},
-			{
-				displayName: 'Action',
-				name: 'action',
-				type: 'options',
-				noDataExpression: true,
-				options: [
-					{ name: 'Generate Image', value: 'generateImage', description: 'Generate an image from text prompt' },
-				],
-				default: 'generateImage',
-				required: true,
-			},
-			{
 				displayName: 'Model',
 				name: 'model',
 				type: 'options',
-				default: 'Tongyi-MAI/Z-Image',
 				required: true,
 				options: [
-					{ name: 'Z-Image', value: 'Tongyi-MAI/Z-Image' },
-					{ name: 'Qwen-Image-2512', value: 'Qwen-Image-2512' },
-				],
-				description: 'Select the model',
-				displayOptions: {
-					show: {
-						resource: ['modelScope'],
-						action: ['generateImage'],
+					{
+						name: 'Z-Image (Generation)',
+						value: 'Tongyi-MAI/Z-Image',
+						description: 'High-quality text-to-image generation model',
 					},
-				},
+					{
+						name: 'Qwen-Image-2512 (Generation)',
+						value: 'Qwen-Image-2512',
+						description: 'Advanced text-to-image generation model',
+					},
+					{
+						name: 'Qwen-Image-Edit-2511 (Editing)',
+						value: 'Qwen-Image-Edit-2511',
+						description: 'Image editing model - requires input image',
+					},
+				],
+				default: 'Tongyi-MAI/Z-Image',
+				description: 'Select the AI model to use',
 			},
+			// Prompt - shown for all models
 			{
 				displayName: 'Prompt',
 				name: 'prompt',
@@ -98,14 +83,28 @@ export class AIMediaGen implements INodeType {
 				},
 				default: '',
 				required: true,
-				description: 'Text description of the image to generate',
+				description: 'Text description for generation or editing',
 				displayOptions: {
 					show: {
-						resource: ['modelScope'],
-						action: ['generateImage'],
+						model: ['Tongyi-MAI/Z-Image', 'Qwen-Image-2512', 'Qwen-Image-Edit-2511'],
 					},
 				},
 			},
+			// Input Image - only for Edit model
+			{
+				displayName: 'Input Image',
+				name: 'inputImage',
+				type: 'string',
+				default: '',
+				description: 'URL or base64 of the image to edit (required for Edit model)',
+				displayOptions: {
+					show: {
+						model: ['Qwen-Image-Edit-2511'],
+					},
+				},
+				placeholder: 'https://example.com/image.jpg or data:image/jpeg;base64,...',
+			},
+			// Size for Z-Image
 			{
 				displayName: 'Size',
 				name: 'size',
@@ -115,15 +114,57 @@ export class AIMediaGen implements INodeType {
 					{ name: '512x512', value: '512x512' },
 					{ name: '768x768', value: '768x768' },
 					{ name: '1024x1024', value: '1024x1024' },
-					{ name: '2048x2048', value: '2048x2048' },
-					{ name: '512x1024', value: '512x1024' },
-					{ name: '1024x512', value: '1024x512' },
 				],
-				description: 'Image size',
+				description: 'Image size (Z-Image supports up to 1024x1024)',
 				displayOptions: {
 					show: {
-						resource: ['modelScope'],
-						action: ['generateImage'],
+						model: ['Tongyi-MAI/Z-Image'],
+					},
+				},
+			},
+			// Size for Qwen-Image-2512
+			{
+				displayName: 'Size',
+				name: 'size',
+				type: 'options',
+				default: '1024x1024',
+				options: [
+					{ name: '1024x1024', value: '1024x1024' },
+					{ name: '1152x896', value: '1152x896' },
+					{ name: '896x1152', value: '896x1152' },
+					{ name: '1216x832', value: '1216x832' },
+					{ name: '832x1216', value: '832x1216' },
+					{ name: '1344x768', value: '1344x768' },
+					{ name: '768x1344', value: '768x1344' },
+					{ name: '1536x640', value: '1536x640' },
+					{ name: '640x1536', value: '640x1536' },
+				],
+				description: 'Image size (Qwen-Image-2512 supports various aspect ratios)',
+				displayOptions: {
+					show: {
+						model: ['Qwen-Image-2512'],
+					},
+				},
+			},
+			// Size for Qwen-Image-Edit-2511
+			{
+				displayName: 'Size',
+				name: 'size',
+				type: 'options',
+				default: '1024x1024',
+				options: [
+					{ name: '1024x1024', value: '1024x1024' },
+					{ name: '1152x896', value: '1152x896' },
+					{ name: '896x1152', value: '896x1152' },
+					{ name: '1216x832', value: '1216x832' },
+					{ name: '832x1216', value: '832x1216' },
+					{ name: '1344x768', value: '1344x768' },
+					{ name: '768x1344', value: '768x1344' },
+				],
+				description: 'Output image size for editing',
+				displayOptions: {
+					show: {
+						model: ['Qwen-Image-Edit-2511'],
 					},
 				},
 			},
@@ -133,12 +174,6 @@ export class AIMediaGen implements INodeType {
 				type: 'number',
 				default: 0,
 				description: 'Random seed for reproducibility (0 = random)',
-				displayOptions: {
-					show: {
-						resource: ['modelScope'],
-						action: ['generateImage'],
-					},
-				},
 			},
 			{
 				displayName: 'Number of Images',
@@ -150,12 +185,6 @@ export class AIMediaGen implements INodeType {
 					maxValue: 4,
 				},
 				description: 'Number of images to generate (1-4)',
-				displayOptions: {
-					show: {
-						resource: ['modelScope'],
-						action: ['generateImage'],
-					},
-				},
 			},
 			// Options
 			{
@@ -225,9 +254,6 @@ export class AIMediaGen implements INodeType {
 
 		for (let i = 0; i < items.length; i++) {
 			try {
-				const resource = this.getNodeParameter('resource', i) as string;
-				const action = this.getNodeParameter('action', i) as string;
-
 				// Get credentials
 				const credentials = await this.getCredentials<ModelScopeApiCredentials>('modelScopeApi');
 				if (!credentials || !credentials.apiKey) {
@@ -238,83 +264,65 @@ export class AIMediaGen implements INodeType {
 					);
 				}
 
-				const timerId = performanceMonitor.startTimer(action);
+				const timerId = performanceMonitor.startTimer('aiMediaGen');
 				let result: INodeExecutionData;
 
-				if (resource === 'modelScope') {
-					const timeout = this.getNodeParameter('options.timeout', CONSTANTS.INDICES.FIRST_ITEM) as number;
+				const timeout = this.getNodeParameter('options.timeout', CONSTANTS.INDICES.FIRST_ITEM) as number;
+				const model = this.getNodeParameter('model', i) as string;
 
-					if (enableCache) {
-						const prompt = this.getNodeParameter('prompt', i) as string || '';
-						const promptHash = AIMediaGen.hashString(prompt);
-						const cacheKey = `${action}:${promptHash}`;
-						const cached = await cacheManager.get(cacheKey);
+				if (enableCache) {
+					const prompt = this.getNodeParameter('prompt', i) as string || '';
+					const promptHash = AIMediaGen.hashString(prompt);
+					const cacheKey = `${model}:${promptHash}`;
+					const cached = await cacheManager.get(cacheKey);
 
-						if (cached) {
-							this.logger?.info('Cache hit', { action, cacheKey });
-							result = {
-								json: {
-									success: true,
-									...cached as Record<string, unknown>,
-									_metadata: {
-										action,
-										cached: true,
-										timestamp: new Date().toISOString(),
-									},
+					if (cached) {
+						this.logger?.info('Cache hit', { model, cacheKey });
+						result = {
+							json: {
+								success: true,
+								...cached as Record<string, unknown>,
+								_metadata: {
+									model,
+									cached: true,
+									timestamp: new Date().toISOString(),
 								},
-							};
-						} else {
-							this.logger?.info('Cache miss', { action, cacheKey });
-
-							if (action === 'generateImage') {
-								result = await AIMediaGen.executeGenerateImage(this, i, credentials, timeout);
-							} else {
-								throw new NodeOperationError(this.getNode(), `Unknown action: ${action}`, { itemIndex: i });
-							}
-
-							if (result.json.success) {
-								await cacheManager.set(cacheKey, result.json, this.getNodeParameter('options.cacheTtl', i) as number);
-							}
-						}
+							},
+						};
 					} else {
-						if (action === 'generateImage') {
-							result = await AIMediaGen.executeGenerateImage(this, i, credentials, timeout);
-						} else {
-							throw new NodeOperationError(this.getNode(), `Unknown action: ${action}`, { itemIndex: i });
+						this.logger?.info('Cache miss', { model, cacheKey });
+						result = await AIMediaGen.executeModelRequest(this, i, credentials, timeout);
+
+						if (result.json.success) {
+							await cacheManager.set(cacheKey, result.json, this.getNodeParameter('options.cacheTtl', i) as number);
 						}
 					}
 				} else {
-					throw new NodeOperationError(
-						this.getNode(),
-						`Unknown resource: ${resource}`,
-						{ itemIndex: i }
-					);
+					result = await AIMediaGen.executeModelRequest(this, i, credentials, timeout);
 				}
 
 				const elapsed = performanceMonitor.endTimer(timerId);
 
 				performanceMonitor.recordMetric({
 					timestamp: Date.now().toString(),
-					provider: resource,
-					model: this.getNodeParameter('model', i) as string,
+					provider: 'modelScope',
+					model,
 					mediaType: 'image',
 					duration: elapsed,
 					success: result.json.success as boolean,
 					fromCache: (result.json._metadata as ResultMetadata)?.cached || false,
 				});
 
-				this.logger?.info('Action executed', {
-					resource,
-					action,
+				this.logger?.info('Execution completed', {
+					model,
 					duration: elapsed,
 					success: result.json.success,
 				});
 
 				results.push(result);
 			} catch (error) {
-				this.logger?.error('Action failed', {
-					resource: this.getNodeParameter('resource', i),
-					action: this.getNodeParameter('action', i),
+				this.logger?.error('Execution failed', {
+					model: this.getNodeParameter('model', i),
 					error: error instanceof Error ? error.message : String(error),
 				});
 
@@ -339,7 +347,7 @@ export class AIMediaGen implements INodeType {
 		return [this.helpers.constructExecutionMetaData(results, { itemData: { item: 0 } })];
 	}
 
-	private static async executeGenerateImage(
+	private static async executeModelRequest(
 		context: IExecuteFunctions,
 		itemIndex: number,
 		credentials: ModelScopeApiCredentials,
@@ -362,6 +370,22 @@ export class AIMediaGen implements INodeType {
 		}
 
 		const baseUrl = credentials.baseUrl || 'https://api.modelscope.cn/v1';
+		const isEditModel = model === 'Qwen-Image-Edit-2511';
+
+		// For Edit model, get input image
+		let inputImage = '';
+		if (isEditModel) {
+			inputImage = context.getNodeParameter('inputImage', itemIndex) as string || '';
+			if (!inputImage || inputImage.trim() === '') {
+				return {
+					json: {
+						success: false,
+						error: 'Input image is required for Edit model',
+						errorCode: 'VALIDATION_ERROR',
+					},
+				};
+			}
+		}
 
 		return await AIMediaGen.makeModelScopeRequest(
 			baseUrl,
@@ -372,6 +396,7 @@ export class AIMediaGen implements INodeType {
 				size: size || '1024x1024',
 				seed: seed || 0,
 				num_images: numImages || 1,
+				input_image: inputImage,
 			},
 			timeout
 		);
@@ -382,24 +407,43 @@ export class AIMediaGen implements INodeType {
 		apiKey: string,
 		model: string,
 		input: { prompt: string },
-		parameters: { size?: string; seed: number; num_images?: number },
+		parameters: { size?: string; seed: number; num_images?: number; input_image?: string },
 		timeout: number
 	): Promise<INodeExecutionData> {
 		const controller = new AbortController();
 		const timeoutId = setTimeout(() => controller.abort(), timeout);
 
 		try {
+			const requestBody: Record<string, unknown> = {
+				model,
+				input,
+			};
+
+			// Add size and seed for all models
+			if (parameters.size) {
+				requestBody.parameters = {
+					size: parameters.size,
+					seed: parameters.seed,
+				};
+			}
+
+			// Add num_images for generation models
+			if (parameters.num_images && parameters.input_image === undefined) {
+				(requestBody.parameters as Record<string, unknown>).num_images = parameters.num_images;
+			}
+
+			// For edit models, add input_image to the input
+			if (parameters.input_image) {
+				(input as Record<string, unknown>).image = parameters.input_image;
+			}
+
 			const response = await fetch(`${baseUrl}/files/generation`, {
 				method: 'POST',
 				headers: {
 					'Authorization': `Bearer ${apiKey}`,
 					'Content-Type': 'application/json',
 				},
-				body: JSON.stringify({
-					model,
-					input,
-					parameters,
-				}),
+				body: JSON.stringify(requestBody),
 				signal: controller.signal,
 			});
 
