@@ -67,3 +67,13 @@ export const INDICES = {
 export const HASH = {
 	LENGTH: 32,
 } as const;
+
+/**
+ * API endpoints
+ */
+export const API_ENDPOINTS = {
+	MODELSCOPE: {
+		BASE_URL: 'https://api.modelscope.cn/v1',
+		FILES_GENERATION: '/files/generation',
+	},
+} as const;

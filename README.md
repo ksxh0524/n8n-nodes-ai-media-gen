@@ -1,12 +1,11 @@
 # n8n-nodes-ai-media-gen
 
-A simple and extensible n8n node for AI media generation (images, videos, audio) using multiple API formats.
+A simple and extensible n8n node for AI media generation (images) using ModelScope API.
 
 ## Features
 
-- **Unified Interface**: Single node for images, videos, and audio generation
-- **Multi-Format Support**: OpenAI, Google Gemini, Alibaba Bailian, Replicate, Hugging Face
-- **Auto Detection**: Automatically detects media type from model name
+- **Image Generation**: Generate images using ModelScope AI models
+- **Image Editing**: Edit images with AI-powered tools
 - **Smart Caching**: Built-in caching to reduce API calls and improve performance
 - **Error Handling**: Comprehensive error handling with user-friendly messages
 - **Retry Logic**: Automatic retry with exponential backoff
@@ -15,6 +14,40 @@ A simple and extensible n8n node for AI media generation (images, videos, audio)
 - **Configurable**: Customizable retry count, timeout, and cache settings
 
 ## Installation
+
+### Prerequisites
+
+- Node.js >= 18.0.0
+- npm or yarn
+
+### System Dependencies (Optional)
+
+The node includes optional image and video processing features that require additional dependencies:
+
+**For image processing:**
+- sharp (automatically installed via npm)
+
+**For video processing:**
+- ffmpeg (must be installed separately)
+- ffprobe (must be installed separately)
+
+**Installing ffmpeg/ffprobe:**
+
+macOS:
+```bash
+brew install ffmpeg
+```
+
+Ubuntu/Debian:
+```bash
+sudo apt-get update
+sudo apt-get install ffmpeg
+```
+
+Windows:
+Download from https://ffmpeg.org/download.html and add to PATH
+
+### Install the Node
 
 ```bash
 cd /path/to/n8n-nodes-ai-media-gen
@@ -27,70 +60,53 @@ npm run build
 ### Basic Usage
 
 1. Add "AI Media Generation" node to your workflow
-2. Select API Format (OpenAI, Gemini, Bailian, Replicate, or Hugging Face)
-3. Configure API credentials
-4. Enter model name (e.g., dall-e-3, imagen-2.0, wanx-v1, flux-schnell, tts-1, sora)
-5. Enter prompt for generation
-6. Add optional parameters (JSON format)
-7. Configure caching settings (optional)
-8. Run workflow
+2. Configure ModelScope API credentials
+3. Select the AI model
+4. Enter prompt for generation or editing
+5. Configure optional parameters (size, seed, number of images)
+6. Configure caching settings (optional)
+7. Run workflow
 
-### Example: Generate an Image with OpenAI
+### Example: Generate an Image with Z-Image
 
 **Input data**:
 ```json
 {
-  "model": "dall-e-3",
+  "model": "Tongyi-MAI/Z-Image",
   "prompt": "A serene sunset over a calm ocean, digital art",
-  "additionalParams": "{\"size\": \"1024x1024\", \"quality\": \"hd\"}"
+  "size": "1024x1024",
+  "seed": 0,
+  "numImages": 1
 }
 ```
 
 **Output data**:
 ```json
 {
-  "created": 1700000000,
-  "data": [
-    {
-      "url": "https://example.com/generated/image.png",
-      "revised_prompt": "A serene sunset..."
-    }
-  ],
+  "success": true,
+  "imageUrl": "https://example.com/generated/image.png",
+  "model": "Tongyi-MAI/Z-Image",
   "_metadata": {
-    "apiFormat": "openai",
-    "model": "dall-e-3",
-    "mediaType": "image",
     "timestamp": "2024-01-20T04:39:00.000Z",
     "cached": false
   }
 }
 ```
 
-## Supported API Formats
+## Supported Models
 
-| API Format | Image | Video | Audio | Description |
-|-----------|-------|-------|-------|-------------|
-| OpenAI | DALL-E 2/3 | Sora | TTS | OpenAI API format (Authorization: Bearer <key>) |
-| Gemini | Imagen | - | - | Google Gemini API format |
-| Bailian | Wanx | Wanx Video | CosyVoice | Alibaba Bailian API format (Authorization: Bearer <key>) |
-| Replicate | Various | Various | Various | Replicate API format (Authorization: Bearer <key>) |
-| Hugging Face | Various | Various | Various | Hugging Face API format (Authorization: Bearer <key>) |
+### Image Generation Models
 
-## Media Type Detection
+| Model | Description | Supported Sizes |
+|-------|-------------|----------------|
+| Tongyi-MAI/Z-Image | High-quality text-to-image generation model | 512x512, 768x768, 1024x1024 |
+| Qwen-Image-2512 | Advanced text-to-image generation model | 1024x1024, 1152x896, 896x1152, 1216x832, 832x1216, 1344x768, 768x1344, 1536x640, 640x1536 |
 
-The node automatically detects media type based on model name:
+### Image Editing Models
 
-### Video Models
-- Contains: `sora`, `video`, `svd`, `cogvideo`, `wanx-video`
-- Examples: `sora`, `video-gen`, `svd-xt`, `cogvideox`, `wanx-video-v1`
-
-### Audio Models
-- Contains: `tts`, `audio`, `speech`, `voice`, `sambert`, `cosyvoice`
-- Examples: `tts-1`, `audio-gen`, `speech-api`, `voice-synthesis`, `sambert-v1`, `cosyvoice-v1`
-
-### Image Models
-- Default for all other models
-- Examples: `dall-e-3`, `imagen-2.0`, `wanx-v1`, `flux-schnell`, `stable-diffusion`
+| Model | Description | Supported Sizes |
+|-------|-------------|----------------|
+| Qwen-Image-Edit-2511 | Image editing model - requires input image | 1024x1024, 1152x896, 896x1152, 1216x832, 832x1216, 1344x768, 768x1344 |
 
 ## Node Configuration
 
@@ -98,21 +114,28 @@ The node automatically detects media type based on model name:
 
 | Parameter | Type | Required | Default | Description |
 |-----------|-------|----------|-------------|
-| Model | string | Yes | Model name (e.g., dall-e-3, imagen-2.0, wanx-v1, flux-schnell, tts-1, sora) |
-| Prompt | string | Yes | Text prompt for generation |
-| Additional Parameters (JSON) | string | No | {} | Additional parameters as JSON object (e.g., {"size": "1024x1024", "n": 1}) |
+| Model | options | Yes | Tongyi-MAI/Z-Image | Select the AI model to use |
+| Prompt | string | Yes | Text description for generation or editing | |
+| Input Image | string | No | URL or base64 of the image to edit (required for Edit model) | |
+| Size | options | Yes | 1024x1024 | Image size (depends on model) |
+| Seed | number | No | 0 | Random seed for reproducibility (0 = random) |
+| Number of Images | number | No | 1 | Number of images to generate (1-4) |
+
+### Options
+
+| Parameter | Type | Required | Default | Description |
+|-----------|-------|----------|-------------|
 | Max Retries | number | No | 3 | Maximum number of retry attempts for failed requests |
 | Timeout (ms) | number | No | 60000 | Request timeout in milliseconds |
+| Enable Caching | boolean | No | true | Enable result caching to reduce API calls |
+| Cache TTL (seconds) | number | No | 3600 | Cache time-to-live in seconds (default: 3600 = 1 hour) |
 
 ### Credentials
 
 | Field | Type | Required | Description |
 |-------|-------|----------|-------------|
-| API Format | options | Yes | Select API format (OpenAI, Gemini, Bailian, Replicate, Hugging Face) |
-| API Key | string | Yes | API key for the selected service |
-| Base URL | string | No | Custom base URL (optional, uses provider default if empty) |
-| Enable Caching | boolean | No | true | Enable result caching to reduce API calls |
-| Cache TTL (seconds) | number | No | 3600 | Cache time-to-live in seconds (default: 3600 = 1 hour) |
+| API Key | string | Yes | ModelScope API key for authentication |
+| Base URL | string | No | Custom base URL (optional, uses ModelScope default if empty) |
 
 ## Caching
 
@@ -121,16 +144,18 @@ The node includes a built-in caching mechanism to reduce API calls and improve p
 ### How It Works
 
 1. **Cache Key Generation**: Each generation request creates a unique cache key based on:
-   - API format
    - Model name
    - Prompt text
-   - Additional parameters
+   - Size
+   - Seed
+   - Number of images
+   - Input image (for editing)
 
 2. **Cache Lookup**: Before making an API call, the node checks if a cached result exists
 
 3. **Cache Hit**: If found, returns the cached result immediately
 
-4. **Cache Miss**: If not found, makes the API call and stores the result
+4. **Cache Miss**: If not found, makes an API call and stores the result
 
 ### Cache Configuration
 
@@ -146,7 +171,7 @@ The node includes a built-in caching mechanism to reduce API calls and improve p
 
 ### Disabling Caching
 
-You can disable caching in the credentials configuration if you always want fresh results.
+You can disable caching in the node configuration if you always want fresh results.
 
 ## Error Handling
 
@@ -158,12 +183,9 @@ All errors are wrapped in `MediaGenError` with proper error codes:
 |------|-----------|-------------|
 | INVALID_API_KEY | No | API key is invalid or missing |
 | RATE_LIMIT | Yes | Rate limit exceeded, please try again later |
-| INVALID_MODEL | No | Model name is invalid |
 | NETWORK_ERROR | Yes | Network error occurred |
 | TIMEOUT | Yes | Request timed out |
-| INVALID_PARAMS | No | Invalid parameters provided |
 | API_ERROR | No | API error occurred |
-| SERVICE_UNAVAILABLE | Yes | Service is temporarily unavailable |
 
 ### Error Response Format
 
@@ -187,7 +209,7 @@ The node implements automatic retry with exponential backoff:
 - **Max Delay**: 30000ms
 - **Max Retries**: Configurable (default: 3)
 
-Only retryable errors will be retried (NETWORK_ERROR, TIMEOUT, RATE_LIMIT, SERVICE_UNAVAILABLE).
+Only retryable errors will be retried (NETWORK_ERROR, TIMEOUT, RATE_LIMIT).
 
 ## Logging
 
@@ -199,71 +221,44 @@ The node provides detailed logging at different levels:
 
 Logs include:
 - Model name
-- Media type
-- API format
 - Error messages
 - Timestamps
 - Cache status
 
 ## Examples
 
-### Example 1: Generate Image with OpenAI
+### Example 1: Generate Image with Z-Image
 
 ```json
 {
-  "model": "dall-e-3",
+  "model": "Tongyi-MAI/Z-Image",
   "prompt": "A futuristic city with flying cars at sunset, digital art style",
-  "additionalParams": "{\"size\": \"1024x1024\", \"quality\": \"hd\", \"style\": \"vivid\"}"
+  "size": "1024x1024",
+  "seed": 12345,
+  "numImages": 2
 }
 ```
 
-### Example 2: Generate Audio with OpenAI
+### Example 2: Generate Image with Qwen-Image-2512
 
 ```json
 {
-  "model": "tts-1",
-  "prompt": "Welcome to our service! We're happy to have you here.",
-  "additionalParams": "{\"voice\": \"alloy\", \"speed\": 1.0}"
-}
-```
-
-### Example 3: Generate Video with Bailian
-
-```json
-{
-  "model": "wanx-video-v1",
-  "prompt": "A drone flying over a tropical island",
-  "additionalParams": "{\"duration\": 10}"
-}
-```
-
-### Example 4: Generate Image with Gemini
-
-```json
-{
-  "model": "imagen-2.0",
+  "model": "Qwen-Image-2512",
   "prompt": "A professional photo of a business meeting",
-  "additionalParams": "{\"aspectRatio\": \"1:1\", \"negativePrompt\": \"blurry, low quality\"}"
+  "size": "1152x896",
+  "seed": 0,
+  "numImages": 1
 }
 ```
 
-### Example 5: Generate Image with Replicate
+### Example 3: Edit Image with Qwen-Image-Edit-2511
 
 ```json
 {
-  "model": "stability-ai/sdxl",
-  "prompt": "A beautiful landscape with mountains and a lake",
-  "additionalParams": "{\"width\": 1024, \"height\": 1024, \"num_inference_steps\": 50}"
-}
-```
-
-### Example 6: Generate Image with Hugging Face
-
-```json
-{
-  "model": "stabilityai/stable-diffusion-xl-base-1.0",
-  "prompt": "A cat sitting on a windowsill",
-  "additionalParams": "{\"negative_prompt\": \"blurry, low quality\", \"guidance_scale\": 7.5}"
+  "model": "Qwen-Image-Edit-2511",
+  "prompt": "Add a blue sky with clouds",
+  "inputImage": "https://example.com/original-image.jpg",
+  "size": "1024x1024"
 }
 ```
 
@@ -284,35 +279,34 @@ npm run format             # Format code
 ```
 n8n-nodes-ai-media-gen/
 ├── nodes/                  # Source code
-│   ├── AIMediaGen.node.ts  # Main node implementation
+│   ├── AIMediaGen.ts      # Main node implementation
 │   ├── ai-media-gen.svg    # Node icon
 │   ├── index.ts            # Export file
 │   ├── credentials/        # Credential definitions
-│   │   ├── aiMediaApi.credentials.ts
+│   │   ├── modelScopeApi.credentials.ts
 │   │   └── index.ts
 │   ├── utils/             # Utility functions
-│   │   ├── errors.ts       # Error handling and validation
-│   │   ├── helpers.ts      # Helper functions
-│   │   └── cache.ts        # Caching mechanism
+│   │   ├── cache.ts       # Caching mechanism
+│   │   ├── constants.ts   # Constants
+│   │   ├── errors.ts      # Error handling
+│   │   ├── helpers.ts     # Helper functions
+│   │   ├── imageProcessor.ts  # Image processing
+│   │   ├── imageTypes.ts  # Image type definitions
+│   │   ├── monitoring.ts  # Performance monitoring
+│   │   ├── types.ts       # Type definitions
+│   │   └── videoProcessor.ts  # Video processing
 │   └── __tests__/         # Unit tests
+│       ├── actionHandler.test.ts
+│       ├── cache.test.ts
 │       ├── detectMediaType.test.ts
+│       ├── errors.test.ts
 │       ├── helpers.test.ts
-│       └── errors.test.ts
-├── docs/                   # Documentation
+│       ├── imageProcessor.test.ts
+│       ├── monitoring.test.ts
+│       └── videoProcessor.test.ts
 ├── dist/                  # Compiled output
 └── Configuration files
 ```
-
-### Adding New API Formats
-
-To add a new API format:
-
-1. **Add to credentials**: Update `nodes/credentials/aiMediaApi.credentials.ts`
-2. **Add default URL**: Update `getDefaultBaseUrl()` in `nodes/utils/helpers.ts`
-3. **Add endpoint logic**: Update `getEndpoint()` in `nodes/utils/helpers.ts`
-4. **Add headers**: Update `getHeaders()` in `nodes/utils/helpers.ts`
-5. **Add request body**: Update `buildRequestBody()` in `nodes/utils/helpers.ts`
-6. **Add tests**: Create tests in `nodes/__tests__/`
 
 ### Code Style
 
@@ -327,10 +321,9 @@ To add a new API format:
 Caching can significantly reduce API costs and improve response times for repeated requests.
 
 ### 2. Use Appropriate Timeouts
-Set timeouts based on the expected generation time:
+Set timeouts based on expected generation time:
 - Images: 30-60 seconds
-- Videos: 60-300 seconds
-- Audio: 10-30 seconds
+- Larger images: 60-120 seconds
 
 ### 3. Adjust Retry Count
 For production environments, consider:
@@ -349,8 +342,8 @@ Set cache TTL based on how often your data changes:
 
 **Solution**:
 - Verify API key is correct
-- Check API format matches the provider
-- Ensure base URL is correct (if custom)
+- Check base URL is correct (if custom)
+- Ensure API key has proper permissions
 
 ### Issue: Timeout errors
 
@@ -369,7 +362,7 @@ Set cache TTL based on how often your data changes:
 ### Issue: Cache not working
 
 **Solution**:
-- Verify caching is enabled in credentials
+- Verify caching is enabled in node configuration
 - Check cache TTL is set correctly
 - Review logs for cache hit/miss messages
 
@@ -377,8 +370,8 @@ Set cache TTL based on how often your data changes:
 
 **Solution**:
 - Verify model name is correct
-- Check model is available for the provider
-- Ensure media type detection is correct
+- Check model is available on ModelScope
+- Ensure model type matches operation (generation vs editing)
 
 ## License
 

@@ -3,6 +3,7 @@
  * Handles image loading, processing, and conversion operations using sharp
  */
 
+import sharp from 'sharp';
 import { MediaGenError, ERROR_CODES } from './errors';
 import type {
 	ImageInput,
@@ -28,27 +29,11 @@ import {
 	ImageFormat,
 } from './imageTypes';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let sharp: any = null;
-
-try {
-	sharp = require('sharp');
-} catch (error) {
-	sharp = null;
-}
-
-/**
- * Check if sharp is available
- */
-export function isSharpAvailable(): boolean {
-	return sharp !== null;
-}
-
 /**
  * Default configuration values
  */
-const DEFAULT_MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
-const DEFAULT_TIMEOUT = 30000; // 30 seconds
+const DEFAULT_MAX_FILE_SIZE = 50 * 1024 * 1024;
+const DEFAULT_TIMEOUT = 30000;
 
 /**
  * Supported image MIME types
@@ -59,19 +44,12 @@ const SUPPORTED_MIME_TYPES = new Set<string>(Object.values(FORMAT_TO_MIME_TYPE))
  * ImageProcessor class for handling image operations
  */
 export class ImageProcessor {
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	private image: any = null;
+	private image: sharp.Sharp | null = null;
 	private maxFileSize: number;
 	private timeout: number;
 	private currentBuffer: Buffer | null = null;
 
 	constructor(options: ImageProcessorOptions = {}) {
-		if (!isSharpAvailable()) {
-			throw new MediaGenError(
-				'Sharp library is not available. Please install sharp to use image processing features.',
-				ERROR_CODES.DEPENDENCY_MISSING
-			);
-		}
 		this.maxFileSize = options.maxFileSize ?? DEFAULT_MAX_FILE_SIZE;
 		this.timeout = options.timeout ?? DEFAULT_TIMEOUT;
 	}
@@ -292,12 +270,6 @@ export class ImageProcessor {
 	 * This is useful for getting metadata of a processed image
 	 */
 	static async getMetadataFromBuffer(buffer: Buffer): Promise<ImageMetadata> {
-		if (!isSharpAvailable()) {
-			throw new MediaGenError(
-				'Sharp library is not available',
-				ERROR_CODES.DEPENDENCY_MISSING
-			);
-		}
 		try {
 			const metadata = await sharp(buffer).metadata();
 			return {

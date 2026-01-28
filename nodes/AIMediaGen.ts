@@ -5,8 +5,9 @@ import {
 	IExecuteFunctions,
 	NodeOperationError,
 } from 'n8n-workflow';
-import { CacheManager } from './utils/cache';
+import { CacheManager, CacheKeyGenerator } from './utils/cache';
 import { PerformanceMonitor } from './utils/monitoring';
+import { withRetry, MediaGenError } from './utils/errors';
 import * as CONSTANTS from './utils/constants';
 
 interface ResultMetadata {
@@ -279,11 +280,24 @@ export class AIMediaGen implements INodeType {
 
 				const timeout = this.getNodeParameter('options.timeout', CONSTANTS.INDICES.FIRST_ITEM) as number;
 				const model = this.getNodeParameter('model', i) as string;
+				const size = this.getNodeParameter('size', i) as string;
+				const seed = this.getNodeParameter('seed', i) as number;
+				const numImages = this.getNodeParameter('numImages', i) as number;
+				const inputImage = model === 'Qwen-Image-Edit-2511' ? this.getNodeParameter('inputImage', i) as string : '';
 
 				if (enableCache) {
 					const prompt = this.getNodeParameter('prompt', i) as string || '';
-					const promptHash = AIMediaGen.hashString(prompt);
-					const cacheKey = `${model}:${promptHash}`;
+					const cacheKey = CacheKeyGenerator.forGeneration(
+						'modelscope',
+						model,
+						prompt,
+						{
+							size: size || '1024x1024',
+							seed: seed || 0,
+							num_images: numImages || 1,
+							input_image: inputImage,
+						}
+					);
 					const cached = await cacheManager.get(cacheKey);
 
 					if (cached) {
@@ -368,47 +382,46 @@ export class AIMediaGen implements INodeType {
 		const size = context.getNodeParameter('size', itemIndex) as string;
 		const seed = context.getNodeParameter('seed', itemIndex) as number;
 		const numImages = context.getNodeParameter('numImages', itemIndex) as number;
+		const maxRetries = context.getNodeParameter('options.maxRetries', CONSTANTS.INDICES.FIRST_ITEM) as number;
 
 		if (!prompt || prompt.trim() === '') {
-			return {
-				json: {
-					success: false,
-					error: 'Prompt is required',
-					errorCode: 'VALIDATION_ERROR',
-				},
-			};
+			throw new NodeOperationError(
+				context.getNode(),
+				'Prompt is required',
+				{ itemIndex }
+			);
 		}
 
-		const baseUrl = credentials.baseUrl || 'https://api.modelscope.cn/v1';
+		const baseUrl = credentials.baseUrl || CONSTANTS.API_ENDPOINTS.MODELSCOPE.BASE_URL;
 		const isEditModel = model === 'Qwen-Image-Edit-2511';
 
-		// For Edit model, get input image
 		let inputImage = '';
 		if (isEditModel) {
 			inputImage = context.getNodeParameter('inputImage', itemIndex) as string || '';
 			if (!inputImage || inputImage.trim() === '') {
-				return {
-					json: {
-						success: false,
-						error: 'Input image is required for Edit model',
-						errorCode: 'VALIDATION_ERROR',
-					},
-				};
+				throw new NodeOperationError(
+					context.getNode(),
+					'Input image is required for Edit model',
+					{ itemIndex }
+				);
 			}
 		}
 
-		return await AIMediaGen.makeModelScopeRequest(
-			baseUrl,
-			credentials.apiKey,
-			model,
-			{ prompt: prompt.trim() },
-			{
-				size: size || '1024x1024',
-				seed: seed || 0,
-				num_images: numImages || 1,
-				input_image: inputImage,
-			},
-			timeout
+		return await withRetry(
+			() => AIMediaGen.makeModelScopeRequest(
+				baseUrl,
+				credentials.apiKey,
+				model,
+				{ prompt: prompt.trim() },
+				{
+					size: size || '1024x1024',
+					seed: seed || 0,
+					num_images: numImages || 1,
+					input_image: inputImage,
+				},
+				timeout
+			),
+			{ maxRetries }
 		);
 	}
 
@@ -429,7 +442,6 @@ export class AIMediaGen implements INodeType {
 				input,
 			};
 
-			// Add size and seed for all models
 			if (parameters.size) {
 				requestBody.parameters = {
 					size: parameters.size,
@@ -437,17 +449,15 @@ export class AIMediaGen implements INodeType {
 				};
 			}
 
-			// Add num_images for generation models
 			if (parameters.num_images && parameters.input_image === undefined) {
 				(requestBody.parameters as Record<string, unknown>).num_images = parameters.num_images;
 			}
 
-			// For edit models, add input_image to the input
 			if (parameters.input_image) {
 				(input as Record<string, unknown>).image = parameters.input_image;
 			}
 
-			const response = await fetch(`${baseUrl}/files/generation`, {
+			const response = await fetch(`${baseUrl}${CONSTANTS.API_ENDPOINTS.MODELSCOPE.FILES_GENERATION}`, {
 				method: 'POST',
 				headers: {
 					'Authorization': `Bearer ${apiKey}`,
@@ -463,33 +473,28 @@ export class AIMediaGen implements INodeType {
 
 			if (!response.ok) {
 				let errorMessage = 'Failed to generate image';
-				if (response.status === 401) errorMessage = 'Authentication failed. Please check your API Key.';
-				else if (response.status === 429) errorMessage = 'Rate limit exceeded. Please try again later.';
-				else if (response.status === 408) errorMessage = 'Request timeout.';
-				else if (data?.error) errorMessage = data.error;
+				let errorCode = 'API_ERROR';
 
-				return {
-					json: {
-						success: false,
-						error: errorMessage,
-						errorCode: 'API_ERROR',
-						_metadata: {
-							statusCode: response.status,
-						},
-					},
-				};
+				if (response.status === 401) {
+					errorMessage = 'Authentication failed. Please check your API Key.';
+					errorCode = 'INVALID_API_KEY';
+				} else if (response.status === 429) {
+					errorMessage = 'Rate limit exceeded. Please try again later.';
+					errorCode = 'RATE_LIMIT';
+				} else if (response.status === 408) {
+					errorMessage = 'Request timeout.';
+					errorCode = 'TIMEOUT';
+				} else if (data?.error) {
+					errorMessage = data.error;
+				}
+
+				throw new MediaGenError(errorMessage, errorCode, { statusCode: response.status });
 			}
 
 			const imageUrl = data?.output?.url || data?.url || data?.image_url;
 
 			if (!imageUrl) {
-				return {
-					json: {
-						success: false,
-						error: 'No image URL returned from API',
-						errorCode: 'API_ERROR',
-					},
-				};
+				throw new MediaGenError('No image URL returned from API', 'API_ERROR');
 			}
 
 			return {
@@ -506,32 +511,17 @@ export class AIMediaGen implements INodeType {
 			clearTimeout(timeoutId);
 
 			if (error instanceof Error && error.name === 'AbortError') {
-				return {
-					json: {
-						success: false,
-						error: 'Request timeout',
-						errorCode: 'TIMEOUT_ERROR',
-					},
-				};
+				throw new MediaGenError('Request timeout', 'TIMEOUT');
 			}
 
-			return {
-				json: {
-					success: false,
-					error: error instanceof Error ? error.message : String(error),
-					errorCode: 'UNKNOWN',
-				},
-			};
-		}
-	}
+			if (error instanceof MediaGenError) {
+				throw error;
+			}
 
-	private static hashString(str: string): string {
-		let hash = 0;
-		for (let i = 0; i < str.length; i++) {
-			const char = str.charCodeAt(i);
-			hash = (hash << 5) - hash + char;
-			hash = hash & hash;
+			throw new MediaGenError(
+				error instanceof Error ? error.message : String(error),
+				'NETWORK_ERROR'
+			);
 		}
-		return Math.abs(hash).toString(36);
 	}
 }
