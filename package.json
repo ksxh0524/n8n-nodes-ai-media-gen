@@ -34,8 +34,8 @@
       {
         "name": "AIMediaGen",
         "displayName": "AI Media Generation",
-        "subtitle": "={{$parameter.resource}}: {{$parameter.action}}",
-        "description": "Generate and process media using AI models and local processing",
+        "subtitle": "={{$parameter.model}}",
+        "description": "Generate and edit images using ModelScope AI models",
         "icon": "file:ai-media-gen.svg",
         "subgroup": "media-generation",
         "defaults": {
