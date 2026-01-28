@@ -75,154 +75,133 @@ export class AIMediaGen implements INodeType {
 			},
 		],
 		properties: [
-			{
-				displayName: 'Model',
-				name: 'model',
-				type: 'options',
-				required: true,
-				options: [
-					{
-						name: 'Z-Image (Generation)',
-						value: 'Tongyi-MAI/Z-Image',
-						description: 'High-quality text-to-image generation model',
-					},
-					{
-						name: 'Qwen-Image-2512 (Generation)',
-						value: 'Qwen-Image-2512',
-						description: 'Advanced text-to-image generation model',
-					},
-					{
-						name: 'Qwen-Image-Edit-2511 (Editing)',
-						value: 'Qwen-Image-Edit-2511',
-						description: 'Image editing model - requires input image',
-					},
-				],
-				default: 'Tongyi-MAI/Z-Image',
-				description: 'Select the AI model to use',
-			},
-			// Prompt - shown for all models
-			{
-				displayName: 'Prompt',
-				name: 'prompt',
-				type: 'string',
-				typeOptions: {
-					rows: CONSTANTS.UI.TEXT_AREA_ROWS.PROMPT,
+		{
+			displayName: 'Operation',
+			name: 'operation',
+			type: 'options',
+			required: true,
+			options: [
+				{
+					name: 'Generate Image',
+					value: 'generate',
+					description: 'Generate a new image from text prompt',
 				},
-				default: '',
-				required: true,
-				description: 'Text description for generation or editing',
-				displayOptions: {
-					show: {
-						model: ['Tongyi-MAI/Z-Image', 'Qwen-Image-2512', 'Qwen-Image-Edit-2511'],
-					},
+				{
+					name: 'Edit Image',
+					value: 'edit',
+					description: 'Edit an existing image',
+				},
+			],
+			default: 'generate',
+			description: 'Select the operation to perform',
+		},
+		{
+			displayName: 'Model',
+			name: 'model',
+			type: 'options',
+			required: true,
+			options: [
+				{
+					name: 'Z-Image',
+					value: 'Tongyi-MAI/Z-Image',
+					description: 'High-quality text-to-image generation model',
+				},
+				{
+					name: 'Qwen-Image-2512',
+					value: 'Qwen-Image-2512',
+					description: 'Advanced text-to-image generation model',
+				},
+				{
+					name: 'Qwen-Image-Edit-2511',
+					value: 'Qwen-Image-Edit-2511',
+					description: 'Image editing model',
+				},
+			],
+			default: 'Tongyi-MAI/Z-Image',
+			description: 'Select the AI model to use',
+			displayOptions: {
+				show: {
+					operation: ['generate', 'edit'],
 				},
 			},
+		},
+		// Prompt - shown for all models
+		{
+			displayName: 'Prompt',
+			name: 'prompt',
+			type: 'string',
+			typeOptions: {
+				rows: CONSTANTS.UI.TEXT_AREA_ROWS.PROMPT,
+			},
+			default: '',
+			required: true,
+			description: 'Text description for generation or editing',
+			displayOptions: {
+				show: {
+					operation: ['generate', 'edit'],
+				},
+			},
+		},
 			// Input Image - only for Edit model
 			{
-				displayName: 'Input Image',
-				name: 'inputImage',
-				type: 'string',
-				default: '',
-				description: 'URL or base64 of the image to edit (required for Edit model)',
-				displayOptions: {
-					show: {
-						model: ['Qwen-Image-Edit-2511'],
-					},
+			displayName: 'Input Image',
+			name: 'inputImage',
+			type: 'string',
+			default: '',
+			description: 'URL or base64 of the image to edit (required for Edit operation)',
+			displayOptions: {
+				show: {
+					operation: ['edit'],
 				},
-				placeholder: 'https://example.com/image.jpg or data:image/jpeg;base64,...',
 			},
+			placeholder: 'https://example.com/image.jpg or data:image/jpeg;base64,...',
+		},
 			// Size for Z-Image
 			{
-				displayName: 'Size',
-				name: 'size',
-				type: 'options',
-				default: '1024x1024',
-				options: [
-					{ name: '512x512', value: '512x512' },
-					{ name: '768x768', value: '768x768' },
-					{ name: '1024x1024', value: '1024x1024' },
-				],
-				description: 'Image size (Z-Image supports up to 1024x1024)',
-				displayOptions: {
-					show: {
-						model: ['Tongyi-MAI/Z-Image'],
-					},
+			displayName: 'Size',
+			name: 'size',
+			type: 'options',
+			default: '1024x1024',
+			options: [
+				{ name: '512x512', value: '512x512' },
+				{ name: '768x768', value: '768x768' },
+				{ name: '1024x1024', value: '1024x1024' },
+			],
+			description: 'Image size (supports up to 1024x1024)',
+			displayOptions: {
+				show: {
+					operation: ['generate', 'edit'],
 				},
 			},
-			// Size for Qwen-Image-2512
+		},
+		{
+			displayName: 'Seed',
+			name: 'seed',
+			type: 'number',
+			default: 0,
+			description: 'Random seed for reproducibility (0 = random)',
+			displayOptions: {
+				show: {
+					operation: ['generate'],
+				},
+			},
+		},
 			{
-				displayName: 'Size',
-				name: 'size',
-				type: 'options',
-				default: '1024x1024',
-				options: [
-					{ name: '1024x1024', value: '1024x1024' },
-					{ name: '1152x896', value: '1152x896' },
-					{ name: '896x1152', value: '896x1152' },
-					{ name: '1216x832', value: '1216x832' },
-					{ name: '832x1216', value: '832x1216' },
-					{ name: '1344x768', value: '1344x768' },
-					{ name: '768x1344', value: '768x1344' },
-					{ name: '1536x640', value: '1536x640' },
-					{ name: '640x1536', value: '640x1536' },
-				],
-				description: 'Image size (Qwen-Image-2512 supports various aspect ratios)',
-				displayOptions: {
-					show: {
-						model: ['Qwen-Image-2512'],
-					},
+			displayName: 'Number of Images',
+			name: 'numImages',
+			type: 'number',
+			default: 1,
+			typeOptions: {
+				minValue: 1,
+				maxValue: 4,
+			},
+			description: 'Number of images to generate (1-4)',
+			displayOptions: {
+				show: {
+					operation: ['generate'],
 				},
 			},
-			// Size for Qwen-Image-Edit-2511
-			{
-				displayName: 'Size',
-				name: 'size',
-				type: 'options',
-				default: '1024x1024',
-				options: [
-					{ name: '1024x1024', value: '1024x1024' },
-					{ name: '1152x896', value: '1152x896' },
-					{ name: '896x1152', value: '896x1152' },
-					{ name: '1216x832', value: '1216x832' },
-					{ name: '832x1216', value: '832x1216' },
-					{ name: '1344x768', value: '1344x768' },
-					{ name: '768x1344', value: '768x1344' },
-				],
-				description: 'Output image size for editing',
-				displayOptions: {
-					show: {
-						model: ['Qwen-Image-Edit-2511'],
-					},
-				},
-			},
-			{
-				displayName: 'Seed',
-				name: 'seed',
-				type: 'number',
-				default: 0,
-				description: 'Random seed for reproducibility (0 = random)',
-				displayOptions: {
-					show: {
-						model: ['Tongyi-MAI/Z-Image', 'Qwen-Image-2512'],
-					},
-				},
-			},
-			{
-				displayName: 'Number of Images',
-				name: 'numImages',
-				type: 'number',
-				default: 1,
-				typeOptions: {
-					minValue: 1,
-					maxValue: 4,
-				},
-				description: 'Number of images to generate (1-4)',
-				displayOptions: {
-					show: {
-						model: ['Tongyi-MAI/Z-Image', 'Qwen-Image-2512'],
-					},
-				},
-			},
+		},
 			// Options
 			{
 				displayName: 'Options',
@@ -295,14 +274,12 @@ export class AIMediaGen implements INodeType {
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
 		const items = this.getInputData();
 		const results: INodeExecutionData[] = [];
-
 		const enableCache = this.getNodeParameter('options.enableCache', CONSTANTS.INDICES.FIRST_ITEM) as boolean;
 		const cacheManager = new CacheManager();
 		const performanceMonitor = new PerformanceMonitor();
 
 		for (let i = 0; i < items.length; i++) {
 			try {
-				// Get credentials
 				const credentials = await this.getCredentials<ModelScopeApiCredentials>('modelScopeApi');
 				if (!credentials || !credentials.apiKey) {
 					throw new NodeOperationError(
@@ -315,11 +292,12 @@ export class AIMediaGen implements INodeType {
 				const timerId = performanceMonitor.startTimer('aiMediaGen');
 				let result: INodeExecutionData;
 
+				const operation = this.getNodeParameter('operation', i) as string;
 				const model = this.getNodeParameter('model', i) as string;
 				const size = this.getNodeParameter('size', i) as string;
 				const seed = this.getNodeParameter('seed', i) as number;
 				const numImages = this.getNodeParameter('numImages', i) as number;
-				const inputImage = model === 'Qwen-Image-Edit-2511' ? this.getNodeParameter('inputImage', i) as string : '';
+				const inputImage = operation === 'edit' ? this.getNodeParameter('inputImage', i) as string : '';
 				const timeout = this.getNodeParameter('options.timeout', i) as number;
 
 				if (enableCache) {
@@ -429,6 +407,7 @@ export class AIMediaGen implements INodeType {
 		credentials: ModelScopeApiCredentials,
 		timeout: number
 	): Promise<INodeExecutionData> {
+		const operation = context.getNodeParameter('operation', itemIndex) as string;
 		const model = context.getNodeParameter('model', itemIndex) as string;
 		const prompt = context.getNodeParameter('prompt', itemIndex) as string;
 		const size = context.getNodeParameter('size', itemIndex) as string;
@@ -445,7 +424,7 @@ export class AIMediaGen implements INodeType {
 		}
 
 		// Validate numImages range (for models that support it)
-		const isEditModel = model === 'Qwen-Image-Edit-2511';
+		const isEditModel = operation === 'edit';
 		if (!isEditModel) {
 			validateNumImages(numImages);
 		}
@@ -456,7 +435,7 @@ export class AIMediaGen implements INodeType {
 		const baseUrl = credentials.baseUrl || CONSTANTS.API_ENDPOINTS.MODELSCOPE.BASE_URL;
 
 		let inputImage = '';
-		if (isEditModel) {
+		if (operation === 'edit') {
 			inputImage = context.getNodeParameter('inputImage', itemIndex) as string || '';
 			// Validate input image format
 			validateInputImage(inputImage);
