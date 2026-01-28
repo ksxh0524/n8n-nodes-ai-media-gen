@@ -28,7 +28,7 @@ interface ModelScopeApiResponse {
 
 export class AIMediaGen implements INodeType {
 	description: INodeTypeDescription = {
-		displayName: 'ModelScope',
+		displayName: 'AI Media Generation',
 		name: 'aiMediaGen',
 		icon: 'file:ai-media-gen.svg',
 		description: 'Generate and process media using AI models',

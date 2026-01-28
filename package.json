@@ -38,13 +38,13 @@
     "nodes": [
       {
         "name": "AIMediaGen",
-        "displayName": "ModelScope",
+        "displayName": "AI Media Generation",
         "subtitle": "={{$parameter.resource}}: {{$parameter.action}}",
         "description": "Generate and process media using AI models and local processing",
         "icon": "file:ai-media-gen.svg",
         "subgroup": "media-generation",
         "defaults": {
-          "name": "ModelScope"
+          "name": "AI Media Generation"
         },
         "inputs": [
           "main"
