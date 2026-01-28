@@ -36,16 +36,13 @@
     "prepublishOnly": "npm run build && npm run lint -s",
     "test": "jest"
   },
-  "files": [
-    "dist"
-  ],
   "n8n": {
     "n8nNodesApiVersion": 1,
     "credentials": [
-      "dist/nodes/credentials/modelScopeApi.credentials.js"
+      "nodes/credentials/modelScopeApi.credentials.js"
     ],
     "nodes": [
-      "dist/nodes/AIMediaGen.js"
+      "nodes/AIMediaGen.js"
     ]
   },
   "dependencies": {

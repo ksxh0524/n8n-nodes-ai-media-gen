@@ -20,6 +20,10 @@ function build() {
     .pipe(gulp.dest('dist'));
 }
 
+function copyPackageJson() {
+  return gulp.src('package.json').pipe(gulp.dest('dist'));
+}
+
 function buildDev() {
   return tsProject.src()
     .pipe(sourcemaps.init())
@@ -35,8 +39,8 @@ function watchFiles() {
   gulp.watch('nodes/**/*.ts', buildDev);
 }
 
-exports.build = gulp.series(clean, build);
-exports.buildDev = gulp.series(clean, buildDev);
-exports.dev = gulp.series(clean, buildDev, watchFiles);
+exports.build = gulp.series(clean, build, copyPackageJson);
+exports.buildDev = gulp.series(clean, buildDev, copyPackageJson);
+exports.dev = gulp.series(clean, buildDev, copyPackageJson, watchFiles);
 exports.clean = clean;
 exports.default = build;
