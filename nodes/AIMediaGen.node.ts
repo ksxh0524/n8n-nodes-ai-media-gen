@@ -174,6 +174,11 @@ export class AIMediaGen implements INodeType {
 				type: 'number',
 				default: 0,
 				description: 'Random seed for reproducibility (0 = random)',
+				displayOptions: {
+					show: {
+						model: ['Tongyi-MAI/Z-Image', 'Qwen-Image-2512'],
+					},
+				},
 			},
 			{
 				displayName: 'Number of Images',
@@ -185,6 +190,11 @@ export class AIMediaGen implements INodeType {
 					maxValue: 4,
 				},
 				description: 'Number of images to generate (1-4)',
+				displayOptions: {
+					show: {
+						model: ['Tongyi-MAI/Z-Image', 'Qwen-Image-2512'],
+					},
+				},
 			},
 			// Options
 			{
