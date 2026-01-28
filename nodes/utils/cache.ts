@@ -2,13 +2,26 @@ import { createHash } from 'crypto';
 import type { ICacheOptions } from './types';
 import * as CONSTANTS from './constants';
 
+/**
+ * Cache interface for pluggable cache implementations
+ */
 export interface ICache {
+	/** Get a value from cache */
 	get(key: string): Promise<unknown | null>;
+	/** Set a value in cache with optional TTL */
 	set(key: string, value: unknown, ttl?: number): Promise<void>;
+	/** Delete a value from cache */
 	delete(key: string): Promise<void>;
+	/** Clear all cache entries */
 	clear(): Promise<void>;
 }
 
+/**
+ * Cache manager for storing API responses
+ *
+ * Provides a simple interface for caching API responses to reduce
+ * redundant API calls. Supports pluggable cache implementations.
+ */
 export class CacheManager {
 	private cache: ICache;
 
@@ -33,26 +46,47 @@ export class CacheManager {
 	}
 }
 
+/**
+ * In-memory cache entry with TTL support
+ */
 export class MemoryCacheEntry {
+	/** The cached value */
 	value: unknown;
+	/** Expiration timestamp in milliseconds */
 	expiry: number;
+	/** Last access timestamp in milliseconds */
 	lastAccessed: number;
 
+	/**
+	 * Creates a new cache entry
+	 * @param value - The value to cache
+	 * @param ttl - Time to live in seconds
+	 */
 	constructor(value: unknown, ttl: number) {
 		this.value = value;
 		this.expiry = Date.now() + ttl * 1000;
 		this.lastAccessed = Date.now();
 	}
 
+	/**
+	 * Checks if the entry has expired
+	 * @returns true if expired
+	 */
 	isExpired(): boolean {
 		return Date.now() > this.expiry;
 	}
 
+	/**
+	 * Updates the last accessed time
+	 */
 	access(): void {
 		this.lastAccessed = Date.now();
 	}
 }
 
+/**
+ * In-memory cache implementation with LRU eviction
+ */
 export class MemoryCache implements ICache {
 	private cache = new Map<string, MemoryCacheEntry>();
 	private maxSize: number;
@@ -109,17 +143,40 @@ export class MemoryCache implements ICache {
 	}
 }
 
+/**
+ * Utility class for generating cache keys
+ */
 export class CacheKeyGenerator {
+	/**
+	 * Generates a cache key for generation requests
+	 * @param apiFormat - API format/provider
+	 * @param model - Model name
+	 * @param prompt - Generation prompt
+	 * @param params - Additional parameters
+	 * @returns A consistent cache key
+	 */
 	static forGeneration(apiFormat: string, model: string, prompt: string, params: Record<string, unknown>): string {
 		const paramsStr = JSON.stringify(params || {});
 		return `gen:${apiFormat}:${model}:${this.hash(prompt)}:${this.hash(paramsStr)}`;
 	}
 
+	/**
+	 * Generates a cache key for API requests
+	 * @param apiFormat - API format/provider
+	 * @param endpoint - API endpoint
+	 * @param body - Request body
+	 * @returns A consistent cache key
+	 */
 	static forApiRequest(apiFormat: string, endpoint: string, body: Record<string, unknown>): string {
 		const bodyStr = JSON.stringify(body || {});
 		return `api:${apiFormat}:${endpoint}:${this.hash(bodyStr)}`;
 	}
 
+	/**
+	 * Creates a hash of a string
+	 * @param str - String to hash
+	 * @returns First 32 characters of SHA256 hash
+	 */
 	private static hash(str: string): string {
 		return createHash('sha256').update(str).digest('hex').substring(0, CONSTANTS.HASH.LENGTH);
 	}

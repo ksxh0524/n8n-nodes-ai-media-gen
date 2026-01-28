@@ -77,3 +77,36 @@ export const API_ENDPOINTS = {
 		FILES_GENERATION: '/files/generation',
 	},
 } as const;
+
+/**
+ * Model constraints
+ */
+export const MODEL_CONSTRAINTS = {
+	'Tongyi-MAI/Z-Image': {
+		supportedSizes: ['512x512', '768x768', '1024x1024'],
+		supportsNumImages: true,
+		supportsSeed: true,
+	},
+	'Qwen-Image-2512': {
+		supportedSizes: ['1024x1024', '1152x896', '896x1152', '1216x832', '832x1216', '1344x768', '768x1344', '1536x640', '640x1536'],
+		supportsNumImages: true,
+		supportsSeed: true,
+	},
+	'Qwen-Image-Edit-2511': {
+		supportedSizes: ['1024x1024', '1152x896', '896x1152', '1216x832', '832x1216', '1344x768', '768x1344'],
+		supportsNumImages: false,
+		supportsSeed: false,
+	},
+} as const;
+
+/**
+ * Validation constants
+ */
+export const VALIDATION = {
+	NUM_IMAGES: {
+		MIN: 1,
+		MAX: 4,
+	},
+	URL_PATTERN: /^https?:\/\/.+/i,
+	BASE64_PATTERN: /^data:image\/[a-z]+;base64,/i,
+} as const;

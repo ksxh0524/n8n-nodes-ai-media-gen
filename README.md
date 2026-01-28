@@ -20,33 +20,6 @@ A simple and extensible n8n node for AI media generation (images) using ModelSco
 - Node.js >= 18.0.0
 - npm or yarn
 
-### System Dependencies (Optional)
-
-The node includes optional image and video processing features that require additional dependencies:
-
-**For image processing:**
-- sharp (automatically installed via npm)
-
-**For video processing:**
-- ffmpeg (must be installed separately)
-- ffprobe (must be installed separately)
-
-**Installing ffmpeg/ffprobe:**
-
-macOS:
-```bash
-brew install ffmpeg
-```
-
-Ubuntu/Debian:
-```bash
-sudo apt-get update
-sudo apt-get install ffmpeg
-```
-
-Windows:
-Download from https://ffmpeg.org/download.html and add to PATH
-
 ### Install the Node
 
 ```bash
@@ -113,10 +86,10 @@ npm run build
 ### Parameters
 
 | Parameter | Type | Required | Default | Description |
-|-----------|-------|----------|-------------|
+|-----------|-------|----------|---------|-------------|
 | Model | options | Yes | Tongyi-MAI/Z-Image | Select the AI model to use |
-| Prompt | string | Yes | Text description for generation or editing | |
-| Input Image | string | No | URL or base64 of the image to edit (required for Edit model) | |
+| Prompt | string | Yes | - | Text description for generation or editing |
+| Input Image | string | Conditional | - | URL or base64 of the image to edit (required for Edit model) |
 | Size | options | Yes | 1024x1024 | Image size (depends on model) |
 | Seed | number | No | 0 | Random seed for reproducibility (0 = random) |
 | Number of Images | number | No | 1 | Number of images to generate (1-4) |
@@ -124,11 +97,11 @@ npm run build
 ### Options
 
 | Parameter | Type | Required | Default | Description |
-|-----------|-------|----------|-------------|
+|-----------|-------|----------|---------|-------------|
 | Max Retries | number | No | 3 | Maximum number of retry attempts for failed requests |
-| Timeout (ms) | number | No | 60000 | Request timeout in milliseconds |
+| Timeout (ms) | number | No | 60000 | Request timeout in milliseconds (1000-600000) |
 | Enable Caching | boolean | No | true | Enable result caching to reduce API calls |
-| Cache TTL (seconds) | number | No | 3600 | Cache time-to-live in seconds (default: 3600 = 1 hour) |
+| Cache TTL (seconds) | number | No | 3600 | Cache time-to-live in seconds (60-86400) |
 
 ### Credentials
 
@@ -139,7 +112,7 @@ npm run build
 
 ## Caching
 
-The node includes a built-in caching mechanism to reduce API calls and improve performance:
+The node includes a built-in caching mechanism to reduce API calls and improve performance.
 
 ### How It Works
 
@@ -169,13 +142,9 @@ The node includes a built-in caching mechanism to reduce API calls and improve p
 - **Faster Response Times**: Cached results are returned instantly
 - **Rate Limit Protection**: Helps avoid hitting rate limits
 
-### Disabling Caching
-
-You can disable caching in the node configuration if you always want fresh results.
-
 ## Error Handling
 
-All errors are wrapped in `MediaGenError` with proper error codes:
+All errors are wrapped in `MediaGenError` with proper error codes.
 
 ### Error Codes
 
@@ -186,6 +155,9 @@ All errors are wrapped in `MediaGenError` with proper error codes:
 | NETWORK_ERROR | Yes | Network error occurred |
 | TIMEOUT | Yes | Request timed out |
 | API_ERROR | No | API error occurred |
+| INVALID_IMAGE_INPUT | No | Invalid image input provided |
+| INVALID_PARAMS | No | Invalid parameters provided |
+| SERVICE_UNAVAILABLE | Yes | Service temporarily unavailable |
 
 ### Error Response Format
 
@@ -209,14 +181,14 @@ The node implements automatic retry with exponential backoff:
 - **Max Delay**: 30000ms
 - **Max Retries**: Configurable (default: 3)
 
-Only retryable errors will be retried (NETWORK_ERROR, TIMEOUT, RATE_LIMIT).
+Only retryable errors will be retried (NETWORK_ERROR, TIMEOUT, RATE_LIMIT, SERVICE_UNAVAILABLE).
 
 ## Logging
 
 The node provides detailed logging at different levels:
 
 - **Info**: High-level operations (start, success, cache hit/miss)
-- **Debug**: Detailed information (detected media type, API request, cache key)
+- **Debug**: Detailed information (API request, cache key)
 - **Error**: Failures with context
 
 Logs include:
@@ -262,6 +234,17 @@ Logs include:
 }
 ```
 
+### Example 4: Edit Image with Base64 Input
+
+```json
+{
+  "model": "Qwen-Image-Edit-2511",
+  "prompt": "Remove the background",
+  "inputImage": "data:image/jpeg;base64,/9j/4AAQSkZJRgABA...",
+  "size": "1024x1024"
+}
+```
+
 ## Testing
 
 ```bash
@@ -281,7 +264,6 @@ n8n-nodes-ai-media-gen/
 ├── nodes/                  # Source code
 │   ├── AIMediaGen.ts      # Main node implementation
 │   ├── ai-media-gen.svg    # Node icon
-│   ├── index.ts            # Export file
 │   ├── credentials/        # Credential definitions
 │   │   ├── modelScopeApi.credentials.ts
 │   │   └── index.ts
@@ -290,20 +272,20 @@ n8n-nodes-ai-media-gen/
 │   │   ├── constants.ts   # Constants
 │   │   ├── errors.ts      # Error handling
 │   │   ├── helpers.ts     # Helper functions
-│   │   ├── imageProcessor.ts  # Image processing
-│   │   ├── imageTypes.ts  # Image type definitions
 │   │   ├── monitoring.ts  # Performance monitoring
 │   │   ├── types.ts       # Type definitions
-│   │   └── videoProcessor.ts  # Video processing
+│   │   └── validators.ts  # Input validation
 │   └── __tests__/         # Unit tests
-│       ├── actionHandler.test.ts
+│       ├── AIMediaGen.test.ts
+│       ├── apiIntegration.test.ts
 │       ├── cache.test.ts
-│       ├── detectMediaType.test.ts
 │       ├── errors.test.ts
-│       ├── helpers.test.ts
-│       ├── imageProcessor.test.ts
 │       ├── monitoring.test.ts
-│       └── videoProcessor.test.ts
+│       ├── helpers/
+│       │   └── n8nMock.ts
+│       └── fixtures/
+│           ├── apiResponses.ts
+│           └── testData.ts
 ├── dist/                  # Compiled output
 └── Configuration files
 ```
@@ -322,13 +304,13 @@ Caching can significantly reduce API costs and improve response times for repeat
 
 ### 2. Use Appropriate Timeouts
 Set timeouts based on expected generation time:
-- Images: 30-60 seconds
-- Larger images: 60-120 seconds
+- Simple images: 30-60 seconds
+- Complex images: 60-120 seconds
 
 ### 3. Adjust Retry Count
 For production environments, consider:
-- Low latency: 2-3 retries
-- High latency: 3-5 retries
+- Low latency environments: 2-3 retries
+- High latency environments: 3-5 retries
 
 ### 4. Optimize Cache TTL
 Set cache TTL based on how often your data changes:
@@ -359,19 +341,19 @@ Set cache TTL based on how often your data changes:
 - Reduce concurrent requests
 - Use caching if available
 
-### Issue: Cache not working
+### Issue: Invalid size for model
 
 **Solution**:
-- Verify caching is enabled in node configuration
-- Check cache TTL is set correctly
-- Review logs for cache hit/miss messages
+- Check supported sizes for your model
+- Verify size parameter matches model capabilities
+- Refer to the Supported Models table
 
-### Issue: Invalid model
+### Issue: Invalid input image format
 
 **Solution**:
-- Verify model name is correct
-- Check model is available on ModelScope
-- Ensure model type matches operation (generation vs editing)
+- Ensure input image is a valid URL starting with http:// or https://
+- Or use base64 format: `data:image/<format>;base64,<data>`
+- Verify the URL is accessible
 
 ## License
 

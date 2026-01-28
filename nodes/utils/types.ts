@@ -2,30 +2,7 @@
  * Types for AI Media Generation Node
  *
  * This file contains type definitions used throughout the node.
- * Designed with extensible architecture to support future media types and providers.
  */
-
-export type ApiFormat = 'openai' | 'gemini' | 'bailian' | 'replicate' | 'huggingface';
-
-export type MediaType = 'image' | 'audio' | 'video';
-
-export type ImageFormat = 'jpeg' | 'png' | 'webp' | 'gif' | 'tiff' | 'avif';
-
-export type VideoFormat = 'mp4' | 'webm' | 'mov' | 'avi' | 'mkv' | 'flv';
-
-/**
- * Additional parameters for API requests
- */
-export type IAdditionalParams = Record<string, unknown>;
-
-/**
- * Generation parameters
- */
-export interface IGenerationParams {
-	model?: string;
-	prompt?: string;
-	additionalParams?: string;
-}
 
 /**
  * Retry options
@@ -51,7 +28,7 @@ export interface ICacheOptions {
 export interface IMonitoringFilter {
 	provider?: string;
 	model?: string;
-	mediaType?: MediaType;
+	mediaType?: 'image' | 'audio' | 'video';
 }
 
 /**

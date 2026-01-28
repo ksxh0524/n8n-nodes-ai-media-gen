@@ -9,24 +9,50 @@ import { CacheManager, CacheKeyGenerator } from './utils/cache';
 import { PerformanceMonitor } from './utils/monitoring';
 import { withRetry, MediaGenError } from './utils/errors';
 import * as CONSTANTS from './utils/constants';
+import { validateNumImages, validateSizeForModel, validateInputImage } from './utils/validators';
 
+/**
+ * Metadata for execution results
+ */
 interface ResultMetadata {
+	/** Whether the result was retrieved from cache */
 	cached?: boolean;
+	/** Additional metadata properties */
 	[key: string]: unknown;
 }
 
+/**
+ * ModelScope API credentials
+ */
 interface ModelScopeApiCredentials {
+	/** API key for authentication */
 	apiKey: string;
+	/** Optional custom base URL */
 	baseUrl?: string;
 }
 
+/**
+ * ModelScope API response structure
+ */
 interface ModelScopeApiResponse {
+	/** Output data containing the image URL */
 	output?: { url?: string };
+	/** Alternative URL field */
 	url?: string;
+	/** Alternative image URL field */
 	image_url?: string;
+	/** Error message if the request failed */
 	error?: string;
 }
 
+/**
+ * AI Media Generation Node
+ *
+ * Generates and edits images using ModelScope AI models including:
+ * - Z-Image: High-quality text-to-image generation
+ * - Qwen-Image-2512: Advanced text-to-image generation
+ * - Qwen-Image-Edit-2511: Image editing model
+ */
 export class AIMediaGen implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'AI Media Generation',
@@ -255,6 +281,17 @@ export class AIMediaGen implements INodeType {
 		],
 	};
 
+	/**
+	 * Executes the AI media generation node
+	 *
+	 * Processes input items and generates/edits images using ModelScope AI models.
+	 * Each item can have different parameters (model, size, etc.).
+	 * Supports caching to reduce API calls for identical requests.
+	 *
+	 * @param this - n8n execution context
+	 * @returns Promise resolving to array of execution data
+	 * @throws NodeOperationError when execution fails and continueOnFail is false
+	 */
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
 		const items = this.getInputData();
 		const results: INodeExecutionData[] = [];
@@ -278,12 +315,12 @@ export class AIMediaGen implements INodeType {
 				const timerId = performanceMonitor.startTimer('aiMediaGen');
 				let result: INodeExecutionData;
 
-				const timeout = this.getNodeParameter('options.timeout', CONSTANTS.INDICES.FIRST_ITEM) as number;
 				const model = this.getNodeParameter('model', i) as string;
 				const size = this.getNodeParameter('size', i) as string;
 				const seed = this.getNodeParameter('seed', i) as number;
 				const numImages = this.getNodeParameter('numImages', i) as number;
 				const inputImage = model === 'Qwen-Image-Edit-2511' ? this.getNodeParameter('inputImage', i) as string : '';
+				const timeout = this.getNodeParameter('options.timeout', i) as number;
 
 				if (enableCache) {
 					const prompt = this.getNodeParameter('prompt', i) as string || '';
@@ -350,11 +387,12 @@ export class AIMediaGen implements INodeType {
 					error: error instanceof Error ? error.message : String(error),
 				});
 
+				const errorCode = error instanceof MediaGenError ? error.code : 'UNKNOWN';
 				results.push({
 					json: {
 						success: false,
 						error: error instanceof Error ? error.message : String(error),
-						errorCode: 'UNKNOWN',
+						errorCode,
 						_metadata: {
 							timestamp: new Date().toISOString(),
 						},
@@ -371,6 +409,20 @@ export class AIMediaGen implements INodeType {
 		return [this.helpers.constructExecutionMetaData(results, { itemData: { item: 0 } })];
 	}
 
+	/**
+	 * Executes a model request for a single item
+	 *
+	 * Validates parameters, builds the request, and calls the ModelScope API.
+	 * Implements retry logic for transient failures.
+	 *
+	 * @param context - n8n execution context
+	 * @param itemIndex - Index of the item being processed
+	 * @param credentials - API credentials
+	 * @param timeout - Request timeout in milliseconds
+	 * @returns Promise resolving to execution data with generated image URL
+	 * @throws NodeOperationError for validation errors
+	 * @throws MediaGenError for API errors
+	 */
 	private static async executeModelRequest(
 		context: IExecuteFunctions,
 		itemIndex: number,
@@ -392,19 +444,22 @@ export class AIMediaGen implements INodeType {
 			);
 		}
 
-		const baseUrl = credentials.baseUrl || CONSTANTS.API_ENDPOINTS.MODELSCOPE.BASE_URL;
+		// Validate numImages range (for models that support it)
 		const isEditModel = model === 'Qwen-Image-Edit-2511';
+		if (!isEditModel) {
+			validateNumImages(numImages);
+		}
+
+		// Validate size matches model
+		validateSizeForModel(model, size);
+
+		const baseUrl = credentials.baseUrl || CONSTANTS.API_ENDPOINTS.MODELSCOPE.BASE_URL;
 
 		let inputImage = '';
 		if (isEditModel) {
 			inputImage = context.getNodeParameter('inputImage', itemIndex) as string || '';
-			if (!inputImage || inputImage.trim() === '') {
-				throw new NodeOperationError(
-					context.getNode(),
-					'Input image is required for Edit model',
-					{ itemIndex }
-				);
-			}
+			// Validate input image format
+			validateInputImage(inputImage);
 		}
 
 		return await withRetry(
@@ -425,6 +480,21 @@ export class AIMediaGen implements INodeType {
 		);
 	}
 
+	/**
+	 * Makes a request to the ModelScope API
+	 *
+	 * Builds and sends an HTTP request to the ModelScope generation endpoint.
+	 * Handles timeout, parses response, and converts errors to MediaGenError.
+	 *
+	 * @param baseUrl - API base URL
+	 * @param apiKey - API key for authentication
+	 * @param model - Model name to use
+	 * @param input - Input parameters containing the prompt
+	 * @param parameters - Additional parameters (size, seed, num_images, input_image)
+	 * @param timeout - Request timeout in milliseconds
+	 * @returns Promise resolving to execution data with image URL
+	 * @throws MediaGenError for API or network errors
+	 */
 	private static async makeModelScopeRequest(
 		baseUrl: string,
 		apiKey: string,

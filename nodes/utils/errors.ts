@@ -1,5 +1,11 @@
-import type { ApiFormat, IGenerationParams, IRetryOptions } from './types';
+import type { IRetryOptions } from './types';
 
+/**
+ * Custom error class for media generation operations
+ *
+ * Extends Error with error codes and details for better error handling
+ * and user-friendly error messages.
+ */
 export class MediaGenError extends Error {
 	constructor(
 		message: string,
@@ -11,6 +17,11 @@ export class MediaGenError extends Error {
 		Error.captureStackTrace(this, this.constructor);
 	}
 
+	/**
+	 * Checks if the error is retryable
+	 *
+	 * @returns true if the error type can be retried
+	 */
 	isRetryable(): boolean {
 		const retryableCodes = [
 			'NETWORK_ERROR',
@@ -21,6 +32,11 @@ export class MediaGenError extends Error {
 		return retryableCodes.includes(this.code);
 	}
 
+	/**
+	 * Gets a user-friendly error message
+	 *
+	 * @returns User-friendly error message based on error code
+	 */
 	getUserMessage(): string {
 		const messages: Record<string, string> = {
 			INVALID_API_KEY: 'API key is invalid or missing',
@@ -58,10 +74,27 @@ export const ERROR_CODES = {
 	DEPENDENCY_MISSING: 'DEPENDENCY_MISSING',
 } as const;
 
+/**
+ * Sleeps for a specified duration
+ *
+ * @param ms - Milliseconds to sleep
+ * @returns Promise that resolves after the specified duration
+ */
 export function sleep(ms: number): Promise<void> {
 	return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+/**
+ * Executes a function with retry logic
+ *
+ * Retries the function on retryable errors with exponential backoff.
+ * Non-retryable errors are thrown immediately.
+ *
+ * @param fn - Async function to execute
+ * @param options - Retry configuration options
+ * @returns Promise resolving to the function result
+ * @throws The last error if all retries are exhausted
+ */
 export async function withRetry<T>(
 	fn: () => Promise<T>,
 	options: IRetryOptions = {}
@@ -96,60 +129,4 @@ export async function withRetry<T>(
 	}
 
 	throw lastError;
-}
-
-export function validateCredentials(credentials: unknown): { valid: boolean; errors: string[] } {
-	const errors: string[] = [];
-
-	if (!credentials || typeof credentials !== 'object') {
-		errors.push('Credentials are required');
-		return { valid: false, errors };
-	}
-
-	const creds = credentials as Record<string, unknown>;
-
-	if (!creds.apiKey || typeof creds.apiKey !== 'string' || creds.apiKey.trim() === '') {
-		errors.push('API key is required and must be a non-empty string');
-	}
-
-	if (!creds.apiFormat || typeof creds.apiFormat !== 'string') {
-		errors.push('API format is required');
-	}
-
-	const validFormats: ApiFormat[] = ['openai', 'gemini', 'bailian', 'replicate', 'huggingface'];
-	if (creds.apiFormat && !validFormats.includes(creds.apiFormat as ApiFormat)) {
-		errors.push(`API format must be one of: ${validFormats.join(', ')}`);
-	}
-
-	return {
-		valid: errors.length === 0,
-		errors,
-	};
-}
-
-export function validateGenerationParams(params: IGenerationParams): { valid: boolean; errors: string[] } {
-	const errors: string[] = [];
-
-	if (!params.model || typeof params.model !== 'string' || params.model.trim() === '') {
-		errors.push('Model is required and must be a non-empty string');
-	}
-
-	if (!params.prompt || typeof params.prompt !== 'string' || params.prompt.trim() === '') {
-		errors.push('Prompt is required and must be a non-empty string');
-	}
-
-	if (params.additionalParams !== undefined) {
-		try {
-			if (params.additionalParams && params.additionalParams.trim() !== '') {
-				JSON.parse(params.additionalParams);
-			}
-		} catch (error) {
-			errors.push('Additional parameters must be valid JSON');
-		}
-	}
-
-	return {
-		valid: errors.length === 0,
-		errors,
-	};
 }
