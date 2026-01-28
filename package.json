@@ -39,7 +39,7 @@
       {
         "name": "AIMediaGen",
         "displayName": "AI Media Generation",
-        "subtitle": "={{$parameter.action}}",
+        "subtitle": "={{$parameter.resource}}: {{$parameter.operation}}",
         "description": "Generate and process media using AI models and local processing",
         "icon": "file:ai-media-gen.svg",
         "subgroup": "media-generation",
@@ -54,22 +54,7 @@
         ],
         "usableAsTool": true,
         "credentials": [
-          "aiMediaApi",
-          "openAiApi",
-          "googlePalmApi",
           "modelScopeApi"
-        ],
-        "actions": [
-          {
-            "name": "modelScopeGenerateImage",
-            "displayName": "ModelScope Generate Image",
-            "description": "Generate images using ModelScope AI models"
-          },
-          {
-            "name": "modelScopeEditImage",
-            "displayName": "ModelScope Edit Image",
-            "description": "Edit images using ModelScope Qwen-Image-Edit model"
-          }
         ]
       }
     ]

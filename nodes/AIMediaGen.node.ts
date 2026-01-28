@@ -5,8 +5,6 @@ import {
 	IExecuteFunctions,
 	NodeOperationError,
 } from 'n8n-workflow';
-import { ActionRegistry } from './utils/actionRegistry';
-import type { ActionType } from './utils/actionHandler';
 import { CacheManager } from './utils/cache';
 import { PerformanceMonitor } from './utils/monitoring';
 import * as CONSTANTS from './utils/constants';
@@ -16,20 +14,27 @@ interface ResultMetadata {
 	[key: string]: unknown;
 }
 
-const ACTIONS: Array<{ name: string; value: ActionType }> = [
-	{ name: 'ModelScope Generate Image', value: 'modelScopeGenerateImage' },
-	{ name: 'ModelScope Edit Image', value: 'modelScopeEditImage' },
-];
+interface ModelScopeApiCredentials {
+	apiKey: string;
+	baseUrl?: string;
+}
+
+interface ModelScopeApiResponse {
+	output?: { url?: string };
+	url?: string;
+	image_url?: string;
+	error?: string;
+}
 
 export class AIMediaGen implements INodeType {
 	description: INodeTypeDescription = {
-		displayName: 'AI Media Generation',
+		displayName: 'ModelScope',
 		name: 'aiMediaGen',
 		icon: 'file:ai-media-gen.svg',
 		description: 'Generate and process media using AI models',
 		version: CONSTANTS.NODE_VERSION,
 		group: ['transform'],
-		subtitle: '={{$parameter.action}}',
+		subtitle: '={{$parameter.resource}}: {{$parameter.action}}',
 		defaults: {
 			name: 'AI Media Generation',
 		},
@@ -39,35 +44,48 @@ export class AIMediaGen implements INodeType {
 		credentials: [
 			{
 				name: 'modelScopeApi',
-				required: false,
+				required: true,
 			},
 		],
 		properties: [
+			{
+				displayName: 'Resource',
+				name: 'resource',
+				type: 'options',
+				noDataExpression: true,
+				options: [
+					{ name: 'ModelScope', value: 'modelScope' },
+				],
+				default: 'modelScope',
+				required: true,
+				description: 'AI resource to use',
+			},
 			{
 				displayName: 'Action',
 				name: 'action',
 				type: 'options',
 				noDataExpression: true,
-				options: ACTIONS,
-				default: 'modelScopeGenerateImage',
+				options: [
+					{ name: 'Generate Image', value: 'generateImage', description: 'Generate an image from text prompt' },
+				],
+				default: 'generateImage',
 				required: true,
-				description: 'Select the action to perform',
 			},
-			// ModelScope Generate Image parameters
 			{
 				displayName: 'Model',
 				name: 'model',
 				type: 'options',
-				default: 'Z-Image-Turbo',
+				default: 'Tongyi-MAI/Z-Image',
 				required: true,
 				options: [
-					{ name: 'Z-Image-Turbo', value: 'Z-Image-Turbo' },
+					{ name: 'Z-Image', value: 'Tongyi-MAI/Z-Image' },
 					{ name: 'Qwen-Image-2512', value: 'Qwen-Image-2512' },
 				],
-				description: 'Select the ModelScope model',
+				description: 'Select the model',
 				displayOptions: {
 					show: {
-						action: ['modelScopeGenerateImage'],
+						resource: ['modelScope'],
+						action: ['generateImage'],
 					},
 				},
 			},
@@ -83,7 +101,8 @@ export class AIMediaGen implements INodeType {
 				description: 'Text description of the image to generate',
 				displayOptions: {
 					show: {
-						action: ['modelScopeGenerateImage', 'modelScopeEditImage'],
+						resource: ['modelScope'],
+						action: ['generateImage'],
 					},
 				},
 			},
@@ -103,7 +122,8 @@ export class AIMediaGen implements INodeType {
 				description: 'Image size',
 				displayOptions: {
 					show: {
-						action: ['modelScopeGenerateImage'],
+						resource: ['modelScope'],
+						action: ['generateImage'],
 					},
 				},
 			},
@@ -115,7 +135,8 @@ export class AIMediaGen implements INodeType {
 				description: 'Random seed for reproducibility (0 = random)',
 				displayOptions: {
 					show: {
-						action: ['modelScopeGenerateImage', 'modelScopeEditImage'],
+						resource: ['modelScope'],
+						action: ['generateImage'],
 					},
 				},
 			},
@@ -131,21 +152,8 @@ export class AIMediaGen implements INodeType {
 				description: 'Number of images to generate (1-4)',
 				displayOptions: {
 					show: {
-						action: ['modelScopeGenerateImage'],
-					},
-				},
-			},
-			// ModelScope Edit Image parameters
-			{
-				displayName: 'Edit Image',
-				name: 'editImage',
-				type: 'string',
-				default: '',
-				placeholder: 'https://example.com/image.jpg or data:image/jpeg;base64,...',
-				description: 'URL or base64 of image to edit',
-				displayOptions: {
-					show: {
-						action: ['modelScopeEditImage'],
+						resource: ['modelScope'],
+						action: ['generateImage'],
 					},
 				},
 			},
@@ -211,105 +219,92 @@ export class AIMediaGen implements INodeType {
 		const items = this.getInputData();
 		const results: INodeExecutionData[] = [];
 
-		const actionRegistry = ActionRegistry.getInstance();
-		const registeredActions = actionRegistry.getActionNames();
-
-		if (registeredActions.length === 0) {
-			for (let i = 0; i < items.length; i++) {
-				results.push({
-					json: {
-						success: false,
-						error: 'No actions are currently registered.',
-						errorCode: 'NO_ACTIONS_REGISTERED',
-						_metadata: {
-							timestamp: new Date().toISOString(),
-						},
-					},
-				});
-			}
-			return [this.helpers.constructExecutionMetaData(results, { itemData: { item: 0 } })];
-		}
-
 		const enableCache = this.getNodeParameter('options.enableCache', CONSTANTS.INDICES.FIRST_ITEM) as boolean;
 		const cacheManager = new CacheManager();
 		const performanceMonitor = new PerformanceMonitor();
 
 		for (let i = 0; i < items.length; i++) {
 			try {
-				const action = this.getNodeParameter('action', i) as ActionType;
-				const handler = actionRegistry.getHandler(action);
+				const resource = this.getNodeParameter('resource', i) as string;
+				const action = this.getNodeParameter('action', i) as string;
 
-				if (!handler) {
+				// Get credentials
+				const credentials = await this.getCredentials<ModelScopeApiCredentials>('modelScopeApi');
+				if (!credentials || !credentials.apiKey) {
 					throw new NodeOperationError(
 						this.getNode(),
-						`Unknown action: ${action}. Available actions: ${registeredActions.join(', ')}`,
+						'API Key is required. Please configure your ModelScope API credentials.',
 						{ itemIndex: i }
 					);
-				}
-
-				let credentials;
-				if (handler.requiresCredential) {
-					const credentialType = handler.credentialType;
-					credentials = await this.getCredentials(credentialType);
-
-					if (!credentials) {
-						throw new NodeOperationError(
-							this.getNode(),
-							`Credentials required for action: ${action}`,
-							{ itemIndex: i }
-						);
-					}
 				}
 
 				const timerId = performanceMonitor.startTimer(action);
 				let result: INodeExecutionData;
 
-				if (enableCache) {
-					const prompt = this.getNodeParameter('prompt', i) as string || '';
-					const model = this.getNodeParameter('model', i) as string || '';
-					const editImage = this.getNodeParameter('editImage', i) as string || '';
-					const promptHash = AIMediaGen.hashString(prompt + editImage);
-					const cacheKey = `${action}:${model}:${promptHash}`;
-					const cached = await cacheManager.get(cacheKey);
+				if (resource === 'modelScope') {
+					const timeout = this.getNodeParameter('options.timeout', CONSTANTS.INDICES.FIRST_ITEM) as number;
 
-					if (cached) {
-						this.logger?.info('Cache hit', { action, cacheKey });
-						result = {
-							json: {
-								success: true,
-								...cached as Record<string, unknown>,
-								_metadata: {
-									action,
-									cached: true,
-									timestamp: new Date().toISOString(),
+					if (enableCache) {
+						const prompt = this.getNodeParameter('prompt', i) as string || '';
+						const promptHash = AIMediaGen.hashString(prompt);
+						const cacheKey = `${action}:${promptHash}`;
+						const cached = await cacheManager.get(cacheKey);
+
+						if (cached) {
+							this.logger?.info('Cache hit', { action, cacheKey });
+							result = {
+								json: {
+									success: true,
+									...cached as Record<string, unknown>,
+									_metadata: {
+										action,
+										cached: true,
+										timestamp: new Date().toISOString(),
+									},
 								},
-							},
-						};
-					} else {
-						this.logger?.info('Cache miss', { action, cacheKey });
-						result = await handler.execute(this, i, credentials);
+							};
+						} else {
+							this.logger?.info('Cache miss', { action, cacheKey });
 
-						if (result.json.success) {
-							await cacheManager.set(cacheKey, result.json, this.getNodeParameter('options.cacheTtl', i) as number);
+							if (action === 'generateImage') {
+								result = await AIMediaGen.executeGenerateImage(this, i, credentials, timeout);
+							} else {
+								throw new NodeOperationError(this.getNode(), `Unknown action: ${action}`, { itemIndex: i });
+							}
+
+							if (result.json.success) {
+								await cacheManager.set(cacheKey, result.json, this.getNodeParameter('options.cacheTtl', i) as number);
+							}
+						}
+					} else {
+						if (action === 'generateImage') {
+							result = await AIMediaGen.executeGenerateImage(this, i, credentials, timeout);
+						} else {
+							throw new NodeOperationError(this.getNode(), `Unknown action: ${action}`, { itemIndex: i });
 						}
 					}
 				} else {
-					result = await handler.execute(this, i, credentials);
+					throw new NodeOperationError(
+						this.getNode(),
+						`Unknown resource: ${resource}`,
+						{ itemIndex: i }
+					);
 				}
 
 				const elapsed = performanceMonitor.endTimer(timerId);
 
 				performanceMonitor.recordMetric({
 					timestamp: Date.now().toString(),
-					provider: action,
-					model: this.getNodeParameter('model', i) as string || 'unknown',
-					mediaType: handler.mediaType,
+					provider: resource,
+					model: this.getNodeParameter('model', i) as string,
+					mediaType: 'image',
 					duration: elapsed,
 					success: result.json.success as boolean,
 					fromCache: (result.json._metadata as ResultMetadata)?.cached || false,
 				});
 
 				this.logger?.info('Action executed', {
+					resource,
 					action,
 					duration: elapsed,
 					success: result.json.success,
@@ -318,6 +313,7 @@ export class AIMediaGen implements INodeType {
 				results.push(result);
 			} catch (error) {
 				this.logger?.error('Action failed', {
+					resource: this.getNodeParameter('resource', i),
 					action: this.getNodeParameter('action', i),
 					error: error instanceof Error ? error.message : String(error),
 				});
@@ -341,6 +337,138 @@ export class AIMediaGen implements INodeType {
 		}
 
 		return [this.helpers.constructExecutionMetaData(results, { itemData: { item: 0 } })];
+	}
+
+	private static async executeGenerateImage(
+		context: IExecuteFunctions,
+		itemIndex: number,
+		credentials: ModelScopeApiCredentials,
+		timeout: number
+	): Promise<INodeExecutionData> {
+		const model = context.getNodeParameter('model', itemIndex) as string;
+		const prompt = context.getNodeParameter('prompt', itemIndex) as string;
+		const size = context.getNodeParameter('size', itemIndex) as string;
+		const seed = context.getNodeParameter('seed', itemIndex) as number;
+		const numImages = context.getNodeParameter('numImages', itemIndex) as number;
+
+		if (!prompt || prompt.trim() === '') {
+			return {
+				json: {
+					success: false,
+					error: 'Prompt is required',
+					errorCode: 'VALIDATION_ERROR',
+				},
+			};
+		}
+
+		const baseUrl = credentials.baseUrl || 'https://api.modelscope.cn/v1';
+
+		return await AIMediaGen.makeModelScopeRequest(
+			baseUrl,
+			credentials.apiKey,
+			model,
+			{ prompt: prompt.trim() },
+			{
+				size: size || '1024x1024',
+				seed: seed || 0,
+				num_images: numImages || 1,
+			},
+			timeout
+		);
+	}
+
+	private static async makeModelScopeRequest(
+		baseUrl: string,
+		apiKey: string,
+		model: string,
+		input: { prompt: string },
+		parameters: { size?: string; seed: number; num_images?: number },
+		timeout: number
+	): Promise<INodeExecutionData> {
+		const controller = new AbortController();
+		const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+		try {
+			const response = await fetch(`${baseUrl}/files/generation`, {
+				method: 'POST',
+				headers: {
+					'Authorization': `Bearer ${apiKey}`,
+					'Content-Type': 'application/json',
+				},
+				body: JSON.stringify({
+					model,
+					input,
+					parameters,
+				}),
+				signal: controller.signal,
+			});
+
+			clearTimeout(timeoutId);
+
+			const data = await response.json().catch(() => null) as ModelScopeApiResponse | null;
+
+			if (!response.ok) {
+				let errorMessage = 'Failed to generate image';
+				if (response.status === 401) errorMessage = 'Authentication failed. Please check your API Key.';
+				else if (response.status === 429) errorMessage = 'Rate limit exceeded. Please try again later.';
+				else if (response.status === 408) errorMessage = 'Request timeout.';
+				else if (data?.error) errorMessage = data.error;
+
+				return {
+					json: {
+						success: false,
+						error: errorMessage,
+						errorCode: 'API_ERROR',
+						_metadata: {
+							statusCode: response.status,
+						},
+					},
+				};
+			}
+
+			const imageUrl = data?.output?.url || data?.url || data?.image_url;
+
+			if (!imageUrl) {
+				return {
+					json: {
+						success: false,
+						error: 'No image URL returned from API',
+						errorCode: 'API_ERROR',
+					},
+				};
+			}
+
+			return {
+				json: {
+					success: true,
+					imageUrl,
+					model,
+					_metadata: {
+						timestamp: new Date().toISOString(),
+					},
+				},
+			};
+		} catch (error) {
+			clearTimeout(timeoutId);
+
+			if (error instanceof Error && error.name === 'AbortError') {
+				return {
+					json: {
+						success: false,
+						error: 'Request timeout',
+						errorCode: 'TIMEOUT_ERROR',
+					},
+				};
+			}
+
+			return {
+				json: {
+					success: false,
+					error: error instanceof Error ? error.message : String(error),
+					errorCode: 'UNKNOWN',
+				},
+			};
+		}
 	}
 
 	private static hashString(str: string): string {
