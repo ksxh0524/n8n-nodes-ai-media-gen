@@ -1,15 +1,16 @@
 {
   "name": "n8n-nodes-ai-media-gen",
   "version": "1.0.0",
-  "description": "n8n node for AI media generation with extensible architecture. Currently supports image generation via ModelScope API.",
+  "description": "n8n node for AI media generation with extensible architecture. Currently supports image generation and editing via ModelScope API.",
   "keywords": [
     "n8n",
     "n8n-node",
     "n8n-community-node-package",
     "ai",
     "image-generation",
+    "image-editing",
     "modelscope",
-    "extensible"
+    "qwen"
   ],
   "license": "MIT",
   "homepage": "https://github.com/n8n-nodes-ai-media-gen",
@@ -25,48 +26,28 @@
   },
   "main": "index.js",
   "types": "index.d.ts",
-  "n8n": {
-    "n8nNodesApiVersion": 1,
-    "credentials": [
-      "modelScopeApi"
-    ],
-    "nodes": [
-      {
-        "name": "AIMediaGen",
-        "displayName": "AI Media Generation",
-        "subtitle": "={{$parameter.model}}",
-        "description": "Generate and edit images using ModelScope AI models",
-        "icon": "file:ai-media-gen.svg",
-        "subgroup": "media-generation",
-        "defaults": {
-          "name": "AI Media Generation"
-        },
-        "inputs": [
-          "main"
-        ],
-        "outputs": [
-          "main"
-        ],
-        "usableAsTool": true,
-        "credentials": [
-          "modelScopeApi"
-        ]
-      }
-    ]
-  },
   "scripts": {
     "build": "gulp build",
     "build:dev": "gulp build:dev",
     "dev": "gulp dev",
-    "format": "prettier nodes --write",
-    "lint": "eslint nodes package.json",
-    "lint:fix": "eslint nodes package.json --fix",
+    "format": "prettier nodes credentials --write",
+    "lint": "eslint nodes credentials package.json",
+    "lint:fix": "eslint nodes credentials package.json --fix",
     "prepublishOnly": "npm run build && npm run lint -s",
     "test": "jest"
   },
   "files": [
     "dist"
   ],
+  "n8n": {
+    "n8nNodesApiVersion": 1,
+    "credentials": [
+      "dist/credentials/modelScopeApi.credentials.js"
+    ],
+    "nodes": [
+      "dist/nodes/AIMediaGen.js"
+    ]
+  },
   "dependencies": {
     "n8n-workflow": "^1.0.0"
   },
