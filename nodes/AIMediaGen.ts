@@ -571,10 +571,13 @@ export class AIMediaGen implements INodeType {
 			// Edit model (Qwen-Image-Edit-2511) doesn't use size parameter
 			const isEditModel = model === 'Qwen-Image-Edit-2511';
 
+			// Generate random seed when seed is 0
+			const actualSeed = parameters.seed === 0 ? Math.floor(Math.random() * 2147483647) : parameters.seed;
+
 			if (parameters.size && !isEditModel) {
 				requestBody.parameters = {
 					size: parameters.size,
-					seed: parameters.seed,
+					seed: actualSeed,
 				};
 			}
 
