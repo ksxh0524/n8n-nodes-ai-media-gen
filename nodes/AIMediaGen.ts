@@ -198,21 +198,41 @@ export class AIMediaGen implements INodeType {
 			required: true,
 			options: [
 				{
-					name: 'Nano Banana (Standard)',
+					name: 'Nano Banana',
 					value: 'nano-banana',
 					description: 'Standard quality generation',
 				},
 				{
-					name: 'Nano Banana HD',
-					value: 'nano-banana-hd',
-					description: 'High quality 4K output',
+					name: 'Nano Banana Pro',
+					value: 'nano-banana-pro',
+					description: 'High quality Pro model',
+				},
+				{
+					name: 'Custom Model',
+					value: 'custom',
+					description: 'Enter a custom model ID',
 				},
 			],
 			default: 'nano-banana',
-			description: 'Select model quality level',
+			description: 'Select model or enter custom model ID',
 			displayOptions: {
 				show: {
 					operation: ['nanoBanana'],
+				},
+			},
+		},
+		// Nano Banana - Custom Model ID
+		{
+			displayName: 'Custom Model ID',
+			name: 'nbCustomModelId',
+			type: 'string',
+			default: '',
+			placeholder: 'e.g., gpt-4-image, dalle-3, etc.',
+			description: 'Enter a custom model ID to use',
+			displayOptions: {
+				show: {
+					operation: ['nanoBanana'],
+					nbModel: ['custom'],
 				},
 			},
 		},
@@ -1251,11 +1271,24 @@ export class AIMediaGen implements INodeType {
 
 		// Get parameters
 		const mode = context.getNodeParameter('nbMode', itemIndex) as string;
-		const model = context.getNodeParameter('nbModel', itemIndex) as string;
+		let model = context.getNodeParameter('nbModel', itemIndex) as string;
 		const prompt = context.getNodeParameter('nbPrompt', itemIndex) as string;
 		const n = context.getNodeParameter('nbN', itemIndex) as number || 1;
 		const size = context.getNodeParameter('nbSize', itemIndex) as string || '1024x1024';
 		const responseFormat = context.getNodeParameter('nbResponseFormat', itemIndex) as string || 'url';
+
+		// Handle custom model ID
+		if (model === 'custom') {
+			const customModelId = context.getNodeParameter('nbCustomModelId', itemIndex) as string;
+			if (!customModelId || customModelId.trim() === '') {
+				throw new NodeOperationError(
+					context.getNode(),
+					'Custom Model ID is required when Custom Model is selected',
+					{ itemIndex }
+				);
+			}
+			model = customModelId.trim();
+		}
 
 		// Get timeout
 		let timeout = 60000;
