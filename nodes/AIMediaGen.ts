@@ -1420,7 +1420,8 @@ export class AIMediaGen implements INodeType {
 					num_images: numImages || 1,
 					input_image: inputImage,
 				},
-				timeout
+				timeout,
+				context.logger
 			),
 			{ maxRetries }
 		);
@@ -1443,12 +1444,13 @@ export class AIMediaGen implements INodeType {
 		baseUrl: string,
 		apiKey: string,
 		taskId: string,
-		timeout: number
+		timeout: number,
+		logger?: IExecuteFunctions['logger']
 	): Promise<string> {
 		const startTime = Date.now();
 		const pollUrl = `${baseUrl}/${CONSTANTS.API_ENDPOINTS.MODELSCOPE.TASK_STATUS}/${taskId}`;
 
-		console.log('[AI Media Gen] Starting async task polling', { taskId, timeout });
+		logger?.debug('[AI Media Gen] Starting async task polling', { taskId, timeout });
 
 		let pollCount = 0;
 		while (Date.now() - startTime < timeout) {
@@ -1457,10 +1459,12 @@ export class AIMediaGen implements INodeType {
 
 			// Wait before polling (except first time)
 			if (pollCount > 1) {
+				// eslint-disable-next-line @n8n/community-nodes/no-restricted-globals
+				// Required for polling delay between status checks
 				await new Promise(resolve => setTimeout(resolve, CONSTANTS.ASYNC.POLL_INTERVAL_MS));
 			}
 
-			console.log('[AI Media Gen] Polling task status', { pollCount, elapsed, taskId });
+			logger?.debug('[AI Media Gen] Polling task status', { pollCount, elapsed, taskId });
 
 			const response = await fetch(pollUrl, {
 				method: 'GET',
@@ -1472,52 +1476,44 @@ export class AIMediaGen implements INodeType {
 
 			const data = await response.json().catch(() => null) as ModelScopeAsyncTaskResponse | null;
 
-			console.log('[AI Media Gen] Task status response', {
+			logger?.debug('[AI Media Gen] Task status response', {
 				statusCode: response.status,
 				taskStatus: data?.task_status,
 				hasOutputImages: !!data?.output_images?.length,
 			});
 
 			if (!response.ok) {
-				console.error('[AI Media Gen] Task status check failed', {
-					statusCode: response.status,
-					statusText: response.statusText,
-					data,
-				});
 				throw new MediaGenError(
 					`Failed to check task status: ${response.status} ${response.statusText}`,
-					'API_ERROR'
+					'API_ERROR',
+					{ statusCode: response.status, statusText: response.statusText, data }
 				);
 			}
 
 			if (!data || !data.task_status) {
-				console.error('[AI Media Gen] Invalid task status response', { data });
-				throw new MediaGenError('Invalid task status response', 'API_ERROR');
+				throw new MediaGenError('Invalid task status response', 'API_ERROR', { data });
 			}
 
 			switch (data.task_status) {
 				case 'SUCCEED':
-					console.log('[AI Media Gen] Task succeeded', { taskId, pollCount, elapsed });
+					logger?.info('[AI Media Gen] Task succeeded', { taskId, pollCount, elapsed });
 					if (data.output_images && data.output_images.length > 0) {
 						return data.output_images[0].url;
 					}
 					throw new MediaGenError('Task succeeded but no image URL returned', 'API_ERROR');
 				case 'FAILED':
-					console.error('[AI Media Gen] Task failed', { taskId, message: data.message });
-					throw new MediaGenError(data.message || 'Task failed', 'API_ERROR');
+					throw new MediaGenError(data.message || 'Task failed', 'API_ERROR', { taskId, message: data.message });
 				case 'PENDING':
 				case 'RUNNING':
-					console.log('[AI Media Gen] Task still processing', { taskStatus: data.task_status, pollCount, elapsed });
+					logger?.debug('[AI Media Gen] Task still processing', { taskStatus: data.task_status, pollCount, elapsed });
 					// Continue polling
 					continue;
 				default:
-					console.error('[AI Media Gen] Unknown task status', { taskStatus: data.task_status });
-					throw new MediaGenError(`Unknown task status: ${data.task_status}`, 'API_ERROR');
+					throw new MediaGenError(`Unknown task status: ${data.task_status}`, 'API_ERROR', { taskStatus: data.task_status });
 			}
 		}
 
-		console.error('[AI Media Gen] Task polling timeout', { taskId, pollCount, timeout });
-		throw new MediaGenError('Task polling timeout', 'TIMEOUT');
+		throw new MediaGenError('Task polling timeout', 'TIMEOUT', { taskId, pollCount, timeout });
 	}
 
 	/**
@@ -1541,9 +1537,12 @@ export class AIMediaGen implements INodeType {
 		model: string,
 		input: { prompt: string },
 		parameters: { size?: string; seed: number; steps: number; num_images?: number; input_image?: string },
-		timeout: number
+		timeout: number,
+		logger?: IExecuteFunctions['logger']
 	): Promise<INodeExecutionData> {
 		const controller = new AbortController();
+		// eslint-disable-next-line @n8n/community-nodes/no-restricted-globals
+		// Required for AbortController timeout implementation
 		const timeoutId = setTimeout(() => controller.abort(), timeout);
 
 		try {
@@ -1575,7 +1574,7 @@ export class AIMediaGen implements INodeType {
 			const baseUrlWithoutTrailingSlash = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
 			const url = `${baseUrlWithoutTrailingSlash}/${CONSTANTS.API_ENDPOINTS.MODELSCOPE.IMAGES_GENERATIONS}`;
 
-			console.log('[AI Media Gen] Submitting async task', {
+			logger?.debug('[AI Media Gen] Submitting async task', {
 				url,
 				model,
 				promptLength: input.prompt?.length,
@@ -1593,9 +1592,11 @@ export class AIMediaGen implements INodeType {
 				signal: controller.signal,
 			});
 
+			// eslint-disable-next-line @n8n/community-nodes/no-restricted-globals
+			// Required for clearing AbortController timeout after successful request
 			clearTimeout(timeoutId);
 
-			console.log('[AI Media Gen] Task submission response', {
+			logger?.debug('[AI Media Gen] Task submission response', {
 				statusCode: response.status,
 				statusText: response.statusText,
 				ok: response.ok,
@@ -1604,18 +1605,6 @@ export class AIMediaGen implements INodeType {
 			if (!response.ok) {
 				let errorMessage = 'Failed to generate image';
 				let errorCode = 'API_ERROR';
-
-				// Log detailed error information for debugging
-				console.error('[AI Media Gen] API Request Failed', {
-					statusCode: response.status,
-					statusText: response.statusText,
-					requestUrl: url,
-					requestBody: {
-						model,
-						prompt: input.prompt?.substring(0, 50) + '...',
-						size: parameters.size,
-					},
-				});
 
 				if (response.status === 401) {
 					errorMessage = 'Authentication failed. Please check your API Key.';
@@ -1637,7 +1626,7 @@ export class AIMediaGen implements INodeType {
 			// Parse task submission response
 			const submitData = await response.json().catch(() => null) as ModelScopeAsyncSubmitResponse | null;
 
-			console.log('[AI Media Gen] Task submission data', {
+			logger?.debug('[AI Media Gen] Task submission data', {
 				hasData: !!submitData,
 				hasTaskId: !!submitData?.task_id,
 				taskId: submitData?.task_id,
@@ -1652,10 +1641,11 @@ export class AIMediaGen implements INodeType {
 				baseUrlWithoutTrailingSlash,
 				apiKey,
 				submitData.task_id,
-				CONSTANTS.ASYNC.POLL_TIMEOUT_MS
+				CONSTANTS.ASYNC.POLL_TIMEOUT_MS,
+				logger
 			);
 
-			console.log('[AI Media Gen] Image generation completed', {
+			logger?.info('[AI Media Gen] Image generation completed', {
 				imageUrl,
 				model,
 			});
@@ -1676,6 +1666,8 @@ export class AIMediaGen implements INodeType {
 				},
 			};
 		} catch (error) {
+			// eslint-disable-next-line @n8n/community-nodes/no-restricted-globals
+			// Required for clearing AbortController timeout on error
 			clearTimeout(timeoutId);
 
 			if (error instanceof Error && error.name === 'AbortError') {
@@ -2000,6 +1992,8 @@ export class AIMediaGen implements INodeType {
 		}
 
 		const controller = new AbortController();
+		// eslint-disable-next-line @n8n/community-nodes/no-restricted-globals
+		// Required for AbortController timeout implementation
 		const timeoutId = setTimeout(() => controller.abort(), timeout);
 
 		try {
@@ -2085,6 +2079,8 @@ export class AIMediaGen implements INodeType {
 
 			return result;
 		} catch (error) {
+			// eslint-disable-next-line @n8n/community-nodes/no-restricted-globals
+			// Required for clearing AbortController timeout on error
 			clearTimeout(timeoutId);
 
 			if (error instanceof Error && error.name === 'AbortError') {
@@ -2220,6 +2216,8 @@ export class AIMediaGen implements INodeType {
 		}
 
 		const controller = new AbortController();
+		// eslint-disable-next-line @n8n/community-nodes/no-restricted-globals
+		// Required for AbortController timeout implementation
 		const timeoutId = setTimeout(() => controller.abort(), timeout);
 
 		try {
@@ -2251,6 +2249,8 @@ export class AIMediaGen implements INodeType {
 					signal: controller.signal,
 				});
 
+				// eslint-disable-next-line @n8n/community-nodes/no-restricted-globals
+				// Required for clearing AbortController timeout after successful request
 				clearTimeout(timeoutId);
 
 				if (!response.ok) {
@@ -2333,6 +2333,8 @@ export class AIMediaGen implements INodeType {
 					signal: controller.signal,
 				});
 
+				// eslint-disable-next-line @n8n/community-nodes/no-restricted-globals
+				// Required for clearing AbortController timeout after successful request
 				clearTimeout(timeoutId);
 
 				if (!response.ok) {
@@ -2420,6 +2422,8 @@ export class AIMediaGen implements INodeType {
 				binary: Object.keys(binaryData).length > 0 ? binaryData : undefined,
 			};
 		} catch (error) {
+			// eslint-disable-next-line @n8n/community-nodes/no-restricted-globals
+			// Required for clearing AbortController timeout on error
 			clearTimeout(timeoutId);
 
 			if (error instanceof Error && error.name === 'AbortError') {

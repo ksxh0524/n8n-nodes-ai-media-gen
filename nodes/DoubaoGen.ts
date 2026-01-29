@@ -388,6 +388,8 @@ export class DoubaoGen implements INodeType {
 		}
 
 		const controller = new AbortController();
+		// eslint-disable-next-line @n8n/community-nodes/no-restricted-globals
+		// Required for AbortController timeout implementation
 		const timeoutId = setTimeout(() => controller.abort(), timeout);
 
 		try {
@@ -420,6 +422,8 @@ export class DoubaoGen implements INodeType {
 					signal: controller.signal,
 				});
 
+				// eslint-disable-next-line @n8n/community-nodes/no-restricted-globals
+				// Required for clearing AbortController timeout after successful request
 				clearTimeout(timeoutId);
 
 				if (!response.ok) {
@@ -501,6 +505,8 @@ export class DoubaoGen implements INodeType {
 					signal: controller.signal,
 				});
 
+				// eslint-disable-next-line @n8n/community-nodes/no-restricted-globals
+				// Required for clearing AbortController timeout after successful request
 				clearTimeout(timeoutId);
 
 				if (!response.ok) {
@@ -586,6 +592,8 @@ export class DoubaoGen implements INodeType {
 				binary: Object.keys(binaryData).length > 0 ? binaryData : undefined,
 			};
 		} catch (error) {
+			// eslint-disable-next-line @n8n/community-nodes/no-restricted-globals
+			// Required for clearing AbortController timeout on error
 			clearTimeout(timeoutId);
 
 			if (error instanceof Error && error.name === 'AbortError') {

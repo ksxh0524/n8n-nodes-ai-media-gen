@@ -81,6 +81,8 @@ export const ERROR_CODES = {
  * @returns Promise that resolves after the specified duration
  */
 export function sleep(ms: number): Promise<void> {
+	// eslint-disable-next-line @n8n/community-nodes/no-restricted-globals
+	// Required for retry delay implementation in exponential backoff
 	return new Promise(resolve => setTimeout(resolve, ms));
 }
 
