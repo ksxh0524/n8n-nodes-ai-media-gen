@@ -203,6 +203,11 @@ export class AIMediaGen implements INodeType {
 					description: 'Standard quality generation',
 				},
 				{
+					name: 'Nano Banana 2',
+					value: 'nano-banana-2',
+					description: 'Second generation model',
+				},
+				{
 					name: 'Nano Banana Pro',
 					value: 'nano-banana-pro',
 					description: 'High quality Pro model',
@@ -320,7 +325,7 @@ export class AIMediaGen implements INodeType {
 				},
 			},
 		},
-		// Nano Banana - Aspect Ratio (for Pro model)
+		// Nano Banana - Aspect Ratio (for Pro model and Nano Banana 2)
 		{
 			displayName: 'Aspect Ratio',
 			name: 'nbAspectRatio',
@@ -338,15 +343,15 @@ export class AIMediaGen implements INodeType {
 				{ name: '16:9', value: '16:9' },
 				{ name: '21:9', value: '21:9' },
 			],
-			description: 'Select aspect ratio (for Pro model)',
+			description: 'Select aspect ratio (for Pro model and Nano Banana 2)',
 			displayOptions: {
 				show: {
 					operation: ['nanoBanana'],
-					nbModel: ['nano-banana-pro'],
+					nbModel: ['nano-banana-2', 'nano-banana-pro'],
 				},
 			},
 		},
-		// Nano Banana - Resolution (for Pro model)
+		// Nano Banana - Resolution (for Pro model and Nano Banana 2)
 		{
 			displayName: 'Resolution',
 			name: 'nbResolution',
@@ -357,11 +362,11 @@ export class AIMediaGen implements INodeType {
 				{ name: '2K', value: '2K' },
 				{ name: '4K', value: '4K' },
 			],
-			description: 'Select resolution (only for Pro model)',
+			description: 'Select resolution (for Pro model and Nano Banana 2)',
 			displayOptions: {
 				show: {
 					operation: ['nanoBanana'],
-					nbModel: ['nano-banana-pro'],
+					nbModel: ['nano-banana-2', 'nano-banana-pro'],
 				},
 			},
 		},
@@ -1343,8 +1348,8 @@ export class AIMediaGen implements INodeType {
 
 		// Determine size based on model type
 		let size = '1024x1024';
-		if (model === 'nano-banana-pro') {
-			// For Pro model, get aspect ratio and resolution
+		if (model === 'nano-banana-pro' || model === 'nano-banana-2') {
+			// For Pro model and Nano Banana 2, get aspect ratio and resolution
 			const aspectRatio = context.getNodeParameter('nbAspectRatio', itemIndex) as string || '1:1';
 			const resolution = context.getNodeParameter('nbResolution', itemIndex) as string || '1K';
 
@@ -1354,7 +1359,8 @@ export class AIMediaGen implements INodeType {
 				size = '1024x1024';
 			}
 
-			context.logger?.info('[Nano Banana Pro] Using calculated size', {
+			context.logger?.info('[Nano Banana Pro/2] Using calculated size', {
+				model,
 				aspectRatio,
 				resolution,
 				size,
