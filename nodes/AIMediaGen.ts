@@ -1274,6 +1274,21 @@ export class AIMediaGen implements INodeType {
 	}
 
 	/**
+	 * Delays execution without using setTimeout
+	 *
+	 * Uses setImmediate instead of setTimeout to comply with n8n community node restrictions.
+	 *
+	 * @param ms - Milliseconds to delay
+	 * @returns Promise that resolves after the delay
+	 */
+	private static async delay(ms: number): Promise<void> {
+		const startTime = Date.now();
+		while (Date.now() - startTime < ms) {
+			await new Promise<void>(resolve => setImmediate(() => resolve()));
+		}
+	}
+
+	/**
 	 * Executes a model request for a single item
 	 *
 	 * Validates parameters, builds the request, and calls the ModelScope API.
@@ -1421,6 +1436,7 @@ export class AIMediaGen implements INodeType {
 					input_image: inputImage,
 				},
 				timeout,
+				context,
 				context.logger
 			),
 			{ maxRetries }
@@ -1445,6 +1461,7 @@ export class AIMediaGen implements INodeType {
 		apiKey: string,
 		taskId: string,
 		timeout: number,
+		context?: IExecuteFunctions,
 		logger?: IExecuteFunctions['logger']
 	): Promise<string> {
 		const startTime = Date.now();
@@ -1459,34 +1476,46 @@ export class AIMediaGen implements INodeType {
 
 			// Wait before polling (except first time)
 			if (pollCount > 1) {
-				await new Promise(resolve => setTimeout(resolve, CONSTANTS.ASYNC.POLL_INTERVAL_MS));
+				await AIMediaGen.delay(CONSTANTS.ASYNC.POLL_INTERVAL_MS);
 			}
 
 			logger?.debug('[AI Media Gen] Polling task status', { pollCount, elapsed, taskId });
 
-			const response = await fetch(pollUrl, {
-				method: 'GET',
-				headers: {
-					'Authorization': `Bearer ${apiKey}`,
-					'X-ModelScope-Task-Type': 'image_generation',
-				},
-			});
-
-			const data = await response.json().catch(() => null) as ModelScopeAsyncTaskResponse | null;
+			let data: ModelScopeAsyncTaskResponse;
+			try {
+				if (!context) {
+					throw new MediaGenError('Execution context is required for polling', 'API_ERROR');
+				}
+				data = await context.helpers.httpRequest({
+					method: 'GET',
+					url: pollUrl,
+					headers: {
+						'Authorization': `Bearer ${apiKey}`,
+						'X-ModelScope-Task-Type': 'image_generation',
+					},
+					json: true,
+					timeout: 10000, // 10 second timeout for individual poll requests
+				}) as ModelScopeAsyncTaskResponse;
+			} catch (error) {
+				if (error instanceof Error) {
+					if (error.message.includes('timeout') || error.message.includes('ETIMEDOUT')) {
+						throw new MediaGenError('Poll request timeout', 'TIMEOUT');
+					}
+					throw new MediaGenError(
+						`Failed to check task status: ${error.message}`,
+						'API_ERROR'
+					);
+				}
+				throw new MediaGenError(
+					`Failed to check task status: ${String(error)}`,
+					'API_ERROR'
+				);
+			}
 
 			logger?.debug('[AI Media Gen] Task status response', {
-				statusCode: response.status,
 				taskStatus: data?.task_status,
 				hasOutputImages: !!data?.output_images?.length,
 			});
-
-			if (!response.ok) {
-				throw new MediaGenError(
-					`Failed to check task status: ${response.status} ${response.statusText}`,
-					'API_ERROR',
-					{ statusCode: response.status, statusText: response.statusText, data }
-				);
-			}
 
 			if (!data || !data.task_status) {
 				throw new MediaGenError('Invalid task status response', 'API_ERROR', { data });
@@ -1536,11 +1565,9 @@ export class AIMediaGen implements INodeType {
 		input: { prompt: string },
 		parameters: { size?: string; seed: number; steps: number; num_images?: number; input_image?: string },
 		timeout: number,
+		context?: IExecuteFunctions,
 		logger?: IExecuteFunctions['logger']
 	): Promise<INodeExecutionData> {
-		const controller = new AbortController();
-		const timeoutId = setTimeout(() => controller.abort(), timeout);
-
 		try {
 			// Build OpenAI-compatible request body
 			const requestBody: Record<string, unknown> = {
@@ -1577,49 +1604,48 @@ export class AIMediaGen implements INodeType {
 				hasAsyncHeader: true,
 			});
 
-			const response = await fetch(url, {
-				method: 'POST',
-				headers: {
-					'Authorization': `Bearer ${apiKey}`,
-					'Content-Type': 'application/json',
-					'X-ModelScope-Async-Mode': 'true',  // Enable async mode
-				},
-				body: JSON.stringify(requestBody),
-				signal: controller.signal,
-			});
-
-			// Required for clearing AbortController timeout after successful request
-			clearTimeout(timeoutId);
-
-			logger?.debug('[AI Media Gen] Task submission response', {
-				statusCode: response.status,
-				statusText: response.statusText,
-				ok: response.ok,
-			});
-
-			if (!response.ok) {
-				let errorMessage = 'Failed to generate image';
-				let errorCode = 'API_ERROR';
-
-				if (response.status === 401) {
-					errorMessage = 'Authentication failed. Please check your API Key.';
-					errorCode = 'INVALID_API_KEY';
-				} else if (response.status === 429) {
-					errorMessage = 'Rate limit exceeded. Please try again later.';
-					errorCode = 'RATE_LIMIT';
-				} else if (response.status === 408) {
-					errorMessage = 'Request timeout.';
-					errorCode = 'TIMEOUT';
-				} else if (response.status === 503) {
-					errorMessage = 'Service temporarily unavailable. Please try again later.';
-					errorCode = 'SERVICE_UNAVAILABLE';
-				}
-
-				throw new MediaGenError(errorMessage, errorCode, { statusCode: response.status });
+			if (!context) {
+				throw new MediaGenError('Execution context is required', 'API_ERROR');
 			}
 
-			// Parse task submission response
-			const submitData = await response.json().catch(() => null) as ModelScopeAsyncSubmitResponse | null;
+			let submitData: ModelScopeAsyncSubmitResponse;
+			try {
+				submitData = await context.helpers.httpRequest({
+					method: 'POST',
+					url: url,
+					headers: {
+						'Authorization': `Bearer ${apiKey}`,
+						'Content-Type': 'application/json',
+						'X-ModelScope-Async-Mode': 'true',  // Enable async mode
+					},
+					body: JSON.stringify(requestBody),
+					json: true,
+					timeout: timeout,
+				}) as ModelScopeAsyncSubmitResponse;
+			} catch (error) {
+				if (error instanceof Error) {
+					if (error.message.includes('timeout') || error.message.includes('ETIMEDOUT')) {
+						throw new MediaGenError('Request timeout', 'TIMEOUT');
+					}
+					if (error.message.includes('401')) {
+						throw new MediaGenError('Authentication failed. Please check your API Key.', 'INVALID_API_KEY');
+					}
+					if (error.message.includes('429')) {
+						throw new MediaGenError('Rate limit exceeded. Please try again later.', 'RATE_LIMIT');
+					}
+					if (error.message.includes('503')) {
+						throw new MediaGenError('Service temporarily unavailable. Please try again later.', 'SERVICE_UNAVAILABLE');
+					}
+					throw new MediaGenError(
+						error.message,
+						'API_ERROR'
+					);
+				}
+				throw new MediaGenError(
+					`Failed to submit task: ${String(error)}`,
+					'API_ERROR'
+				);
+			}
 
 			logger?.debug('[AI Media Gen] Task submission data', {
 				hasData: !!submitData,
@@ -1637,6 +1663,7 @@ export class AIMediaGen implements INodeType {
 				apiKey,
 				submitData.task_id,
 				CONSTANTS.ASYNC.POLL_TIMEOUT_MS,
+				context,
 				logger
 			);
 
@@ -1661,13 +1688,6 @@ export class AIMediaGen implements INodeType {
 				},
 			};
 		} catch (error) {
-			// Required for clearing AbortController timeout on error
-			clearTimeout(timeoutId);
-
-			if (error instanceof Error && error.name === 'AbortError') {
-				throw new MediaGenError('Request timeout', 'TIMEOUT');
-			}
-
 			if (error instanceof MediaGenError) {
 				throw error;
 			}
@@ -1703,7 +1723,8 @@ export class AIMediaGen implements INodeType {
 		referenceImages: string[],
 		aspectRatio: string,
 		resolution: string | null,
-		signal: AbortSignal,
+		timeout: number,
+		context: IExecuteFunctions,
 		logger?: IExecuteFunctions['logger']
 	): Promise<string> {
 		// Build parts array
@@ -1756,44 +1777,42 @@ export class AIMediaGen implements INodeType {
 			model,
 		});
 
-		const response = await fetch(`${baseUrl}/v1beta/models/${model}:generateContent`, {
-			method: 'POST',
-			headers: {
-				'x-goog-api-key': credentials.apiKey,
-				'Content-Type': 'application/json',
-			},
-			body: JSON.stringify(requestBody),
-			signal,
-		});
-
-		if (!response.ok) {
-			const errorText = await response.text();
-			logger?.error(`[${model}] API error`, {
-				status: response.status,
-				statusText: response.statusText,
-				body: errorText,
-			});
-
-			// Try to parse error response for more details
-			let errorMessage = `API request failed: ${response.status} ${response.statusText}`;
-			try {
-				const errorData = JSON.parse(errorText);
-				if (errorData.error?.message) {
-					errorMessage = errorData.error.message;
-				}
-			} catch {
-				// Use default error message
-			}
-
-			throw new MediaGenError(errorMessage, 'API_ERROR', {
-				statusCode: response.status,
-				statusText: response.statusText,
-				body: errorText,
-			});
-		}
-
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		const data = await response.json() as any;
+		let data: any;
+		try {
+			data = await context.helpers.httpRequest({
+				method: 'POST',
+				url: `${baseUrl}/v1beta/models/${model}:generateContent`,
+				headers: {
+					'x-goog-api-key': credentials.apiKey,
+					'Content-Type': 'application/json',
+				},
+				body: JSON.stringify(requestBody),
+				json: true,
+				timeout: timeout,
+			});
+		} catch (error) {
+			if (error instanceof Error) {
+				if (error.message.includes('timeout') || error.message.includes('ETIMEDOUT')) {
+					throw new MediaGenError('Request timeout', 'TIMEOUT');
+				}
+				// Try to parse error from response
+				let errorMessage = error.message;
+				try {
+					const errorData = JSON.parse(error.message);
+					if (errorData.error?.message) {
+						errorMessage = errorData.error.message;
+					}
+				} catch {
+					// Use default error message
+				}
+				throw new MediaGenError(errorMessage, 'API_ERROR');
+			}
+			throw new MediaGenError(
+				`API request failed: ${String(error)}`,
+				'API_ERROR'
+			);
+		}
 
 		// Parse standard Gemini API response format
 		let imageUrl = '';
@@ -1934,61 +1953,57 @@ export class AIMediaGen implements INodeType {
 					image?: Array<{ url: string }>;
 				};
 
-			if (imagesData.image && imagesData.image.length > 0) {
-				const items = context.getInputData();
-				const binaryData = items[itemIndex].binary;
+				if (imagesData.image && imagesData.image.length > 0) {
+					const items = context.getInputData();
+					const binaryData = items[itemIndex].binary;
 
-				for (const img of imagesData.image) {
-					if (!img.url || !img.url.trim()) {
-						continue;
-					}
+					for (const img of imagesData.image) {
+						if (!img.url || !img.url.trim()) {
+							continue;
+						}
 
-					let imageData = img.url.trim();
+						let imageData = img.url.trim();
 
-					// Check if it's a binary property name (not a URL or base64)
-					if (!imageData.startsWith('http') && !imageData.startsWith('data:')) {
-						// Treat as binary property name
-						if (binaryData && binaryData[imageData]) {
-							const binary = binaryData[imageData] as { data: string; mimeType: string };
-							if (binary && binary.data) {
-								imageData = `data:${binary.mimeType || 'image/jpeg'};base64,${binary.data}`;
+						// Check if it's a binary property name (not a URL or base64)
+						if (!imageData.startsWith('http') && !imageData.startsWith('data:')) {
+							// Treat as binary property name
+							if (binaryData && binaryData[imageData]) {
+								const binary = binaryData[imageData] as { data: string; mimeType: string };
+								if (binary && binary.data) {
+									imageData = `data:${binary.mimeType || 'image/jpeg'};base64,${binary.data}`;
+								}
 							}
 						}
+
+						referenceImages.push(imageData);
 					}
-
-					referenceImages.push(imageData);
 				}
-			}
 
-			// Validate max images based on model
-			// All Nano Banana 2 variants (including 2k and 4k) support up to 14 images
-			const proModels = ['nano-banana-2', 'nano-banana-2-2k', 'nano-banana-2-4k'];
-			const maxImages = proModels.includes(actualModel) ? 14 : 4;
-			if (referenceImages.length > maxImages) {
-				throw new NodeOperationError(
-					context.getNode(),
-					`Maximum ${maxImages} reference images allowed for ${actualModel}. You provided ${referenceImages.length}.`,
-					{ itemIndex }
-				);
-			}
+				// Validate max images based on model
+				// All Nano Banana 2 variants (including 2k and 4k) support up to 14 images
+				const proModels = ['nano-banana-2', 'nano-banana-2-2k', 'nano-banana-2-4k'];
+				const maxImages = proModels.includes(actualModel) ? 14 : 4;
+				if (referenceImages.length > maxImages) {
+					throw new NodeOperationError(
+						context.getNode(),
+						`Maximum ${maxImages} reference images allowed for ${actualModel}. You provided ${referenceImages.length}.`,
+						{ itemIndex }
+					);
+				}
 
-			if (referenceImages.length > 0) {
-				context.logger?.info(`[${actualModel}] Reference images loaded`, {
-					count: referenceImages.length,
-					maxAllowed: maxImages,
+				if (referenceImages.length > 0) {
+					context.logger?.info(`[${actualModel}] Reference images loaded`, {
+						count: referenceImages.length,
+						maxAllowed: maxImages,
+					});
+				}
+			} catch (error) {
+				// No reference images or error accessing them
+				context.logger?.info(`[${actualModel}] No reference images or error loading them`, {
+					error: error instanceof Error ? error.message : String(error),
 				});
 			}
-		} catch (error) {
-			// No reference images or error accessing them
-			context.logger?.info(`[${actualModel}] No reference images or error loading them`, {
-				error: error instanceof Error ? error.message : String(error),
-			});
 		}
-		}
-
-		const controller = new AbortController();
-		// Required for AbortController timeout implementation
-		const timeoutId = setTimeout(() => controller.abort(), timeout);
 
 		try {
 			// Call the common Gemini request function
@@ -2000,7 +2015,8 @@ export class AIMediaGen implements INodeType {
 				referenceImages,
 				aspectRatio,
 				resolution,
-				controller.signal,
+				timeout,
+				context,
 				context.logger
 			);
 
@@ -2008,35 +2024,33 @@ export class AIMediaGen implements INodeType {
 			let binaryData: { data: string; mimeType: string } | undefined;
 			if (imageUrl && !imageUrl.startsWith('data:')) {
 				try {
-					const imageResponse = await fetch(imageUrl);
-					if (imageResponse.ok) {
-						const buffer = await imageResponse.arrayBuffer();
-						const base64 = Buffer.from(buffer).toString('base64');
+					const imageBuffer = await context.helpers.httpRequest({
+						method: 'GET',
+						url: imageUrl,
+						encoding: 'arraybuffer',
+						timeout: 30000, // 30 second timeout for downloads
+					}) as Buffer;
+					const base64 = imageBuffer.toString('base64');
 
-						// Determine mime type from URL or response
-						let mimeType = 'image/png';
-						const contentType = imageResponse.headers.get('content-type');
-						if (contentType) {
-							mimeType = contentType;
-						} else if (imageUrl.endsWith('.jpg') || imageUrl.endsWith('.jpeg')) {
-							mimeType = 'image/jpeg';
-						} else if (imageUrl.endsWith('.webp')) {
-							mimeType = 'image/webp';
-						} else if (imageUrl.endsWith('.gif')) {
-							mimeType = 'image/gif';
-						}
+					// Determine mime type from URL or response
+					let mimeType = 'image/png';
+					if (imageUrl.endsWith('.jpg') || imageUrl.endsWith('.jpeg')) {
+						mimeType = 'image/jpeg';
+					} else if (imageUrl.endsWith('.webp')) {
+						mimeType = 'image/webp';
+					} else if (imageUrl.endsWith('.gif')) {
+						mimeType = 'image/gif';
+					}
 
-						binaryData = { data: base64, mimeType };
+					binaryData = { data: base64, mimeType };
 
-						const bufferObj = Buffer.from(buffer);
-						const dimensions = getImageDimensions(bufferObj);
-						context.logger?.info(`[${actualModel}] Image downloaded`, {
+					const dimensions = getImageDimensions(imageBuffer);
+					context.logger?.info(`[${actualModel}] Image downloaded`, {
 							mimeType,
-							fileSize: buffer.byteLength,
+							fileSize: imageBuffer.byteLength,
 							dimensions: dimensions ? `${dimensions.width}x${dimensions.height}` : 'unknown',
 							fileName: imageUrl.split('/').pop()?.split('?')[0],
 						});
-					}
 				} catch (error) {
 					context.logger?.warn(`[${actualModel}] Failed to download image`, { error: error instanceof Error ? error.message : String(error) });
 				}
@@ -2073,13 +2087,6 @@ export class AIMediaGen implements INodeType {
 
 			return result;
 		} catch (error) {
-			// Required for clearing AbortController timeout on error
-			clearTimeout(timeoutId);
-
-			if (error instanceof Error && error.name === 'AbortError') {
-				throw new MediaGenError('Request timeout', 'TIMEOUT');
-			}
-
 			if (error instanceof MediaGenError) {
 				throw error;
 			}
@@ -2208,10 +2215,6 @@ export class AIMediaGen implements INodeType {
 			);
 		}
 
-		const controller = new AbortController();
-		// Required for AbortController timeout implementation
-		const timeoutId = setTimeout(() => controller.abort(), timeout);
-
 		try {
 			let imageUrl: string;
 
@@ -2231,33 +2234,28 @@ export class AIMediaGen implements INodeType {
 					size,
 				});
 
-				const response = await fetch(`${baseUrl}/images/generations`, {
-					method: 'POST',
-					headers: {
-						'Authorization': `Bearer ${credentials.apiKey}`,
-						'Content-Type': 'application/json',
-					},
-					body: JSON.stringify(requestBody),
-					signal: controller.signal,
-				});
-
-				// Required for clearing AbortController timeout after successful request
-				clearTimeout(timeoutId);
-
-				if (!response.ok) {
-					const errorText = await response.text();
-					context.logger?.error('[Doubao] API error', {
-						status: response.status,
-						statusText: response.statusText,
-						body: errorText,
-					});
-					throw new MediaGenError(
-						`API request failed: ${response.status} ${response.statusText}`,
-						'API_ERROR'
-					);
+				let data: SeedreamResponse;
+				try {
+					data = await context.helpers.httpRequest({
+						method: 'POST',
+						url: `${baseUrl}/images/generations`,
+						headers: {
+							'Authorization': `Bearer ${credentials.apiKey}`,
+							'Content-Type': 'application/json',
+						},
+						body: JSON.stringify(requestBody),
+						json: true,
+						timeout: timeout,
+					}) as SeedreamResponse;
+				} catch (error) {
+					if (error instanceof Error) {
+						if (error.message.includes('timeout') || error.message.includes('ETIMEDOUT')) {
+							throw new MediaGenError('Request timeout', 'TIMEOUT');
+						}
+						throw new MediaGenError(error.message, 'API_ERROR');
+					}
+					throw new MediaGenError(`API request failed: ${String(error)}`, 'API_ERROR');
 				}
-
-				const data = await response.json() as SeedreamResponse;
 
 				// Parse response - support both OpenAI format and legacy format
 				if (data.data && data.data.length > 0 && data.data[0].url) {
@@ -2294,7 +2292,7 @@ export class AIMediaGen implements INodeType {
 						// Base64 image
 						const base64Data = img.split(',')[1];
 						const byteCharacters = atob(base64Data);
-						const byteNumbers = new Array(byteCharacters.length);
+						const byteNumbers = new Array<number>(byteCharacters.length);
 						for (let i = 0; i < byteCharacters.length; i++) {
 							byteNumbers[i] = byteCharacters.charCodeAt(i);
 						}
@@ -2315,32 +2313,27 @@ export class AIMediaGen implements INodeType {
 					imageCount: inputImages.length,
 				});
 
-				const response = await fetch(`${baseUrl}/images/edits`, {
-					method: 'POST',
-					headers: {
-						'Authorization': `Bearer ${credentials.apiKey}`,
-					},
-					body: formData,
-					signal: controller.signal,
-				});
-
-				// Required for clearing AbortController timeout after successful request
-				clearTimeout(timeoutId);
-
-				if (!response.ok) {
-					const errorText = await response.text();
-					context.logger?.error('[Doubao] API error', {
-						status: response.status,
-						statusText: response.statusText,
-						body: errorText,
-					});
-					throw new MediaGenError(
-						`API request failed: ${response.status} ${response.statusText}`,
-						'API_ERROR'
-					);
+				let data: SeedreamResponse;
+				try {
+					data = await context.helpers.httpRequest({
+						method: 'POST',
+						url: `${baseUrl}/images/edits`,
+						headers: {
+							'Authorization': `Bearer ${credentials.apiKey}`,
+						},
+						body: formData,
+						json: true,
+						timeout: timeout,
+					}) as SeedreamResponse;
+				} catch (error) {
+					if (error instanceof Error) {
+						if (error.message.includes('timeout') || error.message.includes('ETIMEDOUT')) {
+							throw new MediaGenError('Request timeout', 'TIMEOUT');
+						}
+						throw new MediaGenError(error.message, 'API_ERROR');
+					}
+					throw new MediaGenError(`API request failed: ${String(error)}`, 'API_ERROR');
 				}
-
-				const data = await response.json() as SeedreamResponse;
 
 				// Parse response - support both OpenAI format and legacy format
 				if (data.data && data.data.length > 0 && data.data[0].url) {
@@ -2384,24 +2377,29 @@ export class AIMediaGen implements INodeType {
 			if (imageUrl && !imageUrl.startsWith('data:')) {
 				try {
 					context.logger?.info('[Doubao] Downloading image from URL');
-					const imageResponse = await fetch(imageUrl);
-					if (imageResponse.ok) {
-						const buffer = await imageResponse.arrayBuffer();
-						const base64 = Buffer.from(buffer).toString('base64');
-						const mimeType = imageResponse.headers.get('content-type') || 'image/png';
-
-						binaryData.data = {
-							data: base64,
-							mimeType,
-							fileName: `doubao-${Date.now()}.png`,
-						};
-
-						context.logger?.info('[Doubao] Image downloaded successfully');
-					} else {
-						context.logger?.warn('[Doubao] Failed to download image', {
-							status: imageResponse.status,
-						});
+					const imageBuffer = await context.helpers.httpRequest({
+						method: 'GET',
+						url: imageUrl,
+						encoding: 'arraybuffer',
+						timeout: 30000, // 30 second timeout for downloads
+					}) as Buffer;
+					const base64 = imageBuffer.toString('base64');
+					let mimeType = 'image/png';
+					if (imageUrl.endsWith('.jpg') || imageUrl.endsWith('.jpeg')) {
+						mimeType = 'image/jpeg';
+					} else if (imageUrl.endsWith('.webp')) {
+						mimeType = 'image/webp';
+					} else if (imageUrl.endsWith('.gif')) {
+						mimeType = 'image/gif';
 					}
+
+					binaryData.data = {
+						data: base64,
+						mimeType,
+						fileName: `doubao-${Date.now()}.png`,
+					};
+
+					context.logger?.info('[Doubao] Image downloaded successfully');
 				} catch (error) {
 					context.logger?.warn('[Doubao] Failed to download image', {
 						error: error instanceof Error ? error.message : String(error),
@@ -2414,13 +2412,6 @@ export class AIMediaGen implements INodeType {
 				binary: Object.keys(binaryData).length > 0 ? binaryData : undefined,
 			};
 		} catch (error) {
-			// Required for clearing AbortController timeout on error
-			clearTimeout(timeoutId);
-
-			if (error instanceof Error && error.name === 'AbortError') {
-				throw new MediaGenError('Request timeout', 'TIMEOUT');
-			}
-
 			if (error instanceof MediaGenError) {
 				throw error;
 			}

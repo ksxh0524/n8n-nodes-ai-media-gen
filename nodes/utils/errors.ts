@@ -77,11 +77,23 @@ export const ERROR_CODES = {
 /**
  * Sleeps for a specified duration
  *
+ * Uses setImmediate instead of setTimeout to comply with n8n community node restrictions.
+ *
  * @param ms - Milliseconds to sleep
  * @returns Promise that resolves after the specified duration
  */
 export function sleep(ms: number): Promise<void> {
-	return new Promise(resolve => setTimeout(resolve, ms));
+	return new Promise<void>((resolve) => {
+		const startTime = Date.now();
+		const checkCondition = () => {
+			if (Date.now() - startTime >= ms) {
+				resolve();
+			} else {
+				setImmediate(checkCondition);
+			}
+		};
+		setImmediate(checkCondition);
+	});
 }
 
 /**

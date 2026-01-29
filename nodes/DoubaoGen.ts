@@ -387,10 +387,6 @@ export class DoubaoGen implements INodeType {
 			);
 		}
 
-		const controller = new AbortController();
-		// Required for AbortController timeout implementation
-		const timeoutId = setTimeout(() => controller.abort(), timeout);
-
 		try {
 			let imageUrl: string;
 
@@ -411,33 +407,28 @@ export class DoubaoGen implements INodeType {
 					size,
 				});
 
-				const response = await fetch(`${baseUrl}/images/generations`, {
-					method: 'POST',
-					headers: {
-						'Authorization': `Bearer ${credentials.apiKey}`,
-						'Content-Type': 'application/json',
-					},
-					body: JSON.stringify(requestBody),
-					signal: controller.signal,
-				});
-
-				// Required for clearing AbortController timeout after successful request
-				clearTimeout(timeoutId);
-
-				if (!response.ok) {
-					const errorText = await response.text();
-					context.logger?.error('[Doubao] API error', {
-						status: response.status,
-						statusText: response.statusText,
-						body: errorText,
-					});
-					throw new MediaGenError(
-						`API request failed: ${response.status} ${response.statusText}`,
-						'API_ERROR'
-					);
+				let data: SeedreamResponse;
+				try {
+					data = await context.helpers.httpRequest({
+						method: 'POST',
+						url: `${baseUrl}/images/generations`,
+						headers: {
+							'Authorization': `Bearer ${credentials.apiKey}`,
+							'Content-Type': 'application/json',
+						},
+						body: JSON.stringify(requestBody),
+						json: true,
+						timeout: timeout,
+					}) as SeedreamResponse;
+				} catch (error) {
+					if (error instanceof Error) {
+						if (error.message.includes('timeout') || error.message.includes('ETIMEDOUT')) {
+							throw new MediaGenError('Request timeout', 'TIMEOUT');
+						}
+						throw new MediaGenError(error.message, 'API_ERROR');
+					}
+					throw new MediaGenError(`API request failed: ${String(error)}`, 'API_ERROR');
 				}
-
-				const data = await response.json() as SeedreamResponse;
 
 				// Parse response - support both OpenAI format and legacy format
 				if (data.data && data.data.length > 0 && data.data[0].url) {
@@ -494,32 +485,27 @@ export class DoubaoGen implements INodeType {
 					
 				});
 
-				const response = await fetch(`${baseUrl}/images/edits`, {
-					method: 'POST',
-					headers: {
-						'Authorization': `Bearer ${credentials.apiKey}`,
-					},
-					body: formData,
-					signal: controller.signal,
-				});
-
-				// Required for clearing AbortController timeout after successful request
-				clearTimeout(timeoutId);
-
-				if (!response.ok) {
-					const errorText = await response.text();
-					context.logger?.error('[Doubao] API error', {
-						status: response.status,
-						statusText: response.statusText,
-						body: errorText,
-					});
-					throw new MediaGenError(
-						`API request failed: ${response.status} ${response.statusText}`,
-						'API_ERROR'
-					);
+				let data: SeedreamResponse;
+				try {
+					data = await context.helpers.httpRequest({
+						method: 'POST',
+						url: `${baseUrl}/images/edits`,
+						headers: {
+							'Authorization': `Bearer ${credentials.apiKey}`,
+						},
+						body: formData,
+						json: true,
+						timeout: timeout,
+					}) as SeedreamResponse;
+				} catch (error) {
+					if (error instanceof Error) {
+						if (error.message.includes('timeout') || error.message.includes('ETIMEDOUT')) {
+							throw new MediaGenError('Request timeout', 'TIMEOUT');
+						}
+						throw new MediaGenError(error.message, 'API_ERROR');
+					}
+					throw new MediaGenError(`API request failed: ${String(error)}`, 'API_ERROR');
 				}
-
-				const data = await response.json() as SeedreamResponse;
 
 				// Parse response - support both OpenAI format and legacy format
 				if (data.data && data.data.length > 0 && data.data[0].url) {
@@ -561,24 +547,29 @@ export class DoubaoGen implements INodeType {
 			if (imageUrl && !imageUrl.startsWith('data:')) {
 				try {
 					context.logger?.info('[Doubao] Downloading image from URL');
-					const imageResponse = await fetch(imageUrl);
-					if (imageResponse.ok) {
-						const buffer = await imageResponse.arrayBuffer();
-						const base64 = Buffer.from(buffer).toString('base64');
-						const mimeType = imageResponse.headers.get('content-type') || 'image/png';
-
-						binaryData.data = {
-							data: base64,
-							mimeType,
-							fileName: `doubao-${Date.now()}.png`,
-						};
-
-						context.logger?.info('[Doubao] Image downloaded successfully');
-					} else {
-						context.logger?.warn('[Doubao] Failed to download image', {
-							status: imageResponse.status,
-						});
+					const imageBuffer = await context.helpers.httpRequest({
+						method: 'GET',
+						url: imageUrl,
+						encoding: 'arraybuffer',
+						timeout: 30000, // 30 second timeout for downloads
+					}) as Buffer;
+					const base64 = imageBuffer.toString('base64');
+					let mimeType = 'image/png';
+					if (imageUrl.endsWith('.jpg') || imageUrl.endsWith('.jpeg')) {
+						mimeType = 'image/jpeg';
+					} else if (imageUrl.endsWith('.webp')) {
+						mimeType = 'image/webp';
+					} else if (imageUrl.endsWith('.gif')) {
+						mimeType = 'image/gif';
 					}
+
+					binaryData.data = {
+						data: base64,
+						mimeType,
+						fileName: `doubao-${Date.now()}.png`,
+					};
+
+					context.logger?.info('[Doubao] Image downloaded successfully');
 				} catch (error) {
 					context.logger?.warn('[Doubao] Failed to download image', {
 						error: error instanceof Error ? error.message : String(error),
@@ -591,13 +582,6 @@ export class DoubaoGen implements INodeType {
 				binary: Object.keys(binaryData).length > 0 ? binaryData : undefined,
 			};
 		} catch (error) {
-			// Required for clearing AbortController timeout on error
-			clearTimeout(timeoutId);
-
-			if (error instanceof Error && error.name === 'AbortError') {
-				throw new MediaGenError('Request timeout', 'TIMEOUT');
-			}
-
 			if (error instanceof MediaGenError) {
 				throw error;
 			}
