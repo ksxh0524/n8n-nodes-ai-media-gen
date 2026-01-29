@@ -34,7 +34,7 @@ export class doubaoApi implements ICredentialType {
 	test: ICredentialTestRequest = {
 		request: {
 			baseURL: '={{$credentials.baseUrl || "https://ark.cn-beijing.volces.com/api/v3"}}',
-			url: '/seedream/text2image/v1',
+			url: '/images/generations',
 			method: 'POST' as const,
 			body: {
 				model: 'doubao-seedream-4-5-251128',

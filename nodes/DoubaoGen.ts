@@ -372,7 +372,7 @@ export class DoubaoGen implements INodeType {
 					responseFormat,
 				});
 
-				const response = await fetch(`${baseUrl}/seedream/text2image/v1`, {
+				const response = await fetch(`${baseUrl}/images/generations`, {
 					method: 'POST',
 					headers: {
 						'Authorization': `Bearer ${credentials.apiKey}`,
@@ -449,7 +449,7 @@ export class DoubaoGen implements INodeType {
 					responseFormat,
 				});
 
-				const response = await fetch(`${baseUrl}/seedream/image2image/v1`, {
+				const response = await fetch(`${baseUrl}/images/edits`, {
 					method: 'POST',
 					headers: {
 						'Authorization': `Bearer ${credentials.apiKey}`,

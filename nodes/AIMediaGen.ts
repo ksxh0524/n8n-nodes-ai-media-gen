@@ -2169,7 +2169,6 @@ export class AIMediaGen implements INodeType {
 					size,
 					stream: false,
 					watermark: false,
-					seed: seed > 0 ? seed : undefined,
 				};
 
 				context.logger?.info('[Doubao] Sending text-to-image request', {
@@ -2178,7 +2177,7 @@ export class AIMediaGen implements INodeType {
 					size,
 				});
 
-				const response = await fetch(`${baseUrl}/seedream/text2image/v1`, {
+				const response = await fetch(`${baseUrl}/images/generations`, {
 					method: 'POST',
 					headers: {
 						'Authorization': `Bearer ${credentials.apiKey}`,
@@ -2255,7 +2254,7 @@ export class AIMediaGen implements INodeType {
 					imageCount: inputImages.length,
 				});
 
-				const response = await fetch(`${baseUrl}/seedream/image2image/v1`, {
+				const response = await fetch(`${baseUrl}/images/edits`, {
 					method: 'POST',
 					headers: {
 						'Authorization': `Bearer ${credentials.apiKey}`,
