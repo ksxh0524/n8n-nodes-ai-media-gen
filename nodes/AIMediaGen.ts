@@ -449,7 +449,7 @@ export class AIMediaGen implements INodeType {
 					doubaoMode: ['image-to-image'],
 				},
 			},
-			description: 'Reference images to guide generation (supports: URL, base64, or binary property name). For image-to-image mode.',
+			description: 'Reference images to guide generation (max: 14 images). Supports: URL, base64, or binary property name.',
 			options: [
 				{
 					displayName: 'Image',
@@ -2114,6 +2114,16 @@ export class AIMediaGen implements INodeType {
 					const items = context.getInputData();
 					const binaryData = items[itemIndex].binary;
 
+					// Validate max images (Doubao supports up to 14 reference images)
+					const maxImages = 14;
+					if (imagesData.image.length > maxImages) {
+						throw new NodeOperationError(
+							context.getNode(),
+							`Maximum ${maxImages} reference images allowed for ${model}. You provided ${imagesData.image.length}.`,
+							{ itemIndex }
+						);
+					}
+
 					// Use the first image as the main input image
 					const firstImage = imagesData.image[0];
 					if (firstImage.url && firstImage.url.trim()) {
@@ -2135,6 +2145,7 @@ export class AIMediaGen implements INodeType {
 
 					context.logger?.info('[Doubao] Reference images loaded', {
 						count: imagesData.image.length,
+						maxAllowed: maxImages,
 					});
 				}
 			} catch (error) {
