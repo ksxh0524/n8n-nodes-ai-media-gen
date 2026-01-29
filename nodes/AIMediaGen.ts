@@ -320,23 +320,74 @@ export class AIMediaGen implements INodeType {
 				},
 			},
 		},
-		// Nano Banana - Size
+		// Nano Banana - Aspect Ratio (for Pro model)
+		{
+			displayName: 'Aspect Ratio',
+			name: 'nbAspectRatio',
+			type: 'options',
+			default: '1:1',
+			options: [
+				{ name: '1:1 (Square)', value: '1:1' },
+				{ name: '2:3 (Portrait)', value: '2:3' },
+				{ name: '3:2 (Landscape)', value: '3:2' },
+				{ name: '3:4 (Portrait)', value: '3:4' },
+				{ name: '4:3 (Landscape)', value: '4:3' },
+				{ name: '4:5 (Portrait)', value: '4:5' },
+				{ name: '5:4 (Landscape)', value: '5:4' },
+				{ name: '9:16 (Portrait)', value: '9:16' },
+				{ name: '16:9 (Landscape)', value: '16:9' },
+				{ name: '21:9 (Ultra Wide)', value: '21:9' },
+			],
+			description: 'Select aspect ratio (for Pro model)',
+			displayOptions: {
+				show: {
+					operation: ['nanoBanana'],
+					nbModel: ['nano-banana-pro'],
+				},
+			},
+		},
+		// Nano Banana - Resolution (for Pro model)
+		{
+			displayName: 'Resolution',
+			name: 'nbResolution',
+			type: 'options',
+			default: '1K',
+			options: [
+				{ name: '1K (~1120 tokens)', value: '1K' },
+				{ name: '2K (~1120 tokens)', value: '2K' },
+				{ name: '4K (~2000 tokens)', value: '4K' },
+			],
+			description: 'Select resolution (only for Pro model)',
+			displayOptions: {
+				show: {
+					operation: ['nanoBanana'],
+					nbModel: ['nano-banana-pro'],
+				},
+			},
+		},
+		// Nano Banana - Size (for standard model)
 		{
 			displayName: 'Size',
 			name: 'nbSize',
 			type: 'options',
 			default: '1024x1024',
 			options: [
-				{ name: '256x256', value: '256x256' },
-				{ name: '512x512', value: '512x512' },
-				{ name: '1024x1024', value: '1024x1024' },
-				{ name: '1792x1024', value: '1792x1024' },
-				{ name: '1024x1792', value: '1024x1792' },
+				{ name: '1:1 - 1024x1024', value: '1024x1024' },
+				{ name: '2:3 - 832x1248', value: '832x1248' },
+				{ name: '3:2 - 1248x832', value: '1248x832' },
+				{ name: '3:4 - 864x1184', value: '864x1184' },
+				{ name: '4:3 - 1184x864', value: '1184x864' },
+				{ name: '4:5 - 896x1152', value: '896x1152' },
+				{ name: '5:4 - 1152x896', value: '1152x896' },
+				{ name: '9:16 - 768x1344', value: '768x1344' },
+				{ name: '16:9 - 1344x768', value: '1344x768' },
+				{ name: '21:9 - 1536x672', value: '1536x672' },
 			],
-			description: 'Image size (Note: HD model supports up to 4K)',
+			description: 'Image size (1K resolution only)',
 			displayOptions: {
 				show: {
 					operation: ['nanoBanana'],
+					nbModel: ['nano-banana', 'custom'],
 				},
 			},
 		},
@@ -1269,13 +1320,49 @@ export class AIMediaGen implements INodeType {
 			baseUrl,
 		});
 
+		// Resolution map for Nano Banana Pro (aspect ratio -> resolution)
+		const PRO_RESOLUTION_MAP: Record<string, Record<string, string>> = {
+			'1:1': { '1K': '1024x1024', '2K': '2048x2048', '4K': '4096x4096' },
+			'2:3': { '1K': '848x1264', '2K': '1696x2528', '4K': '3392x5056' },
+			'3:2': { '1K': '1264x848', '2K': '2528x1696', '4K': '5056x3392' },
+			'3:4': { '1K': '896x1200', '2K': '1792x2400', '4K': '3584x4800' },
+			'4:3': { '1K': '1200x896', '2K': '2400x1792', '4K': '4800x3584' },
+			'4:5': { '1K': '928x1152', '2K': '1856x2304', '4K': '3712x4608' },
+			'5:4': { '1K': '1152x928', '2K': '2304x1856', '4K': '4608x3712' },
+			'9:16': { '1K': '768x1376', '2K': '1536x2752', '4K': '3072x5504' },
+			'16:9': { '1K': '1376x768', '2K': '2752x1536', '4K': '5504x3072' },
+			'21:9': { '1K': '1584x672', '2K': '3168x1344', '4K': '6336x2688' },
+		};
+
 		// Get parameters
 		const mode = context.getNodeParameter('nbMode', itemIndex) as string;
 		let model = context.getNodeParameter('nbModel', itemIndex) as string;
 		const prompt = context.getNodeParameter('nbPrompt', itemIndex) as string;
 		const n = context.getNodeParameter('nbN', itemIndex) as number || 1;
-		const size = context.getNodeParameter('nbSize', itemIndex) as string || '1024x1024';
 		const responseFormat = context.getNodeParameter('nbResponseFormat', itemIndex) as string || 'url';
+
+		// Determine size based on model type
+		let size = '1024x1024';
+		if (model === 'nano-banana-pro') {
+			// For Pro model, get aspect ratio and resolution
+			const aspectRatio = context.getNodeParameter('nbAspectRatio', itemIndex) as string || '1:1';
+			const resolution = context.getNodeParameter('nbResolution', itemIndex) as string || '1K';
+
+			if (PRO_RESOLUTION_MAP[aspectRatio] && PRO_RESOLUTION_MAP[aspectRatio][resolution]) {
+				size = PRO_RESOLUTION_MAP[aspectRatio][resolution];
+			} else {
+				size = '1024x1024';
+			}
+
+			context.logger?.info('[Nano Banana Pro] Using calculated size', {
+				aspectRatio,
+				resolution,
+				size,
+			});
+		} else {
+			// For standard model or custom, get size directly
+			size = context.getNodeParameter('nbSize', itemIndex) as string || '1024x1024';
+		}
 
 		// Handle custom model ID
 		if (model === 'custom') {
