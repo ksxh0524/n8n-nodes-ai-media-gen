@@ -213,31 +213,21 @@ export class AIMediaGen implements INodeType {
 					description: 'High quality Pro model',
 				},
 				{
-					name: 'Custom Model',
-					value: 'custom',
-					description: 'Enter a custom model ID',
+					name: 'Gemini 2.5 Flash Image',
+					value: 'gemini-2.5-flash-image',
+					description: 'Fast generation model',
+				},
+				{
+					name: 'Gemini 3 Pro Image Preview',
+					value: 'gemini-3-pro-image-preview',
+					description: 'High quality Pro model',
 				},
 			],
 			default: 'nano-banana',
-			description: 'Select model or enter custom model ID',
+			description: 'Select model to use',
 			displayOptions: {
 				show: {
 					operation: ['nanoBanana'],
-				},
-			},
-		},
-		// Nano Banana - Custom Model ID
-		{
-			displayName: 'Custom Model ID',
-			name: 'nbCustomModelId',
-			type: 'string',
-			default: '',
-			placeholder: 'e.g., gpt-4-image, dalle-3, etc.',
-			description: 'Enter a custom model ID to use',
-			displayOptions: {
-				show: {
-					operation: ['nanoBanana'],
-					nbModel: ['custom'],
 				},
 			},
 		},
@@ -325,7 +315,7 @@ export class AIMediaGen implements INodeType {
 				},
 			},
 		},
-		// Nano Banana - Aspect Ratio (for Pro model and Nano Banana 2)
+		// Nano Banana - Aspect Ratio (for Pro models)
 		{
 			displayName: 'Aspect Ratio',
 			name: 'nbAspectRatio',
@@ -343,15 +333,15 @@ export class AIMediaGen implements INodeType {
 				{ name: '16:9', value: '16:9' },
 				{ name: '21:9', value: '21:9' },
 			],
-			description: 'Select aspect ratio (for Pro model and Nano Banana 2)',
+			description: 'Select aspect ratio (for Pro models)',
 			displayOptions: {
 				show: {
 					operation: ['nanoBanana'],
-					nbModel: ['nano-banana-2', 'nano-banana-pro'],
+					nbModel: ['nano-banana-2', 'nano-banana-pro', 'gemini-3-pro-image-preview'],
 				},
 			},
 		},
-		// Nano Banana - Resolution (for Pro model and Nano Banana 2)
+		// Nano Banana - Resolution (for Pro models)
 		{
 			displayName: 'Resolution',
 			name: 'nbResolution',
@@ -362,15 +352,15 @@ export class AIMediaGen implements INodeType {
 				{ name: '2K', value: '2K' },
 				{ name: '4K', value: '4K' },
 			],
-			description: 'Select resolution (for Pro model and Nano Banana 2)',
+			description: 'Select resolution (for Pro models)',
 			displayOptions: {
 				show: {
 					operation: ['nanoBanana'],
-					nbModel: ['nano-banana-2', 'nano-banana-pro'],
+					nbModel: ['nano-banana-2', 'nano-banana-pro', 'gemini-3-pro-image-preview'],
 				},
 			},
 		},
-		// Nano Banana - Size (for standard model)
+		// Nano Banana - Size (for standard models)
 		{
 			displayName: 'Size',
 			name: 'nbSize',
@@ -392,7 +382,7 @@ export class AIMediaGen implements INodeType {
 			displayOptions: {
 				show: {
 					operation: ['nanoBanana'],
-					nbModel: ['nano-banana', 'custom'],
+					nbModel: ['nano-banana', 'gemini-2.5-flash-image'],
 				},
 			},
 		},
@@ -1341,15 +1331,18 @@ export class AIMediaGen implements INodeType {
 
 		// Get parameters
 		const mode = context.getNodeParameter('nbMode', itemIndex) as string;
-		let model = context.getNodeParameter('nbModel', itemIndex) as string;
+		const model = context.getNodeParameter('nbModel', itemIndex) as string;
 		const prompt = context.getNodeParameter('nbPrompt', itemIndex) as string;
 		const n = context.getNodeParameter('nbN', itemIndex) as number || 1;
 		const responseFormat = context.getNodeParameter('nbResponseFormat', itemIndex) as string || 'url';
 
 		// Determine size based on model type
 		let size = '1024x1024';
-		if (model === 'nano-banana-pro' || model === 'nano-banana-2') {
-			// For Pro model and Nano Banana 2, get aspect ratio and resolution
+		const proModels = ['nano-banana-2', 'nano-banana-pro', 'gemini-3-pro-image-preview'];
+		const standardModels = ['nano-banana', 'gemini-2.5-flash-image'];
+
+		if (proModels.includes(model)) {
+			// For Pro models, get aspect ratio and resolution
 			const aspectRatio = context.getNodeParameter('nbAspectRatio', itemIndex) as string || '1:1';
 			const resolution = context.getNodeParameter('nbResolution', itemIndex) as string || '1K';
 
@@ -1359,28 +1352,18 @@ export class AIMediaGen implements INodeType {
 				size = '1024x1024';
 			}
 
-			context.logger?.info('[Nano Banana Pro/2] Using calculated size', {
+			context.logger?.info('[Pro Model] Using calculated size', {
 				model,
 				aspectRatio,
 				resolution,
 				size,
 			});
-		} else {
-			// For standard model or custom, get size directly
+		} else if (standardModels.includes(model)) {
+			// For standard models, get size directly
 			size = context.getNodeParameter('nbSize', itemIndex) as string || '1024x1024';
-		}
-
-		// Handle custom model ID
-		if (model === 'custom') {
-			const customModelId = context.getNodeParameter('nbCustomModelId', itemIndex) as string;
-			if (!customModelId || customModelId.trim() === '') {
-				throw new NodeOperationError(
-					context.getNode(),
-					'Custom Model ID is required when Custom Model is selected',
-					{ itemIndex }
-				);
-			}
-			model = customModelId.trim();
+		} else {
+			// Unknown model, use default
+			size = '1024x1024';
 		}
 
 		// Get timeout
