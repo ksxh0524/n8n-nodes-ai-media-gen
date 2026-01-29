@@ -42,6 +42,16 @@ interface GooglePalmApiCredentials {
 }
 
 /**
+ * Doubao API credentials
+ */
+interface DoubaoApiCredentials {
+	/** API key for authentication */
+	apiKey: string;
+	/** Optional custom base URL */
+	baseUrl?: string;
+}
+
+/**
  * ModelScope async task submission response
  */
 interface ModelScopeAsyncSubmitResponse {
@@ -55,6 +65,16 @@ interface ModelScopeAsyncTaskResponse {
 	task_status: 'PENDING' | 'RUNNING' | 'SUCCEED' | 'FAILED';
 	output_images?: Array<{ url: string }>;
 	message?: string;
+}
+
+/**
+ * Seedream image generation response
+ */
+interface SeedreamResponse {
+	request_id: string;
+	output_url?: string;
+	b64_json?: string;
+	status: string;
 }
 
 /**
@@ -130,6 +150,15 @@ export class AIMediaGen implements INodeType {
 					},
 				},
 			},
+			{
+				name: 'doubaoApi',
+				required: true,
+				displayOptions: {
+					show: {
+						operation: ['doubao'],
+					},
+				},
+			},
 		],
 		properties: [
 		{
@@ -147,6 +176,11 @@ export class AIMediaGen implements INodeType {
 					name: 'Nano Banana',
 					value: 'nanoBanana',
 					description: 'Generate and edit images using Google Nano Banana (Gemini 2.5 Flash)',
+				},
+				{
+					name: 'Doubao',
+					value: 'doubao',
+					description: 'Generate and edit images using Doubao Seedream AI model',
 				},
 			],
 			default: 'modelscope',
@@ -328,6 +362,168 @@ export class AIMediaGen implements INodeType {
 				show: {
 					operation: ['nanoBanana'],
 					nbModel: ['nano-banana-2'],
+				},
+			},
+		},
+		// Doubao - Mode
+		{
+			displayName: 'Mode',
+			name: 'doubaoMode',
+			type: 'options',
+			required: true,
+			options: [
+				{
+					name: 'Text to Image',
+					value: 'text-to-image',
+					description: 'Generate images from text description',
+				},
+				{
+					name: 'Image to Image',
+					value: 'image-to-image',
+					description: 'Edit images with text instructions',
+				},
+			],
+			default: 'text-to-image',
+			description: 'Select generation mode',
+			displayOptions: {
+				show: {
+					operation: ['doubao'],
+				},
+			},
+		},
+		// Doubao - Model
+		{
+			displayName: 'Model',
+			name: 'doubaoModel',
+			type: 'options',
+			required: true,
+			options: [
+				{
+					name: 'Doubao Seedream 4.5',
+					value: 'doubao-seedream-4.5',
+					description: 'Latest high-quality image generation model',
+				},
+				{
+					name: 'Doubao Seedream 4.0',
+					value: 'doubao-seedream-4.0',
+					description: 'Previous generation model',
+				},
+			],
+			default: 'doubao-seedream-4.5',
+			description: 'Select Doubao model to use',
+			displayOptions: {
+				show: {
+					operation: ['doubao'],
+				},
+			},
+		},
+		// Doubao - Prompt
+		{
+			displayName: 'Prompt',
+			name: 'doubaoPrompt',
+			type: 'string',
+			typeOptions: {
+				rows: 5,
+			},
+			default: '',
+			required: true,
+			description: 'Text description for generation or editing',
+			displayOptions: {
+				show: {
+					operation: ['doubao'],
+				},
+			},
+		},
+		// Doubao - Reference Images
+		{
+			displayName: 'Reference Images',
+			name: 'doubaoInputImages',
+			type: 'fixedCollection',
+			typeOptions: {
+				multipleValues: true,
+			},
+			default: {},
+			displayOptions: {
+				show: {
+					operation: ['doubao'],
+					doubaoMode: ['image-to-image'],
+				},
+			},
+			description: 'Reference images to guide generation (supports: URL, base64, or binary property name). For image-to-image mode.',
+			options: [
+				{
+					displayName: 'Image',
+					name: 'image',
+					values: [
+						{
+							displayName: 'Image',
+							name: 'url',
+							type: 'string',
+							default: '',
+							placeholder: 'https://... or data:image/... or binary property name',
+							description: 'Image URL, base64 data, or binary property name',
+							typeOptions: {
+								rows: 2,
+							},
+						},
+					],
+				},
+			],
+		},
+		// Doubao - Size
+		{
+			displayName: 'Size',
+			name: 'doubaoSize',
+			type: 'options',
+			default: '2K',
+			options: [
+				{ name: '2K (2048x2048)', value: '2K' },
+				{ name: '4K (4096x4096)', value: '4K' },
+				{ name: '1080P (1920x1080)', value: '1080P' },
+				{ name: '1024x1024', value: '1024x1024' },
+				{ name: '768x1024', value: '768x1024' },
+				{ name: '1024x768', value: '1024x768' },
+				{ name: '768x768', value: '768x768' },
+				{ name: '512x512', value: '512x512' },
+			],
+			description: 'Image size/resolution',
+			displayOptions: {
+				show: {
+					operation: ['doubao'],
+				},
+			},
+		},
+		// Doubao - Response Format
+		{
+			displayName: 'Response Format',
+			name: 'doubaoResponseFormat',
+			type: 'options',
+			default: 'url',
+			options: [
+				{ name: 'URL', value: 'url' },
+				{ name: 'Base64', value: 'b64_json' },
+			],
+			description: 'Response format: URL or Base64',
+			displayOptions: {
+				show: {
+					operation: ['doubao'],
+				},
+			},
+		},
+		// Doubao - Seed
+		{
+			displayName: 'Seed',
+			name: 'doubaoSeed',
+			type: 'number',
+			default: 0,
+			typeOptions: {
+				minValue: 0,
+				maxValue: 4294967295,
+			},
+			description: 'Random seed for generation (0 for random)',
+			displayOptions: {
+				show: {
+					operation: ['doubao'],
 				},
 			},
 		},
@@ -590,7 +786,132 @@ export class AIMediaGen implements INodeType {
 
 				let result: INodeExecutionData;
 
-				if (operation === 'nanoBanana') {
+				if (operation === 'doubao') {
+					// Handle Doubao operation
+					const credentials = await this.getCredentials<DoubaoApiCredentials>('doubaoApi');
+					if (!credentials || !credentials.apiKey) {
+						throw new NodeOperationError(
+							this.getNode(),
+							'API Key is required. Please configure your Doubao API credentials.',
+							{ itemIndex: i }
+						);
+					}
+
+					const timerId = performanceMonitor.startTimer('doubao');
+
+					// Check cache if enabled
+					if (enableCache) {
+						const model = this.getNodeParameter('doubaoModel', i) as string;
+						const mode = this.getNodeParameter('doubaoMode', i) as string;
+						const prompt = this.getNodeParameter('doubaoPrompt', i) as string;
+
+						// Build cache parameters
+						const cacheParams: Record<string, unknown> = {
+							mode,
+							model,
+						};
+
+						// Add size
+						try {
+							cacheParams.size = this.getNodeParameter('doubaoSize', i);
+						} catch (error) {
+							cacheParams.size = '2K';
+						}
+
+						// Add seed
+						try {
+							cacheParams.seed = this.getNodeParameter('doubaoSeed', i);
+						} catch (error) {
+							cacheParams.seed = 0;
+						}
+
+						// Add response format
+						try {
+							cacheParams.responseFormat = this.getNodeParameter('doubaoResponseFormat', i);
+						} catch (error) {
+							cacheParams.responseFormat = 'url';
+						}
+
+						// Add input image for image-to-image mode
+						if (mode === 'image-to-image') {
+							try {
+								const imagesData = this.getNodeParameter('doubaoInputImages', i) as {
+									image?: Array<{ url: string }>;
+								};
+								if (imagesData.image && imagesData.image.length > 0) {
+									// Create hash of all image URLs for cache key
+									cacheParams.images = imagesData.image.map(img => img.url).join('|');
+								}
+							} catch (error) {
+								// No reference images
+							}
+						}
+
+						const cacheKey = CacheKeyGenerator.forGeneration(
+							'doubao',
+							model,
+							prompt,
+							cacheParams
+						);
+						const cached = await cacheManager.get(cacheKey);
+
+						if (cached) {
+							this.logger?.info('Cache hit', { model, cacheKey });
+							result = {
+								json: {
+									success: true,
+									...cached as Record<string, unknown>,
+									_metadata: {
+										model,
+										cached: true,
+										timestamp: new Date().toISOString(),
+									},
+								},
+							};
+						} else {
+							this.logger?.info('Cache miss', { model, cacheKey });
+							result = await AIMediaGen.executeDoubaoRequest(this, i, credentials);
+
+							// Safely get cacheTtl
+							let cacheTtl: number = CONSTANTS.DEFAULTS.CACHE_TTL_SECONDS;
+							try {
+								cacheTtl = this.getNodeParameter('options.cacheTtl', i) as number;
+							} catch (error) {
+								this.logger?.debug('Options cacheTtl not set, using default', {
+									index: i,
+									defaultValue: CONSTANTS.DEFAULTS.CACHE_TTL_SECONDS
+								});
+								cacheTtl = CONSTANTS.DEFAULTS.CACHE_TTL_SECONDS;
+							}
+
+							if (result.json.success) {
+								await cacheManager.set(cacheKey, result.json, cacheTtl);
+							}
+						}
+					} else {
+						result = await AIMediaGen.executeDoubaoRequest(this, i, credentials);
+					}
+
+					const elapsed = performanceMonitor.endTimer(timerId);
+
+					performanceMonitor.recordMetric({
+						timestamp: Date.now().toString(),
+						provider: 'doubao',
+						model: result.json.model as string,
+						mediaType: 'image',
+						duration: elapsed,
+						success: result.json.success as boolean,
+						fromCache: (result.json._metadata as ResultMetadata)?.cached || false,
+					});
+
+					this.logger?.info('Execution completed', {
+						model: result.json.model,
+						duration: elapsed,
+						success: result.json.success,
+					});
+
+					results.push(result);
+				} else if (operation === 'nanoBanana') {
 					// Handle Nano Banana operation
 					const credentials = await this.getCredentials<GooglePalmApiCredentials>('googlePalmApi');
 					if (!credentials || !credentials.apiKey) {
@@ -871,9 +1192,18 @@ export class AIMediaGen implements INodeType {
 				// Get operation for error logging
 				const operation = this.getNodeParameter('operation', i) as string;
 
+				let model: string;
+				if (operation === 'nanoBanana') {
+					model = this.getNodeParameter('nbModel', i) as string;
+				} else if (operation === 'doubao') {
+					model = this.getNodeParameter('doubaoModel', i) as string;
+				} else {
+					model = this.getNodeParameter('model', i) as string;
+				}
+
 				this.logger?.error('Execution failed', {
 					operation,
-					model: operation === 'nanoBanana' ? this.getNodeParameter('nbModel', i) : this.getNodeParameter('model', i),
+					model,
 					error: error instanceof Error ? error.message : String(error),
 					errorCode,
 					errorDetails,
@@ -1711,6 +2041,308 @@ export class AIMediaGen implements INodeType {
 			}
 
 			return result;
+		} catch (error) {
+			clearTimeout(timeoutId);
+
+			if (error instanceof Error && error.name === 'AbortError') {
+				throw new MediaGenError('Request timeout', 'TIMEOUT');
+			}
+
+			if (error instanceof MediaGenError) {
+				throw error;
+			}
+
+			throw new MediaGenError(
+				error instanceof Error ? error.message : String(error),
+				'NETWORK_ERROR'
+			);
+		}
+	}
+
+	/**
+	 * Executes Doubao API request
+	 *
+	 * @param context - n8n execution context
+	 * @param itemIndex - Index of the item being processed
+	 * @param credentials - Doubao API credentials
+	 * @returns Promise resolving to execution data
+	 */
+	private static async executeDoubaoRequest(
+		context: IExecuteFunctions,
+		itemIndex: number,
+		credentials: DoubaoApiCredentials
+	): Promise<INodeExecutionData> {
+		const baseUrl = credentials.baseUrl || 'https://ark.cn-beijing.volces.com/api/v3';
+
+		context.logger?.info('[Doubao] Starting generation', {
+			itemIndex,
+			baseUrl,
+		});
+
+		const mode = context.getNodeParameter('doubaoMode', itemIndex) as string;
+		const model = context.getNodeParameter('doubaoModel', itemIndex) as string;
+		const prompt = context.getNodeParameter('doubaoPrompt', itemIndex) as string;
+		const size = context.getNodeParameter('doubaoSize', itemIndex) as string || '2K';
+		const responseFormat = context.getNodeParameter('doubaoResponseFormat', itemIndex) as string || 'url';
+		const seed = context.getNodeParameter('doubaoSeed', itemIndex) as number || 0;
+
+		let timeout = 60000;
+		try {
+			timeout = context.getNodeParameter('options.timeout', itemIndex) as number;
+		} catch (error) {
+			// Use default
+		}
+
+		// Validate prompt
+		if (!prompt || prompt.trim() === '') {
+			throw new NodeOperationError(
+				context.getNode(),
+				'Prompt is required',
+				{ itemIndex }
+			);
+		}
+
+		// Get input image(s) for image-to-image mode
+		let inputImage = '';
+		if (mode === 'image-to-image') {
+			try {
+				const imagesData = context.getNodeParameter('doubaoInputImages', itemIndex) as {
+					image?: Array<{ url: string }>;
+				};
+
+				if (imagesData.image && imagesData.image.length > 0) {
+					const items = context.getInputData();
+					const binaryData = items[itemIndex].binary;
+
+					// Use the first image as the main input image
+					const firstImage = imagesData.image[0];
+					if (firstImage.url && firstImage.url.trim()) {
+						let imageData = firstImage.url.trim();
+
+						// Check if it's a binary property name (not a URL or base64)
+						if (!imageData.startsWith('http') && !imageData.startsWith('data:')) {
+							// Treat as binary property name
+							if (binaryData && binaryData[imageData]) {
+								const binary = binaryData[imageData] as { data: string; mimeType: string };
+								if (binary && binary.data) {
+									inputImage = `data:${binary.mimeType || 'image/jpeg'};base64,${binary.data}`;
+								}
+							}
+						} else {
+							inputImage = imageData;
+						}
+					}
+
+					context.logger?.info('[Doubao] Reference images loaded', {
+						count: imagesData.image.length,
+					});
+				}
+			} catch (error) {
+				// No reference images or error accessing them
+				context.logger?.info('[Doubao] No reference images or error loading them', {
+					error: error instanceof Error ? error.message : String(error),
+				});
+			}
+		}
+
+		// Validate input image for image-to-image mode
+		if (mode === 'image-to-image' && !inputImage) {
+			throw new NodeOperationError(
+				context.getNode(),
+				'At least one input image is required for image-to-image mode',
+				{ itemIndex }
+			);
+		}
+
+		const controller = new AbortController();
+		const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+		try {
+			let imageUrl: string;
+
+			if (mode === 'text-to-image') {
+				// Text to Image
+				const requestBody = {
+					model: model,
+					prompt: prompt.trim(),
+					size,
+					response_format: responseFormat,
+					stream: false,
+					watermark: false,
+					seed: seed > 0 ? seed : undefined,
+				};
+
+				context.logger?.info('[Doubao] Sending text-to-image request', {
+					model,
+					prompt: prompt.substring(0, 50) + '...',
+					size,
+					responseFormat,
+				});
+
+				const response = await fetch(`${baseUrl}/seedream/text2image/v1`, {
+					method: 'POST',
+					headers: {
+						'Authorization': `Bearer ${credentials.apiKey}`,
+						'Content-Type': 'application/json',
+					},
+					body: JSON.stringify(requestBody),
+					signal: controller.signal,
+				});
+
+				clearTimeout(timeoutId);
+
+				if (!response.ok) {
+					const errorText = await response.text();
+					context.logger?.error('[Doubao] API error', {
+						status: response.status,
+						statusText: response.statusText,
+						body: errorText,
+					});
+					throw new MediaGenError(
+						`API request failed: ${response.status} ${response.statusText}`,
+						'API_ERROR'
+					);
+				}
+
+				const data = await response.json() as SeedreamResponse;
+
+				// Parse response based on format
+				if (responseFormat === 'b64_json' && data.b64_json) {
+					imageUrl = `data:image/png;base64,${data.b64_json}`;
+				} else if (data.output_url) {
+					imageUrl = data.output_url;
+				} else {
+					throw new MediaGenError('No image data returned from API', 'API_ERROR');
+				}
+
+				context.logger?.info('[Doubao] Generation completed', {
+					requestId: data.request_id,
+					hasImageUrl: !!imageUrl,
+				});
+			} else {
+				// Image to Image
+				const formData = new FormData();
+				formData.append('model', model);
+				formData.append('prompt', prompt);
+				formData.append('size', size);
+				formData.append('response_format', responseFormat);
+				formData.append('stream', 'false');
+				formData.append('watermark', 'false');
+				if (seed > 0) {
+					formData.append('seed', seed.toString());
+				}
+
+				// Add input image
+				if (inputImage.startsWith('data:')) {
+					// Base64 image
+					const base64Data = inputImage.split(',')[1];
+					const byteCharacters = atob(base64Data);
+					const byteNumbers = new Array(byteCharacters.length);
+					for (let i = 0; i < byteCharacters.length; i++) {
+						byteNumbers[i] = byteCharacters.charCodeAt(i);
+					}
+					const byteArray = new Uint8Array(byteNumbers);
+					const blob = new Blob([byteArray], { type: 'image/jpeg' });
+					formData.append('image', blob, 'image.jpg');
+				} else {
+					// URL - append as-is
+					formData.append('image_url', inputImage);
+				}
+
+				context.logger?.info('[Doubao] Sending image-to-image request', {
+					model,
+					prompt: prompt.substring(0, 50) + '...',
+					size,
+					responseFormat,
+				});
+
+				const response = await fetch(`${baseUrl}/seedream/image2image/v1`, {
+					method: 'POST',
+					headers: {
+						'Authorization': `Bearer ${credentials.apiKey}`,
+					},
+					body: formData,
+					signal: controller.signal,
+				});
+
+				clearTimeout(timeoutId);
+
+				if (!response.ok) {
+					const errorText = await response.text();
+					context.logger?.error('[Doubao] API error', {
+						status: response.status,
+						statusText: response.statusText,
+						body: errorText,
+					});
+					throw new MediaGenError(
+						`API request failed: ${response.status} ${response.statusText}`,
+						'API_ERROR'
+					);
+				}
+
+				const data = await response.json() as SeedreamResponse;
+
+				// Parse response based on format
+				if (responseFormat === 'b64_json' && data.b64_json) {
+					imageUrl = `data:image/png;base64,${data.b64_json}`;
+				} else if (data.output_url) {
+					imageUrl = data.output_url;
+				} else {
+					throw new MediaGenError('No image data returned from API', 'API_ERROR');
+				}
+
+				context.logger?.info('[Doubao] Edit completed', {
+					requestId: data.request_id,
+					hasImageUrl: !!imageUrl,
+				});
+			}
+
+			// Prepare response data
+			const jsonData: any = {
+				success: true,
+				imageUrl,
+				model,
+				mode,
+				_metadata: {
+					timestamp: new Date().toISOString(),
+				},
+			};
+
+			const binaryData: any = {};
+
+			// Download image if URL returned (not base64)
+			if (imageUrl && !imageUrl.startsWith('data:')) {
+				try {
+					context.logger?.info('[Doubao] Downloading image from URL');
+					const imageResponse = await fetch(imageUrl);
+					if (imageResponse.ok) {
+						const buffer = await imageResponse.arrayBuffer();
+						const base64 = Buffer.from(buffer).toString('base64');
+						const mimeType = imageResponse.headers.get('content-type') || 'image/png';
+
+						binaryData.data = {
+							data: base64,
+							mimeType,
+							fileName: `doubao-${Date.now()}.png`,
+						};
+
+						context.logger?.info('[Doubao] Image downloaded successfully');
+					} else {
+						context.logger?.warn('[Doubao] Failed to download image', {
+							status: imageResponse.status,
+						});
+					}
+				} catch (error) {
+					context.logger?.warn('[Doubao] Failed to download image', {
+						error: error instanceof Error ? error.message : String(error),
+					});
+				}
+			}
+
+			return {
+				json: jsonData,
+				binary: Object.keys(binaryData).length > 0 ? binaryData : undefined,
+			};
 		} catch (error) {
 			clearTimeout(timeoutId);
 

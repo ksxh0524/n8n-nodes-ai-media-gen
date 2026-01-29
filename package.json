@@ -1,7 +1,7 @@
 {
   "name": "n8n-nodes-ai-media-gen",
   "version": "1.0.0",
-  "description": "n8n node for AI media generation with extensible architecture. Currently supports image generation and editing via ModelScope API.",
+  "description": "n8n node for AI media generation with extensible architecture. Supports ModelScope, Nano Banana (Gemini), and Doubao Seedream APIs.",
   "keywords": [
     "n8n",
     "n8n-node",
@@ -10,7 +10,10 @@
     "image-generation",
     "image-editing",
     "modelscope",
-    "qwen"
+    "qwen",
+    "doubao",
+    "seedream",
+    "gemini"
   ],
   "license": "MIT",
   "homepage": "https://github.com/n8n-nodes-ai-media-gen",
@@ -43,8 +46,7 @@
       "nodes/credentials/doubaoApi.credentials.js"
     ],
     "nodes": [
-      "nodes/AIMediaGen.js",
-      "nodes/DoubaoGen.js"
+      "nodes/AIMediaGen.js"
     ]
   },
   "dependencies": {

@@ -22,7 +22,8 @@ interface DoubaoApiCredentials {
  */
 interface SeedreamResponse {
 	request_id: string;
-	output_url: string;
+	output_url?: string;
+	b64_json?: string;
 	status: string;
 }
 
@@ -79,6 +80,26 @@ export class DoubaoGen implements INodeType {
 				],
 				default: 'text-to-image',
 				description: 'Select generation mode',
+			},
+			{
+				displayName: 'Model',
+				name: 'model',
+				type: 'options',
+				required: true,
+				options: [
+					{
+						name: 'Doubao Seedream 4.5',
+						value: 'doubao-seedream-4.5',
+						description: 'Latest high-quality image generation model',
+					},
+					{
+						name: 'Doubao Seedream 4.0',
+						value: 'doubao-seedream-4.0',
+						description: 'Previous generation model',
+					},
+				],
+				default: 'doubao-seedream-4.5',
+				description: 'Select Doubao model to use',
 			},
 			{
 				displayName: 'Prompt',
@@ -139,26 +160,29 @@ export class DoubaoGen implements INodeType {
 				displayName: 'Size',
 				name: 'size',
 				type: 'options',
-				default: '1024x1024',
+				default: '2K',
 				options: [
+					{ name: '2K (2048x2048)', value: '2K' },
+					{ name: '4K (4096x4096)', value: '4K' },
+					{ name: '1080P (1920x1080)', value: '1080P' },
 					{ name: '1024x1024', value: '1024x1024' },
-					{ name: '1024x768', value: '1024x768' },
 					{ name: '768x1024', value: '768x1024' },
+					{ name: '1024x768', value: '1024x768' },
 					{ name: '768x768', value: '768x768' },
 					{ name: '512x512', value: '512x512' },
 				],
-				description: 'Image size',
+				description: 'Image size/resolution',
 			},
 			{
-				displayName: 'Return URL',
-				name: 'returnUrl',
+				displayName: 'Response Format',
+				name: 'responseFormat',
 				type: 'options',
-				default: 'true',
+				default: 'url',
 				options: [
-					{ name: 'Yes', value: 'true' },
-					{ name: 'No', value: 'false' },
+					{ name: 'URL', value: 'url' },
+					{ name: 'Base64', value: 'b64_json' },
 				],
-				description: 'Whether to return a URL (true) or base64 data (false)',
+				description: 'Response format: URL or Base64',
 			},
 			{
 				displayName: 'Seed',
@@ -266,9 +290,10 @@ export class DoubaoGen implements INodeType {
 		});
 
 		const mode = context.getNodeParameter('mode', itemIndex) as string;
+		const model = context.getNodeParameter('model', itemIndex) as string;
 		const prompt = context.getNodeParameter('prompt', itemIndex) as string;
-		const size = context.getNodeParameter('size', itemIndex) as string || '1024x1024';
-		const returnUrl = context.getNodeParameter('returnUrl', itemIndex) as string === 'true';
+		const size = context.getNodeParameter('size', itemIndex) as string || '2K';
+		const responseFormat = context.getNodeParameter('responseFormat', itemIndex) as string || 'url';
 		const seed = context.getNodeParameter('seed', itemIndex) as number || 0;
 
 		let timeout = 60000;
@@ -331,16 +356,20 @@ export class DoubaoGen implements INodeType {
 			if (mode === 'text-to-image') {
 				// Text to Image
 				const requestBody = {
+					model: model,
 					prompt: prompt.trim(),
 					size,
-					return_url: returnUrl,
-					seed,
+					response_format: responseFormat,
+					stream: false,
+					watermark: false,
+					seed: seed > 0 ? seed : undefined,
 				};
 
-				console.log('[Doubao] Sending text-to-image request', {
+				context.logger?.info('[Doubao] Sending text-to-image request', {
+					model,
 					prompt: prompt.substring(0, 50) + '...',
 					size,
-					returnUrl,
+					responseFormat,
 				});
 
 				const response = await fetch(`${baseUrl}/seedream/text2image/v1`, {
@@ -357,7 +386,7 @@ export class DoubaoGen implements INodeType {
 
 				if (!response.ok) {
 					const errorText = await response.text();
-					console.error('[Doubao] API error', {
+					context.logger?.error('[Doubao] API error', {
 						status: response.status,
 						statusText: response.statusText,
 						body: errorText,
@@ -370,21 +399,28 @@ export class DoubaoGen implements INodeType {
 
 				const data = await response.json() as SeedreamResponse;
 
-				if (!data.output_url) {
-					throw new MediaGenError('No image URL returned from API', 'API_ERROR');
+				// Parse response based on format
+				if (responseFormat === 'b64_json' && data.b64_json) {
+					imageUrl = `data:image/png;base64,${data.b64_json}`;
+				} else if (data.output_url) {
+					imageUrl = data.output_url;
+				} else {
+					throw new MediaGenError('No image data returned from API', 'API_ERROR');
 				}
 
-				imageUrl = data.output_url;
-
-				console.log('[Doubao] Generation completed', {
-					imageUrl: imageUrl.substring(0, 50) + '...',
+				context.logger?.info('[Doubao] Generation completed', {
+					requestId: data.request_id,
+					hasImageUrl: !!imageUrl,
 				});
 			} else {
 				// Image to Image
 				const formData = new FormData();
+				formData.append('model', model);
 				formData.append('prompt', prompt);
-				formData.append('image_size', size);
-				formData.append('return_url', returnUrl.toString());
+				formData.append('size', size);
+				formData.append('response_format', responseFormat);
+				formData.append('stream', 'false');
+				formData.append('watermark', 'false');
 				if (seed > 0) {
 					formData.append('seed', seed.toString());
 				}
@@ -406,9 +442,11 @@ export class DoubaoGen implements INodeType {
 					formData.append('image_url', inputImage);
 				}
 
-				console.log('[Doubao] Sending image-to-image request', {
+				context.logger?.info('[Doubao] Sending image-to-image request', {
+					model,
 					prompt: prompt.substring(0, 50) + '...',
 					size,
+					responseFormat,
 				});
 
 				const response = await fetch(`${baseUrl}/seedream/image2image/v1`, {
@@ -424,7 +462,7 @@ export class DoubaoGen implements INodeType {
 
 				if (!response.ok) {
 					const errorText = await response.text();
-					console.error('[Doubao] API error', {
+					context.logger?.error('[Doubao] API error', {
 						status: response.status,
 						statusText: response.statusText,
 						body: errorText,
@@ -437,26 +475,66 @@ export class DoubaoGen implements INodeType {
 
 				const data = await response.json() as SeedreamResponse;
 
-				if (!data.output_url) {
-					throw new MediaGenError('No image URL returned from API', 'API_ERROR');
+				// Parse response based on format
+				if (responseFormat === 'b64_json' && data.b64_json) {
+					imageUrl = `data:image/png;base64,${data.b64_json}`;
+				} else if (data.output_url) {
+					imageUrl = data.output_url;
+				} else {
+					throw new MediaGenError('No image data returned from API', 'API_ERROR');
 				}
 
-				imageUrl = data.output_url;
-
-				console.log('[Doubao] Edit completed', {
-					imageUrl: imageUrl.substring(0, 50) + '...',
+				context.logger?.info('[Doubao] Edit completed', {
+					requestId: data.request_id,
+					hasImageUrl: !!imageUrl,
 				});
 			}
 
-			return {
-				json: {
-					success: true,
-					imageUrl,
-					mode,
-					_metadata: {
-						timestamp: new Date().toISOString(),
-					},
+			// Prepare response data
+			const jsonData: any = {
+				success: true,
+				imageUrl,
+				model,
+				mode,
+				_metadata: {
+					timestamp: new Date().toISOString(),
 				},
+			};
+
+			const binaryData: any = {};
+
+			// Download image if URL returned (not base64)
+			if (imageUrl && !imageUrl.startsWith('data:')) {
+				try {
+					context.logger?.info('[Doubao] Downloading image from URL');
+					const imageResponse = await fetch(imageUrl);
+					if (imageResponse.ok) {
+						const buffer = await imageResponse.arrayBuffer();
+						const base64 = Buffer.from(buffer).toString('base64');
+						const mimeType = imageResponse.headers.get('content-type') || 'image/png';
+
+						binaryData.data = {
+							data: base64,
+							mimeType,
+							fileName: `doubao-${Date.now()}.png`,
+						};
+
+						context.logger?.info('[Doubao] Image downloaded successfully');
+					} else {
+						context.logger?.warn('[Doubao] Failed to download image', {
+							status: imageResponse.status,
+						});
+					}
+				} catch (error) {
+					context.logger?.warn('[Doubao] Failed to download image', {
+						error: error instanceof Error ? error.message : String(error),
+					});
+				}
+			}
+
+			return {
+				json: jsonData,
+				binary: Object.keys(binaryData).length > 0 ? binaryData : undefined,
 			};
 		} catch (error) {
 			clearTimeout(timeoutId);
