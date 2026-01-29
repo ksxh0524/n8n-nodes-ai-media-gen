@@ -10,7 +10,7 @@ import { MediaGenError } from './utils/errors';
 /**
  * Google Gemini API credentials (reused for Nano Banana)
  */
-interface GoogleGeminiCredentials {
+interface NanoBananaCredentials {
 	/** API key from Google AI Studio or compatible service */
 	apiKey: string;
 	/** Optional custom base URL */
@@ -60,7 +60,7 @@ export class NanoBananaGen implements INodeType {
 		usableAsTool: true,
 		credentials: [
 			{
-				name: 'googleGeminiApi',
+				name: 'nanoBananaApi',
 				required: true,
 			},
 		],
@@ -232,7 +232,7 @@ export class NanoBananaGen implements INodeType {
 
 		for (let i = 0; i < items.length; i++) {
 			try {
-				const credentials = await this.getCredentials<GoogleGeminiCredentials>('googleGeminiApi');
+				const credentials = await this.getCredentials<NanoBananaCredentials>('nanoBananaApi');
 				if (!credentials || !credentials.apiKey) {
 					throw new NodeOperationError(
 						this.getNode(),
@@ -349,7 +349,7 @@ export class NanoBananaGen implements INodeType {
 	private static async executeGeneration(
 		context: IExecuteFunctions,
 		itemIndex: number,
-		credentials: GoogleGeminiCredentials,
+		credentials: NanoBananaCredentials,
 		params: {
 			mode: string;
 			model: string;
