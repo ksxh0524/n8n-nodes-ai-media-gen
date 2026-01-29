@@ -388,7 +388,6 @@ export class DoubaoGen implements INodeType {
 		}
 
 		const controller = new AbortController();
-		// eslint-disable-next-line @n8n/community-nodes/no-restricted-globals
 		// Required for AbortController timeout implementation
 		const timeoutId = setTimeout(() => controller.abort(), timeout);
 
@@ -422,7 +421,6 @@ export class DoubaoGen implements INodeType {
 					signal: controller.signal,
 				});
 
-				// eslint-disable-next-line @n8n/community-nodes/no-restricted-globals
 				// Required for clearing AbortController timeout after successful request
 				clearTimeout(timeoutId);
 
@@ -505,7 +503,6 @@ export class DoubaoGen implements INodeType {
 					signal: controller.signal,
 				});
 
-				// eslint-disable-next-line @n8n/community-nodes/no-restricted-globals
 				// Required for clearing AbortController timeout after successful request
 				clearTimeout(timeoutId);
 
@@ -546,6 +543,7 @@ export class DoubaoGen implements INodeType {
 			}
 
 			// Prepare response data
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
 			const jsonData: any = {
 				success: true,
 				imageUrl,
@@ -556,6 +554,7 @@ export class DoubaoGen implements INodeType {
 				},
 			};
 
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
 			const binaryData: any = {};
 
 			// Download image if URL returned (not base64)
@@ -592,7 +591,6 @@ export class DoubaoGen implements INodeType {
 				binary: Object.keys(binaryData).length > 0 ? binaryData : undefined,
 			};
 		} catch (error) {
-			// eslint-disable-next-line @n8n/community-nodes/no-restricted-globals
 			// Required for clearing AbortController timeout on error
 			clearTimeout(timeoutId);
 

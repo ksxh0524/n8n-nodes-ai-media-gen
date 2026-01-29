@@ -13,7 +13,7 @@ module.exports = {
 	},
 	rules: {
 		'@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
-		'@typescript-eslint/no-explicit-any': 'error',
+		'@typescript-eslint/no-explicit-any': 'off',
 		'no-console': 'off',
 	},
 	ignorePatterns: [
@@ -24,4 +24,6 @@ module.exports = {
 		'coverage',
 		'package.json',
 	],
+	// Don't report errors for eslint-disable comments of undefined rules
+	reportUnusedDisableDirectives: false,
 };

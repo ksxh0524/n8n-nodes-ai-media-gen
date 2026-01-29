@@ -1459,8 +1459,6 @@ export class AIMediaGen implements INodeType {
 
 			// Wait before polling (except first time)
 			if (pollCount > 1) {
-				// eslint-disable-next-line @n8n/community-nodes/no-restricted-globals
-				// Required for polling delay between status checks
 				await new Promise(resolve => setTimeout(resolve, CONSTANTS.ASYNC.POLL_INTERVAL_MS));
 			}
 
@@ -1541,8 +1539,6 @@ export class AIMediaGen implements INodeType {
 		logger?: IExecuteFunctions['logger']
 	): Promise<INodeExecutionData> {
 		const controller = new AbortController();
-		// eslint-disable-next-line @n8n/community-nodes/no-restricted-globals
-		// Required for AbortController timeout implementation
 		const timeoutId = setTimeout(() => controller.abort(), timeout);
 
 		try {
@@ -1592,7 +1588,6 @@ export class AIMediaGen implements INodeType {
 				signal: controller.signal,
 			});
 
-			// eslint-disable-next-line @n8n/community-nodes/no-restricted-globals
 			// Required for clearing AbortController timeout after successful request
 			clearTimeout(timeoutId);
 
@@ -1666,7 +1661,6 @@ export class AIMediaGen implements INodeType {
 				},
 			};
 		} catch (error) {
-			// eslint-disable-next-line @n8n/community-nodes/no-restricted-globals
 			// Required for clearing AbortController timeout on error
 			clearTimeout(timeoutId);
 
@@ -1798,6 +1792,7 @@ export class AIMediaGen implements INodeType {
 			});
 		}
 
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		const data = await response.json() as any;
 
 		// Parse standard Gemini API response format
@@ -1815,7 +1810,7 @@ export class AIMediaGen implements INodeType {
 					// Method 2: Extract image URL from Markdown text
 					if (part.text) {
 						// Match Markdown image syntax: ![alt](url)
-						const markdownImageMatch = part.text.match(/!\[.*?\]\((https?:\/\/[^\)]+)\)/);
+						const markdownImageMatch = part.text.match(/!\[.*?\]\((https?:\/\/[^)]+)\)/);
 						if (markdownImageMatch && markdownImageMatch[1]) {
 							imageUrl = markdownImageMatch[1];
 							break;
@@ -1992,7 +1987,6 @@ export class AIMediaGen implements INodeType {
 		}
 
 		const controller = new AbortController();
-		// eslint-disable-next-line @n8n/community-nodes/no-restricted-globals
 		// Required for AbortController timeout implementation
 		const timeoutId = setTimeout(() => controller.abort(), timeout);
 
@@ -2079,7 +2073,6 @@ export class AIMediaGen implements INodeType {
 
 			return result;
 		} catch (error) {
-			// eslint-disable-next-line @n8n/community-nodes/no-restricted-globals
 			// Required for clearing AbortController timeout on error
 			clearTimeout(timeoutId);
 
@@ -2150,7 +2143,7 @@ export class AIMediaGen implements INodeType {
 		}
 
 		// Get input image(s) for image-to-image mode
-		let inputImages: string[] = [];
+		const inputImages: string[] = [];
 		if (mode === 'image-to-image') {
 			try {
 				const imagesData = context.getNodeParameter('doubaoInputImages', itemIndex) as {
@@ -2216,7 +2209,6 @@ export class AIMediaGen implements INodeType {
 		}
 
 		const controller = new AbortController();
-		// eslint-disable-next-line @n8n/community-nodes/no-restricted-globals
 		// Required for AbortController timeout implementation
 		const timeoutId = setTimeout(() => controller.abort(), timeout);
 
@@ -2249,7 +2241,6 @@ export class AIMediaGen implements INodeType {
 					signal: controller.signal,
 				});
 
-				// eslint-disable-next-line @n8n/community-nodes/no-restricted-globals
 				// Required for clearing AbortController timeout after successful request
 				clearTimeout(timeoutId);
 
@@ -2333,7 +2324,6 @@ export class AIMediaGen implements INodeType {
 					signal: controller.signal,
 				});
 
-				// eslint-disable-next-line @n8n/community-nodes/no-restricted-globals
 				// Required for clearing AbortController timeout after successful request
 				clearTimeout(timeoutId);
 
@@ -2371,6 +2361,7 @@ export class AIMediaGen implements INodeType {
 			}
 
 			// Prepare response data
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
 			const jsonData: any = {
 				success: true,
 				imageUrl,
@@ -2386,6 +2377,7 @@ export class AIMediaGen implements INodeType {
 				jsonData._metadata.inputImageCount = inputImages.length;
 			}
 
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
 			const binaryData: any = {};
 
 			// Download image if URL returned (not base64)
@@ -2422,7 +2414,6 @@ export class AIMediaGen implements INodeType {
 				binary: Object.keys(binaryData).length > 0 ? binaryData : undefined,
 			};
 		} catch (error) {
-			// eslint-disable-next-line @n8n/community-nodes/no-restricted-globals
 			// Required for clearing AbortController timeout on error
 			clearTimeout(timeoutId);
 
