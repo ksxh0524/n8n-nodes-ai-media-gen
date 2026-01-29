@@ -186,27 +186,22 @@ export class AIMediaGen implements INodeType {
 				{
 					name: 'Nano Banana',
 					value: 'nano-banana',
-					description: 'Standard quality generation',
+					description: 'Third-party standard quality model',
 				},
 				{
 					name: 'Nano Banana 2',
 					value: 'nano-banana-2',
-					description: 'Second generation model',
-				},
-				{
-					name: 'Nano Banana Pro',
-					value: 'nano-banana-pro',
-					description: 'High quality Pro model',
+					description: 'Third-party second generation model',
 				},
 				{
 					name: 'Gemini 2.5 Flash Image',
 					value: 'gemini-2.5-flash-image',
-					description: 'Fast generation model',
+					description: 'Google fast generation model',
 				},
 				{
 					name: 'Gemini 3 Pro Image Preview',
 					value: 'gemini-3-pro-image-preview',
-					description: 'High quality Pro model',
+					description: 'Google high quality Pro model',
 				},
 			],
 			default: 'nano-banana',
@@ -284,80 +279,41 @@ export class AIMediaGen implements INodeType {
 			description: 'Binary property containing the image file to edit',
 			placeholder: 'Enter a property name containing the binary data, e.g., data',
 		},
-		// Nano Banana - Multiple Input Images (for all models)
+		// Nano Banana - Input Images (only for text-to-image with reference images)
 		{
 			displayName: 'Reference Images',
-			name: 'nbReferenceImages',
+			name: 'nbInputImages',
 			type: 'fixedCollection',
+			typeOptions: {
+				multipleValues: true,
+			},
 			default: {},
 			displayOptions: {
 				show: {
 					operation: ['nanoBanana'],
+					nbMode: ['text-to-image'],
 				},
 			},
-			description: 'Add reference images for generation',
+			description: 'Reference images to guide generation (optional, max: 4 for standard models, 14 for Pro models). Supports: URL, base64, or binary property name.',
 			options: [
 				{
-					displayName: 'Images',
-					name: 'images',
-					type: 'collection',
-					default: {},
-					placeholder: 'Add Image',
-					options: [
+					displayName: 'Image',
+					name: 'image',
+					values: [
 						{
-							displayName: 'Type',
-							name: 'type',
-							type: 'options',
-							default: 'url',
-							options: [
-								{ name: 'URL / Base64', value: 'url' },
-								{ name: 'Binary', value: 'binary' },
-							],
-						},
-						{
-							displayName: 'Image URL / Base64',
+							displayName: 'Image',
 							name: 'url',
 							type: 'string',
 							default: '',
-							displayOptions: {
-								show: {
-									type: ['url'],
-								},
+							placeholder: 'https://... or data:image/... or binary property name',
+							description: 'Image URL, base64 data, or binary property name',
+							typeOptions: {
+								rows: 2,
 							},
-							placeholder: 'https://example.com/image.jpg or data:image/jpeg;base64,...',
-						},
-						{
-							displayName: 'Binary Property',
-							name: 'binary',
-							type: 'string',
-							default: '',
-							displayOptions: {
-								show: {
-									type: ['binary'],
-								},
-							},
-							placeholder: 'Enter binary property name, e.g., data',
 						},
 					],
 				},
 			],
-		},
-		// Nano Banana - Number of Images
-		{
-			displayName: 'Number of Images',
-			name: 'nbN',
-			type: 'number',
-			default: 1,
-			typeOptions: {
-				minValue: 1,
-				maxValue: 4,
-			},
-			description: 'Number of images to generate (1-4)',
-			displayOptions: {
-				show: {
-					operation: ['nanoBanana'],
-				},
-			},
 		},
 		// Nano Banana - Aspect Ratio (for Pro models)
 		{
@@ -381,7 +337,7 @@ export class AIMediaGen implements INodeType {
 			displayOptions: {
 				show: {
 					operation: ['nanoBanana'],
-					nbModel: ['nano-banana-2', 'nano-banana-pro', 'gemini-3-pro-image-preview'],
+					nbModel: ['nano-banana-2', 'gemini-3-pro-image-preview'],
 				},
 			},
 		},
@@ -400,7 +356,7 @@ export class AIMediaGen implements INodeType {
 			displayOptions: {
 				show: {
 					operation: ['nanoBanana'],
-					nbModel: ['nano-banana-2', 'nano-banana-pro', 'gemini-3-pro-image-preview'],
+					nbModel: ['nano-banana-2', 'gemini-3-pro-image-preview'],
 				},
 			},
 		},
@@ -891,8 +847,12 @@ export class AIMediaGen implements INodeType {
 				const errorCode = error instanceof MediaGenError ? error.code : 'UNKNOWN';
 				const errorDetails = error instanceof MediaGenError ? error.details : undefined;
 
+				// Get operation for error logging
+				const operation = this.getNodeParameter('operation', i) as string;
+
 				this.logger?.error('Execution failed', {
-					model: this.getNodeParameter('model', i),
+					operation,
+					model: operation === 'nanoBanana' ? this.getNodeParameter('nbModel', i) : this.getNodeParameter('model', i),
 					error: error instanceof Error ? error.message : String(error),
 					errorCode,
 					errorDetails,
@@ -1380,7 +1340,7 @@ export class AIMediaGen implements INodeType {
 
 		// Determine size based on model type
 		let size = '1024x1024';
-		const proModels = ['nano-banana-2', 'nano-banana-pro', 'gemini-3-pro-image-preview'];
+		const proModels = ['nano-banana-2', 'gemini-3-pro-image-preview'];
 		const standardModels = ['nano-banana', 'gemini-2.5-flash-image'];
 
 		if (proModels.includes(model)) {
@@ -1460,36 +1420,42 @@ export class AIMediaGen implements INodeType {
 			);
 		}
 
-		// For all models, collect reference images
-		let referenceImages: string[] = [];
+		// Collect input images from fixedCollection
+		const referenceImages: string[] = [];
 		try {
-			const refImagesData = context.getNodeParameter('nbReferenceImages', itemIndex) as {
-				images?: Array<{ type: string; url?: string; binary?: string }>;
+			const imagesData = context.getNodeParameter('nbInputImages', itemIndex) as {
+				image?: Array<{ url: string }>;
 			};
 
-			if (refImagesData.images && refImagesData.images.length > 0) {
+			if (imagesData.image && imagesData.image.length > 0) {
 				const items = context.getInputData();
 				const binaryData = items[itemIndex].binary;
 
-				for (const img of refImagesData.images) {
-					let imageData = '';
-					if (img.type === 'binary' && img.binary && binaryData) {
-						const binary = binaryData[img.binary] as { data: string; mimeType: string };
-						if (binary && binary.data) {
-							imageData = `data:${binary.mimeType || 'image/jpeg'};base64,${binary.data}`;
-						}
-					} else if (img.type === 'url' && img.url) {
-						imageData = img.url;
+				for (const img of imagesData.image) {
+					if (!img.url || !img.url.trim()) {
+						continue;
 					}
 
-					if (imageData) {
-						referenceImages.push(imageData);
+					let imageData = img.url.trim();
+
+					// Check if it's a binary property name (not a URL or base64)
+					if (!imageData.startsWith('http') && !imageData.startsWith('data:')) {
+						// Treat as binary property name
+						if (binaryData && binaryData[imageData]) {
+							const binary = binaryData[imageData] as { data: string; mimeType: string };
+							if (binary && binary.data) {
+								imageData = `data:${binary.mimeType || 'image/jpeg'};base64,${binary.data}`;
+							}
+						}
 					}
+
+					referenceImages.push(imageData);
 				}
 			}
 
 			// Validate max images based on model
-			const maxImages = model === 'gemini-3-pro-image-preview' ? 14 : 4;
+			const proModels = ['nano-banana-2', 'gemini-3-pro-image-preview'];
+			const maxImages = proModels.includes(model) ? 14 : 4;
 			if (referenceImages.length > maxImages) {
 				throw new NodeOperationError(
 					context.getNode(),
@@ -1518,7 +1484,7 @@ export class AIMediaGen implements INodeType {
 			let imageUrl: string = '';
 
 			// All Gemini models use Gemini native format
-			const isProModel = ['nano-banana-2', 'nano-banana-pro', 'gemini-3-pro-image-preview'].includes(model);
+			const isProModel = ['nano-banana-2', 'gemini-3-pro-image-preview'].includes(model);
 
 			if (isProModel) {
 				// Pro models: use aspectRatio and imageSize
@@ -1568,7 +1534,7 @@ export class AIMediaGen implements INodeType {
 				const response = await fetch(`${baseUrl}/v1/models/${model}:generateContent`, {
 					method: 'POST',
 					headers: {
-						'Authorization': `Bearer ${credentials.apiKey}`,
+						'x-goog-api-key': credentials.apiKey,
 						'Content-Type': 'application/json',
 					},
 					body: JSON.stringify(requestBody),
@@ -1655,7 +1621,7 @@ export class AIMediaGen implements INodeType {
 				const response = await fetch(`${baseUrl}/v1/models/${model}:generateContent`, {
 					method: 'POST',
 					headers: {
-						'Authorization': `Bearer ${credentials.apiKey}`,
+						'x-goog-api-key': credentials.apiKey,
 						'Content-Type': 'application/json',
 					},
 					body: JSON.stringify(requestBody),

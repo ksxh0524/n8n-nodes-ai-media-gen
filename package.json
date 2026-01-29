@@ -39,10 +39,12 @@
   "n8n": {
     "n8nNodesApiVersion": 1,
     "credentials": [
-      "nodes/credentials/modelScopeApi.credentials.js"
+      "nodes/credentials/modelScopeApi.credentials.js",
+      "nodes/credentials/doubaoApi.credentials.js"
     ],
     "nodes": [
-      "nodes/AIMediaGen.js"
+      "nodes/AIMediaGen.js",
+      "nodes/DoubaoGen.js"
     ]
   },
   "dependencies": {
