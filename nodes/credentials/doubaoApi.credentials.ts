@@ -14,7 +14,7 @@ export class doubaoApi implements ICredentialType {
 			},
 			default: '',
 			required: true,
-			description: 'Doubao API key for authentication',
+			description: 'Doubao API key for authentication (from Volcengine console)',
 		},
 		{
 			displayName: 'Base URL',
@@ -23,12 +23,13 @@ export class doubaoApi implements ICredentialType {
 			default: 'https://ark.cn-beijing.volces.com/api/v3',
 			required: false,
 			placeholder: 'https://ark.cn-beijing.volces.com/api/v3',
-			description: 'Custom base URL (optional, uses Doubao default if empty)',
+			description: 'API base URL (optional, uses default if empty)',
 		},
 	];
 
 	/**
 	 * Test the credentials by making a simple API call
+	 * Note: This will make a real API call and consume quota
 	 */
 	test: ICredentialTestRequest = {
 		request: {
@@ -36,11 +37,16 @@ export class doubaoApi implements ICredentialType {
 			url: '/seedream/text2image/v1',
 			method: 'POST' as const,
 			body: {
+				model: 'doubao-seedream-4.5',
 				prompt: 'test',
 				size: '512x512',
+				response_format: 'url',
+				stream: false,
+				watermark: false,
 			},
 			headers: {
 				Authorization: 'Bearer {{$credentials.apiKey}}',
+				'Content-Type': 'application/json',
 			},
 		},
 	};
