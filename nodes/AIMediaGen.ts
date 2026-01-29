@@ -243,7 +243,7 @@ export class AIMediaGen implements INodeType {
 			displayOptions: {
 				show: {
 					operation: ['modelscope'],
-					model: ['Tongyi-MAI/Z-Image', 'Qwen/Qwen-Image-2512'],
+					model: ['Tongyi-MAI/Z-Image', 'Qwen/Qwen-Image-2512', 'Qwen/Qwen-Image-Edit-2511'],
 				},
 			},
 		},
@@ -260,7 +260,7 @@ export class AIMediaGen implements INodeType {
 			displayOptions: {
 				show: {
 					operation: ['modelscope'],
-					model: ['Tongyi-MAI/Z-Image', 'Qwen/Qwen-Image-2512'],
+					model: ['Tongyi-MAI/Z-Image', 'Qwen/Qwen-Image-2512', 'Qwen/Qwen-Image-Edit-2511'],
 				},
 			},
 		},
@@ -403,7 +403,7 @@ export class AIMediaGen implements INodeType {
 				let numImages = 1;
 				let inputImage = '';
 
-				// Get size for generation models only
+				// Get size for generation models only (Edit model doesn't use size)
 				if (!isEditModel) {
 					try {
 						size = this.getNodeParameter('size', i) as string;
@@ -413,22 +413,18 @@ export class AIMediaGen implements INodeType {
 					}
 				}
 
-				// Get seed for generation models only
-				if (!isEditModel) {
-					try {
-						seed = this.getNodeParameter('seed', i) as number;
-					} catch (error) {
-						this.logger?.debug('[AI Media Gen] Using default seed', { index: i, seed });
-					}
+				// Get seed for all models (Z-Image, Qwen-2512, Edit-2511)
+				try {
+					seed = this.getNodeParameter('seed', i) as number;
+				} catch (error) {
+					this.logger?.debug('[AI Media Gen] Using default seed', { index: i, seed });
 				}
 
-				// Get steps for generation models only
-				if (!isEditModel) {
-					try {
-						steps = this.getNodeParameter('steps', i) as number;
-					} catch (error) {
-						this.logger?.debug('[AI Media Gen] Using default steps', { index: i, steps });
-					}
+				// Get steps for all models (Z-Image, Qwen-2512, Edit-2511)
+				try {
+					steps = this.getNodeParameter('steps', i) as number;
+				} catch (error) {
+					this.logger?.debug('[AI Media Gen] Using default steps', { index: i, steps });
 				}
 
 				// Get numImages only for Z-Image and Qwen-2512
@@ -615,7 +611,7 @@ export class AIMediaGen implements INodeType {
 			});
 		}
 
-		// Get steps only for generation models (not Edit model)
+		// Get steps for all models that support it
 		const isEditModel = model === 'Qwen/Qwen-Image-Edit-2511';
 		const isZImage = model === 'Tongyi-MAI/Z-Image';
 		const isQwenImage = model === 'Qwen/Qwen-Image-2512';
@@ -627,7 +623,7 @@ export class AIMediaGen implements INodeType {
 		let numImages = 1;
 		let inputImage = '';
 
-		// Get size for generation models
+		// Get size for generation models only (Edit model doesn't use size)
 		if (!isEditModel) {
 			try {
 				size = context.getNodeParameter('size', itemIndex) as string;
@@ -639,26 +635,22 @@ export class AIMediaGen implements INodeType {
 			}
 		}
 
-		// Get seed for generation models
-		if (!isEditModel) {
-			try {
-				seed = context.getNodeParameter('seed', itemIndex) as number;
-				context.logger?.info('[AI Media Gen] Seed retrieved', { seed, itemIndex });
-			} catch (error) {
-				seed = 0;
-				context.logger?.warn('[AI Media Gen] Could not get seed, using default', { seed, itemIndex });
-			}
+		// Get seed for all models (Z-Image, Qwen-2512, Edit-2511)
+		try {
+			seed = context.getNodeParameter('seed', itemIndex) as number;
+			context.logger?.info('[AI Media Gen] Seed retrieved', { seed, itemIndex });
+		} catch (error) {
+			seed = 0;
+			context.logger?.warn('[AI Media Gen] Could not get seed, using default', { seed, itemIndex });
 		}
 
-		// Get steps for generation models
-		if (!isEditModel) {
-			try {
-				steps = context.getNodeParameter('steps', itemIndex) as number;
-				context.logger?.info('[AI Media Gen] Steps retrieved', { steps, itemIndex });
-			} catch (error) {
-				steps = 30;
-				context.logger?.warn('[AI Media Gen] Could not get steps, using default', { steps, itemIndex });
-			}
+		// Get steps for all models (Z-Image, Qwen-2512, Edit-2511)
+		try {
+			steps = context.getNodeParameter('steps', itemIndex) as number;
+			context.logger?.info('[AI Media Gen] Steps retrieved', { steps, itemIndex });
+		} catch (error) {
+			steps = 30;
+			context.logger?.warn('[AI Media Gen] Could not get steps, using default', { steps, itemIndex });
 		}
 
 		// Get numImages for models that support it
