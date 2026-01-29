@@ -1549,7 +1549,7 @@ export class AIMediaGen implements INodeType {
 					imageUrl: imageUrl.substring(0, 50) + '...',
 				});
 			} else {
-				// Standard models (Nano Banana, Gemini 2.5 Flash): use direct size
+				// Standard models (nano-banana): convert size to aspect ratio
 				// Build parts array: images first, then text
 				const parts: Array<{ inlineData?: { mimeType: string; data: string }; text?: string }> = [];
 
@@ -1573,7 +1573,21 @@ export class AIMediaGen implements INodeType {
 				// Add text prompt at the end
 				parts.push({ text: prompt.trim() });
 
-				// Build request body - standard models support size parameter
+				// Convert size resolution to aspect ratio string
+				const sizeToAspectRatio: Record<string, string> = {
+					'1024x1024': '1:1',
+					'832x1248': '2:3',
+					'1248x832': '3:2',
+					'864x1184': '3:4',
+					'1184x864': '4:3',
+					'896x1152': '4:5',
+					'1152x896': '5:4',
+					'768x1344': '9:16',
+					'1344x768': '16:9',
+					'1536x672': '21:9',
+				};
+
+				// Build request body - all models use aspect ratio
 				const requestBody: Record<string, unknown> = {
 					contents: [
 						{
@@ -1584,13 +1598,14 @@ export class AIMediaGen implements INodeType {
 					generationConfig: {
 						responseModalities: ['IMAGE'],
 						imageConfig: {
-							size: size,
+							aspectRatio: sizeToAspectRatio[size] || '1:1',
 						},
 					},
 				};
 
 				console.log(`[${model}] Sending generation request`, {
 					size,
+					aspectRatio: sizeToAspectRatio[size],
 					imagesCount: referenceImages.length,
 					prompt: prompt.substring(0, 50) + '...',
 					baseUrl,
