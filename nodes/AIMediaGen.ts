@@ -37,8 +37,8 @@ interface ModelScopeApiCredentials {
 interface GooglePalmApiCredentials {
 	/** API key for authentication */
 	apiKey: string;
-	/** Optional custom base URL */
-	baseUrl?: string;
+	/** Optional custom host (e.g., ai.comfly.chat) */
+	host?: string;
 }
 
 /**
@@ -675,7 +675,25 @@ export class AIMediaGen implements INodeType {
 
 					const timerId = performanceMonitor.startTimer('nanoBanana');
 					result = await AIMediaGen.executeNanoBananaRequest(this, i, credentials);
-					performanceMonitor.endTimer(timerId);
+					const elapsed = performanceMonitor.endTimer(timerId);
+
+					performanceMonitor.recordMetric({
+						timestamp: Date.now().toString(),
+						provider: 'nanoBanana',
+						model: this.getNodeParameter('nbModel', i) as string,
+						mediaType: 'image',
+						duration: elapsed,
+						success: result.json.success as boolean,
+						fromCache: (result.json._metadata as ResultMetadata)?.cached || false,
+					});
+
+					this.logger?.info('Execution completed', {
+						model: this.getNodeParameter('nbModel', i),
+						duration: elapsed,
+						success: result.json.success,
+					});
+
+					results.push(result);
 				} else {
 					// Handle ModelScope operation
 					const credentials = await this.getCredentials<ModelScopeApiCredentials>('modelScopeApi');
@@ -1312,10 +1330,14 @@ export class AIMediaGen implements INodeType {
 		itemIndex: number,
 		credentials: GooglePalmApiCredentials
 	): Promise<INodeExecutionData> {
-		const baseUrl = credentials.baseUrl || 'https://generativelanguage.googleapis.com';
+		// Determine baseUrl from host field or use default
+		const defaultBaseUrl = 'https://generativelanguage.googleapis.com';
+		const baseUrl = credentials.host
+			? (credentials.host.startsWith('http') ? credentials.host : `https://${credentials.host}`)
+			: defaultBaseUrl;
 
-		context.logger?.info('[Nano Banana] Starting generation', {
-			itemIndex,
+		context.logger?.info('[Nano Banana] Using config', {
+			host: credentials.host || '(using default Google API)',
 			baseUrl,
 		});
 
@@ -1491,17 +1513,15 @@ export class AIMediaGen implements INodeType {
 				const aspectRatio = context.getNodeParameter('nbAspectRatio', itemIndex) as string || '1:1';
 				const resolution = context.getNodeParameter('nbResolution', itemIndex) as string || '1K';
 
-				// Build contents array with prompt and reference images
-				const contents: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }> = [
-					{ text: prompt.trim() },
-				];
+				// Build parts array: images first, then text
+				const parts: Array<{ inlineData?: { mimeType: string; data: string }; text?: string }> = [];
 
-				// Add reference images (max 4 for non-Gemini-3-Pro models)
+				// Add reference images first
 				for (const refImage of referenceImages) {
 					if (refImage.startsWith('data:')) {
 						// Base64 image
 						const [mimeType, base64Data] = refImage.split(';base64,');
-						contents.push({
+						parts.push({
 							inlineData: {
 								mimeType: mimeType.replace('data:', '') || 'image/jpeg',
 								data: base64Data,
@@ -1513,10 +1533,18 @@ export class AIMediaGen implements INodeType {
 					}
 				}
 
+				// Add text prompt at the end
+				parts.push({ text: prompt.trim() });
+
 				const requestBody = {
-					contents,
-					config: {
-						responseModalities: ['TEXT', 'IMAGE'],
+					contents: [
+						{
+							parts,
+							role: 'user',
+						},
+					],
+					generationConfig: {
+						responseModalities: ['IMAGE'],
 						imageConfig: {
 							aspectRatio,
 							imageSize: resolution,
@@ -1529,9 +1557,12 @@ export class AIMediaGen implements INodeType {
 					resolution,
 					imagesCount: referenceImages.length,
 					prompt: prompt.substring(0, 50) + '...',
+					baseUrl,
+					fullUrl: `${baseUrl}/v1beta/models/${model}:generateContent`,
+					model,
 				});
 
-				const response = await fetch(`${baseUrl}/v1/models/${model}:generateContent`, {
+				const response = await fetch(`${baseUrl}/v1beta/models/${model}:generateContent`, {
 					method: 'POST',
 					headers: {
 						'x-goog-api-key': credentials.apiKey,
@@ -1558,14 +1589,31 @@ export class AIMediaGen implements INodeType {
 
 				const data = await response.json() as any;
 
-				// Parse Gemini response format
+				// Parse standard Gemini API response format
 				if (data.candidates && data.candidates.length > 0) {
 					const candidate = data.candidates[0];
 					if (candidate.content && candidate.content.parts) {
 						for (const part of candidate.content.parts) {
+							// Method 1: Inline base64 image data
 							if (part.inlineData && part.inlineData.data) {
-								imageUrl = `data:image/png;base64,${part.inlineData.data}`;
+								const mimeType = part.inlineData.mimeType || 'image/png';
+								imageUrl = `data:${mimeType};base64,${part.inlineData.data}`;
 								break;
+							}
+							// Method 2: Extract image URL from Markdown text
+							if (part.text) {
+								// Match Markdown image syntax: ![alt](url)
+								const markdownImageMatch = part.text.match(/!\[.*?\]\((https?:\/\/[^\)]+)\)/);
+								if (markdownImageMatch && markdownImageMatch[1]) {
+									imageUrl = markdownImageMatch[1];
+									break;
+								}
+								// Match plain URL (ends with image extensions)
+							 const urlMatch = part.text.match(/(https?:\/\/[^\s]+\.(png|jpg|jpeg|gif|webp))/i);
+								if (urlMatch && urlMatch[1]) {
+									imageUrl = urlMatch[1];
+									break;
+								}
 							}
 						}
 					}
@@ -1580,17 +1628,15 @@ export class AIMediaGen implements INodeType {
 				});
 			} else {
 				// Standard models (Nano Banana, Gemini 2.5 Flash): use direct size
-				// Build contents array with prompt and reference images
-				const contents: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }> = [
-					{ text: prompt.trim() },
-				];
+				// Build parts array: images first, then text
+				const parts: Array<{ inlineData?: { mimeType: string; data: string }; text?: string }> = [];
 
-				// Add reference images (max 4)
+				// Add reference images first
 				for (const refImage of referenceImages) {
 					if (refImage.startsWith('data:')) {
 						// Base64 image
 						const [mimeType, base64Data] = refImage.split(';base64,');
-						contents.push({
+						parts.push({
 							inlineData: {
 								mimeType: mimeType.replace('data:', '') || 'image/jpeg',
 								data: base64Data,
@@ -1602,10 +1648,18 @@ export class AIMediaGen implements INodeType {
 					}
 				}
 
+				// Add text prompt at the end
+				parts.push({ text: prompt.trim() });
+
 				const requestBody = {
-					contents,
-					config: {
-						responseModalities: ['TEXT', 'IMAGE'],
+					contents: [
+						{
+							parts,
+							role: 'user',
+						},
+					],
+					generationConfig: {
+						responseModalities: ['IMAGE'],
 						imageConfig: {
 							size: size,
 						},
@@ -1616,9 +1670,12 @@ export class AIMediaGen implements INodeType {
 					size,
 					imagesCount: referenceImages.length,
 					prompt: prompt.substring(0, 50) + '...',
+					baseUrl,
+					fullUrl: `${baseUrl}/v1beta/models/${model}:generateContent`,
+					model,
 				});
 
-				const response = await fetch(`${baseUrl}/v1/models/${model}:generateContent`, {
+				const response = await fetch(`${baseUrl}/v1beta/models/${model}:generateContent`, {
 					method: 'POST',
 					headers: {
 						'x-goog-api-key': credentials.apiKey,
@@ -1645,14 +1702,31 @@ export class AIMediaGen implements INodeType {
 
 				const data = await response.json() as any;
 
-				// Parse Gemini response format
+				// Parse standard Gemini API response format
 				if (data.candidates && data.candidates.length > 0) {
 					const candidate = data.candidates[0];
 					if (candidate.content && candidate.content.parts) {
 						for (const part of candidate.content.parts) {
+							// Method 1: Inline base64 image data
 							if (part.inlineData && part.inlineData.data) {
-								imageUrl = `data:image/png;base64,${part.inlineData.data}`;
+								const mimeType = part.inlineData.mimeType || 'image/png';
+								imageUrl = `data:${mimeType};base64,${part.inlineData.data}`;
 								break;
+							}
+							// Method 2: Extract image URL from Markdown text
+							if (part.text) {
+								// Match Markdown image syntax: ![alt](url)
+								const markdownImageMatch = part.text.match(/!\[.*?\]\((https?:\/\/[^\)]+)\)/);
+								if (markdownImageMatch && markdownImageMatch[1]) {
+									imageUrl = markdownImageMatch[1];
+									break;
+								}
+								// Match plain URL (ends with image extensions)
+							 const urlMatch = part.text.match(/(https?:\/\/[^\s]+\.(png|jpg|jpeg|gif|webp))/i);
+								if (urlMatch && urlMatch[1]) {
+									imageUrl = urlMatch[1];
+									break;
+								}
 							}
 						}
 					}
@@ -1667,7 +1741,43 @@ export class AIMediaGen implements INodeType {
 				});
 			}
 
-			return {
+			// Download image binary data
+			let binaryData: { data: string; mimeType: string } | undefined;
+			if (imageUrl && !imageUrl.startsWith('data:')) {
+				try {
+					const imageResponse = await fetch(imageUrl);
+					if (imageResponse.ok) {
+						const buffer = await imageResponse.arrayBuffer();
+						const base64 = Buffer.from(buffer).toString('base64');
+
+						// Determine mime type from URL or response
+						let mimeType = 'image/png';
+						const contentType = imageResponse.headers.get('content-type');
+						if (contentType) {
+							mimeType = contentType;
+						} else if (imageUrl.endsWith('.jpg') || imageUrl.endsWith('.jpeg')) {
+							mimeType = 'image/jpeg';
+						} else if (imageUrl.endsWith('.webp')) {
+							mimeType = 'image/webp';
+						} else if (imageUrl.endsWith('.gif')) {
+							mimeType = 'image/gif';
+						}
+
+						binaryData = { data: base64, mimeType };
+						console.log(`[${model}] Image downloaded`, { mimeType, size: buffer.byteLength });
+					}
+				} catch (error) {
+					console.warn(`[${model}] Failed to download image`, { error: error instanceof Error ? error.message : String(error) });
+				}
+			} else if (imageUrl && imageUrl.startsWith('data:')) {
+				// Already base64, extract data
+				const match = imageUrl.match(/data:([^;]+);base64,(.+)/);
+				if (match) {
+					binaryData = { data: match[2], mimeType: match[1] };
+				}
+			}
+
+			const result: INodeExecutionData = {
 				json: {
 					success: true,
 					imageUrl,
@@ -1678,6 +1788,19 @@ export class AIMediaGen implements INodeType {
 					},
 				},
 			};
+
+			// Add binary data if successfully downloaded
+			if (binaryData) {
+				result.binary = {
+					data: {
+						data: binaryData.data,
+						mimeType: binaryData.mimeType,
+						fileName: `generated-${model}-${Date.now()}.${binaryData.mimeType.split('/')[1] || 'png'}`,
+					},
+				};
+			}
+
+			return result;
 		} catch (error) {
 			clearTimeout(timeoutId);
 
