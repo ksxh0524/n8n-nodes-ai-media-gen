@@ -229,57 +229,7 @@ export class AIMediaGen implements INodeType {
 				},
 			},
 		},
-		// Nano Banana - Input Image Type
-		{
-			displayName: 'Input Image Type',
-			name: 'nbInputImageType',
-			type: 'options',
-			default: 'url',
-			options: [
-				{ name: 'URL / Base64', value: 'url' },
-				{ name: 'Binary File', value: 'binary' },
-			],
-			description: 'Choose how to provide the input image',
-			displayOptions: {
-				show: {
-					operation: ['nanoBanana'],
-					nbMode: ['image-to-image'],
-				},
-			},
-		},
-		// Nano Banana - Input Image (URL/Base64)
-		{
-			displayName: 'Input Image',
-			name: 'nbInputImage',
-			type: 'string',
-			default: '',
-			displayOptions: {
-				show: {
-					operation: ['nanoBanana'],
-					nbMode: ['image-to-image'],
-					nbInputImageType: ['url'],
-				},
-			},
-			description: 'URL or base64 of the image to edit',
-			placeholder: 'https://example.com/image.jpg or data:image/jpeg;base64,...',
-		},
-		// Nano Banana - Input Image (Binary)
-		{
-			displayName: 'Input Image File',
-			name: 'nbInputImageBinary',
-			type: 'string',
-			default: '',
-			displayOptions: {
-				show: {
-					operation: ['nanoBanana'],
-					nbMode: ['image-to-image'],
-					nbInputImageType: ['binary'],
-				},
-			},
-			description: 'Binary property containing the image file to edit',
-			placeholder: 'Enter a property name containing the binary data, e.g., data',
-		},
-		// Nano Banana - Reference Images (only for image-to-image mode)
+		// Nano Banana - Reference Images
 		{
 			displayName: 'Reference Images',
 			name: 'nbInputImages',
@@ -291,10 +241,9 @@ export class AIMediaGen implements INodeType {
 			displayOptions: {
 				show: {
 					operation: ['nanoBanana'],
-					nbMode: ['image-to-image'],
 				},
 			},
-			description: 'Additional reference images to guide editing (optional, max: 4 for standard models, 14 for Pro models). Supports: URL, base64, or binary property name.',
+			description: 'Reference images to guide generation (optional, max: 4 for standard models, 14 for Pro models). Supports: URL, base64, or binary property name.',
 			options: [
 				{
 					displayName: 'Image',
@@ -1403,41 +1352,6 @@ export class AIMediaGen implements INodeType {
 			throw new NodeOperationError(
 				context.getNode(),
 				'Prompt is required',
-				{ itemIndex }
-			);
-		}
-
-		// Get input image for image-to-image mode
-		let inputImage = '';
-		if (mode === 'image-to-image') {
-			const inputImageType = context.getNodeParameter('nbInputImageType', itemIndex) as string;
-			if (inputImageType === 'binary') {
-				const binaryPropertyName = context.getNodeParameter('nbInputImageBinary', itemIndex) as string;
-				const items = context.getInputData();
-				const binaryData = items[itemIndex].binary;
-
-				if (!binaryData || !binaryData[binaryPropertyName]) {
-					throw new NodeOperationError(
-						context.getNode(),
-						`Binary property '${binaryPropertyName}' not found.`,
-						{ itemIndex }
-					);
-				}
-
-				const binary = binaryData[binaryPropertyName] as { data: string; mimeType: string };
-				if (binary.data) {
-					inputImage = `data:${binary.mimeType || 'image/jpeg'};base64,${binary.data}`;
-				}
-			} else {
-				inputImage = context.getNodeParameter('nbInputImage', itemIndex) as string || '';
-			}
-		}
-
-		// Validate input image for image-to-image mode
-		if (mode === 'image-to-image' && model !== 'gemini-3-pro-image-preview' && !inputImage) {
-			throw new NodeOperationError(
-				context.getNode(),
-				'Input image is required for image-to-image mode',
 				{ itemIndex }
 			);
 		}
