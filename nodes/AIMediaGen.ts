@@ -298,7 +298,7 @@ export class AIMediaGen implements INodeType {
 			description: 'Binary property containing the image file to edit',
 			placeholder: 'Enter a property name containing the binary data, e.g., data',
 		},
-		// Nano Banana - Multiple Input Images (for Gemini 3 Pro)
+		// Nano Banana - Multiple Input Images (for all models)
 		{
 			displayName: 'Reference Images',
 			name: 'nbReferenceImages',
@@ -307,10 +307,9 @@ export class AIMediaGen implements INodeType {
 			displayOptions: {
 				show: {
 					operation: ['nanoBanana'],
-					nbModel: ['gemini-3-pro-image-preview'],
 				},
 			},
-			description: 'Add reference images for generation (max 14 images)',
+			description: 'Add reference images for generation',
 			options: [
 				{
 					displayName: 'Images',
@@ -1477,53 +1476,55 @@ export class AIMediaGen implements INodeType {
 			);
 		}
 
-		// For Gemini 3 Pro, collect all reference images
+		// For all models, collect reference images
 		let referenceImages: string[] = [];
-		if (model === 'gemini-3-pro-image-preview') {
-			try {
-				const refImagesData = context.getNodeParameter('nbReferenceImages', itemIndex) as {
-					images?: Array<{ type: string; url?: string; binary?: string }>;
-				};
+		try {
+			const refImagesData = context.getNodeParameter('nbReferenceImages', itemIndex) as {
+				images?: Array<{ type: string; url?: string; binary?: string }>;
+			};
 
-				if (refImagesData.images && refImagesData.images.length > 0) {
-					const items = context.getInputData();
-					const binaryData = items[itemIndex].binary;
+			if (refImagesData.images && refImagesData.images.length > 0) {
+				const items = context.getInputData();
+				const binaryData = items[itemIndex].binary;
 
-					for (const img of refImagesData.images) {
-						let imageData = '';
-						if (img.type === 'binary' && img.binary && binaryData) {
-							const binary = binaryData[img.binary] as { data: string; mimeType: string };
-							if (binary && binary.data) {
-								imageData = `data:${binary.mimeType || 'image/jpeg'};base64,${binary.data}`;
-							}
-						} else if (img.type === 'url' && img.url) {
-							imageData = img.url;
+				for (const img of refImagesData.images) {
+					let imageData = '';
+					if (img.type === 'binary' && img.binary && binaryData) {
+						const binary = binaryData[img.binary] as { data: string; mimeType: string };
+						if (binary && binary.data) {
+							imageData = `data:${binary.mimeType || 'image/jpeg'};base64,${binary.data}`;
 						}
+					} else if (img.type === 'url' && img.url) {
+						imageData = img.url;
+					}
 
-						if (imageData) {
-							referenceImages.push(imageData);
-						}
+					if (imageData) {
+						referenceImages.push(imageData);
 					}
 				}
+			}
 
-				// Validate max 14 images
-				if (referenceImages.length > 14) {
-					throw new NodeOperationError(
-						context.getNode(),
-						`Maximum 14 reference images allowed. You provided ${referenceImages.length}.`,
-						{ itemIndex }
-					);
-				}
+			// Validate max images based on model
+			const maxImages = model === 'gemini-3-pro-image-preview' ? 14 : 4;
+			if (referenceImages.length > maxImages) {
+				throw new NodeOperationError(
+					context.getNode(),
+					`Maximum ${maxImages} reference images allowed for ${model}. You provided ${referenceImages.length}.`,
+					{ itemIndex }
+				);
+			}
 
-				console.log('[Gemini 3 Pro] Reference images loaded', {
+			if (referenceImages.length > 0) {
+				console.log(`[${model}] Reference images loaded`, {
 					count: referenceImages.length,
-				});
-			} catch (error) {
-				// No reference images or error accessing them
-				console.log('[Gemini 3 Pro] No reference images or error loading them', {
-					error: error instanceof Error ? error.message : String(error),
+					maxAllowed: maxImages,
 				});
 			}
+		} catch (error) {
+			// No reference images or error accessing them
+			console.log(`[${model}] No reference images or error loading them`, {
+				error: error instanceof Error ? error.message : String(error),
+			});
 		}
 
 		const controller = new AbortController();
