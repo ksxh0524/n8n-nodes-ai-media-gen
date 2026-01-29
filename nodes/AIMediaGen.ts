@@ -279,7 +279,7 @@ export class AIMediaGen implements INodeType {
 			description: 'Binary property containing the image file to edit',
 			placeholder: 'Enter a property name containing the binary data, e.g., data',
 		},
-		// Nano Banana - Input Images (only for text-to-image with reference images)
+		// Nano Banana - Reference Images (only for image-to-image mode)
 		{
 			displayName: 'Reference Images',
 			name: 'nbInputImages',
@@ -291,10 +291,10 @@ export class AIMediaGen implements INodeType {
 			displayOptions: {
 				show: {
 					operation: ['nanoBanana'],
-					nbMode: ['text-to-image'],
+					nbMode: ['image-to-image'],
 				},
 			},
-			description: 'Reference images to guide generation (optional, max: 4 for standard models, 14 for Pro models). Supports: URL, base64, or binary property name.',
+			description: 'Additional reference images to guide editing (optional, max: 4 for standard models, 14 for Pro models). Supports: URL, base64, or binary property name.',
 			options: [
 				{
 					displayName: 'Image',
