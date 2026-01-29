@@ -1490,10 +1490,23 @@ export class AIMediaGen implements INodeType {
 						statusText: response.statusText,
 						body: errorText,
 					});
-					throw new MediaGenError(
-						`API request failed: ${response.status} ${response.statusText}`,
-						'API_ERROR'
-					);
+
+					// Try to parse error response for more details
+					let errorMessage = `API request failed: ${response.status} ${response.statusText}`;
+					try {
+						const errorData = JSON.parse(errorText);
+						if (errorData.error?.message) {
+							errorMessage = errorData.error.message;
+						}
+					} catch {
+						// Use default error message
+					}
+
+					throw new MediaGenError(errorMessage, 'API_ERROR', {
+						statusCode: response.status,
+						statusText: response.statusText,
+						body: errorText,
+					});
 				}
 
 				const data = await response.json() as any;
@@ -1595,6 +1608,8 @@ export class AIMediaGen implements INodeType {
 					signal: controller.signal,
 				});
 
+				console.log(`[${model}] Request body`, JSON.stringify(requestBody, null, 2));
+
 				clearTimeout(timeoutId);
 
 				if (!response.ok) {
@@ -1604,10 +1619,23 @@ export class AIMediaGen implements INodeType {
 						statusText: response.statusText,
 						body: errorText,
 					});
-					throw new MediaGenError(
-						`API request failed: ${response.status} ${response.statusText}`,
-						'API_ERROR'
-					);
+
+					// Try to parse error response for more details
+					let errorMessage = `API request failed: ${response.status} ${response.statusText}`;
+					try {
+						const errorData = JSON.parse(errorText);
+						if (errorData.error?.message) {
+							errorMessage = errorData.error.message;
+						}
+					} catch {
+						// Use default error message
+					}
+
+					throw new MediaGenError(errorMessage, 'API_ERROR', {
+						statusCode: response.status,
+						statusText: response.statusText,
+						body: errorText,
+					});
 				}
 
 				const data = await response.json() as any;
