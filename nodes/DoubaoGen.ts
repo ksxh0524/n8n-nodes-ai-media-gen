@@ -464,7 +464,7 @@ export class DoubaoGen implements INodeType {
 				formData.append('size', size);
 				formData.append('stream', 'false');
 				formData.append('watermark', 'false');
-				if (seed >= 0) {
+				if (seed > 0) {
 					formData.append('seed', seed.toString());
 				}
 
