@@ -58,20 +58,6 @@ interface ModelScopeAsyncTaskResponse {
 }
 
 /**
- * OpenAI DALL-E format image generation response (for Nano Banana)
- */
-interface DalleImage {
-	b64_json?: string;
-	url?: string;
-	revised_prompt?: string;
-}
-
-interface DalleResponse {
-	created: number;
-	data: DalleImage[];
-}
-
-/**
  * AI Media Generation Node
  *
  * Generates and edits images using multiple AI platforms:
@@ -1391,8 +1377,6 @@ export class AIMediaGen implements INodeType {
 		const mode = context.getNodeParameter('nbMode', itemIndex) as string;
 		const model = context.getNodeParameter('nbModel', itemIndex) as string;
 		const prompt = context.getNodeParameter('nbPrompt', itemIndex) as string;
-		const n = context.getNodeParameter('nbN', itemIndex) as number || 1;
-		const responseFormat = context.getNodeParameter('nbResponseFormat', itemIndex) as string || 'url';
 
 		// Determine size based on model type
 		let size = '1024x1024';
@@ -1533,8 +1517,11 @@ export class AIMediaGen implements INodeType {
 		try {
 			let imageUrl: string = '';
 
-			// Use Gemini native format for Gemini 3 Pro
-			if (model === 'gemini-3-pro-image-preview') {
+			// All Gemini models use Gemini native format
+			const isProModel = ['nano-banana-2', 'nano-banana-pro', 'gemini-3-pro-image-preview'].includes(model);
+
+			if (isProModel) {
+				// Pro models: use aspectRatio and imageSize
 				const aspectRatio = context.getNodeParameter('nbAspectRatio', itemIndex) as string || '1:1';
 				const resolution = context.getNodeParameter('nbResolution', itemIndex) as string || '1K';
 
@@ -1543,7 +1530,7 @@ export class AIMediaGen implements INodeType {
 					{ text: prompt.trim() },
 				];
 
-				// Add reference images
+				// Add reference images (max 4 for non-Gemini-3-Pro models)
 				for (const refImage of referenceImages) {
 					if (refImage.startsWith('data:')) {
 						// Base64 image
@@ -1555,9 +1542,8 @@ export class AIMediaGen implements INodeType {
 							},
 						});
 					} else {
-						// URL - for Gemini API, we might need to fetch and convert, or the API might handle URLs
-						// For now, skip URLs in native format
-						console.warn('[Gemini 3 Pro] URL images not supported in native format, skipping');
+						// URL - skip for now
+						console.warn(`[${model}] URL images not supported in native format, skipping`);
 					}
 				}
 
@@ -1572,8 +1558,7 @@ export class AIMediaGen implements INodeType {
 					},
 				};
 
-				console.log('[Gemini 3 Pro] Sending generation request', {
-					model,
+				console.log(`[${model}] Sending generation request`, {
 					aspectRatio,
 					resolution,
 					imagesCount: referenceImages.length,
@@ -1594,7 +1579,7 @@ export class AIMediaGen implements INodeType {
 
 				if (!response.ok) {
 					const errorText = await response.text();
-					console.error('[Gemini 3 Pro] API error', {
+					console.error(`[${model}] API error`, {
 						status: response.status,
 						statusText: response.statusText,
 						body: errorText,
@@ -1621,28 +1606,53 @@ export class AIMediaGen implements INodeType {
 				}
 
 				if (!imageUrl) {
-					throw new MediaGenError('No image returned from Gemini 3 Pro API', 'API_ERROR');
+					throw new MediaGenError('No image returned from API', 'API_ERROR');
 				}
 
-				console.log('[Gemini 3 Pro] Generation completed', {
+				console.log(`[${model}] Generation completed`, {
 					imageUrl: imageUrl.substring(0, 50) + '...',
 				});
-			} else if (mode === 'text-to-image') {
-				// POST /v1/images/generations (OpenAI DALL-E format)
+			} else {
+				// Standard models (Nano Banana, Gemini 2.5 Flash): use direct size
+				// Build contents array with prompt and reference images
+				const contents: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }> = [
+					{ text: prompt.trim() },
+				];
+
+				// Add reference images (max 4)
+				for (const refImage of referenceImages) {
+					if (refImage.startsWith('data:')) {
+						// Base64 image
+						const [mimeType, base64Data] = refImage.split(';base64,');
+						contents.push({
+							inlineData: {
+								mimeType: mimeType.replace('data:', '') || 'image/jpeg',
+								data: base64Data,
+							},
+						});
+					} else {
+						// URL - skip for now
+						console.warn(`[${model}] URL images not supported in native format, skipping`);
+					}
+				}
+
 				const requestBody = {
-					model,
-					prompt: prompt.trim(),
-					n,
-					size,
-					response_format: responseFormat,
+					contents,
+					config: {
+						responseModalities: ['TEXT', 'IMAGE'],
+						imageConfig: {
+							size: size,
+						},
+					},
 				};
 
-				console.log('[Nano Banana] Sending text-to-image request', {
-					model,
+				console.log(`[${model}] Sending generation request`, {
+					size,
+					imagesCount: referenceImages.length,
 					prompt: prompt.substring(0, 50) + '...',
 				});
 
-				const response = await fetch(`${baseUrl}/v1/images/generations`, {
+				const response = await fetch(`${baseUrl}/v1/models/${model}:generateContent`, {
 					method: 'POST',
 					headers: {
 						'Authorization': `Bearer ${credentials.apiKey}`,
@@ -1656,7 +1666,7 @@ export class AIMediaGen implements INodeType {
 
 				if (!response.ok) {
 					const errorText = await response.text();
-					console.error('[Nano Banana] API error', {
+					console.error(`[${model}] API error`, {
 						status: response.status,
 						statusText: response.statusText,
 						body: errorText,
@@ -1667,92 +1677,26 @@ export class AIMediaGen implements INodeType {
 					);
 				}
 
-				const data = await response.json() as DalleResponse;
+				const data = await response.json() as any;
 
-				if (!data.data || data.data.length === 0) {
-					throw new MediaGenError('No images returned from API', 'API_ERROR');
-				}
-
-				// Get first image
-				const firstImage = data.data[0];
-				imageUrl = firstImage.url || firstImage.b64_json || '';
-
-				if (!imageUrl) {
-					throw new MediaGenError('No image URL or base64 data returned', 'API_ERROR');
-				}
-
-				console.log('[Nano Banana] Generation completed', {
-					imageUrl: imageUrl.substring(0, 50) + '...',
-				});
-			} else {
-				// POST /v1/images/edits (OpenAI DALL-E Edits format)
-				const formData = new FormData();
-				formData.append('model', model);
-				formData.append('prompt', prompt);
-				formData.append('n', n.toString());
-				formData.append('size', size);
-				formData.append('response_format', responseFormat);
-
-				// Add input image
-				if (inputImage.startsWith('data:')) {
-					// It's base64 - convert to blob
-					const base64Data = inputImage.split(',')[1];
-					const byteCharacters = atob(base64Data);
-					const byteNumbers = new Array(byteCharacters.length);
-					for (let i = 0; i < byteCharacters.length; i++) {
-						byteNumbers[i] = byteCharacters.charCodeAt(i);
+				// Parse Gemini response format
+				if (data.candidates && data.candidates.length > 0) {
+					const candidate = data.candidates[0];
+					if (candidate.content && candidate.content.parts) {
+						for (const part of candidate.content.parts) {
+							if (part.inlineData && part.inlineData.data) {
+								imageUrl = `data:image/png;base64,${part.inlineData.data}`;
+								break;
+							}
+						}
 					}
-					const byteArray = new Uint8Array(byteNumbers);
-					const blob = new Blob([byteArray], { type: 'image/jpeg' });
-					formData.append('image', blob, 'image.jpg');
-				} else {
-					// It's a URL - append as-is
-					formData.append('image', inputImage);
 				}
-
-				console.log('[Nano Banana] Sending image-to-image request', {
-					model,
-					prompt: prompt.substring(0, 50) + '...',
-				});
-
-				const response = await fetch(`${baseUrl}/v1/images/edits`, {
-					method: 'POST',
-					headers: {
-						'Authorization': `Bearer ${credentials.apiKey}`,
-					},
-					body: formData,
-					signal: controller.signal,
-				});
-
-				clearTimeout(timeoutId);
-
-				if (!response.ok) {
-					const errorText = await response.text();
-					console.error('[Nano Banana] API error', {
-						status: response.status,
-						statusText: response.statusText,
-						body: errorText,
-					});
-					throw new MediaGenError(
-						`API request failed: ${response.status} ${response.statusText}`,
-						'API_ERROR'
-					);
-				}
-
-				const data = await response.json() as DalleResponse;
-
-				if (!data.data || data.data.length === 0) {
-					throw new MediaGenError('No images returned from API', 'API_ERROR');
-				}
-
-				const firstImage = data.data[0];
-				imageUrl = firstImage.url || firstImage.b64_json || '';
 
 				if (!imageUrl) {
-					throw new MediaGenError('No image URL or base64 data returned', 'API_ERROR');
+					throw new MediaGenError('No image returned from API', 'API_ERROR');
 				}
 
-				console.log('[Nano Banana] Edit completed', {
+				console.log(`[${model}] Generation completed`, {
 					imageUrl: imageUrl.substring(0, 50) + '...',
 				});
 			}
