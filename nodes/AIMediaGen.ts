@@ -298,6 +298,65 @@ export class AIMediaGen implements INodeType {
 			description: 'Binary property containing the image file to edit',
 			placeholder: 'Enter a property name containing the binary data, e.g., data',
 		},
+		// Nano Banana - Multiple Input Images (for Gemini 3 Pro)
+		{
+			displayName: 'Reference Images',
+			name: 'nbReferenceImages',
+			type: 'fixedCollection',
+			default: {},
+			displayOptions: {
+				show: {
+					operation: ['nanoBanana'],
+					nbModel: ['gemini-3-pro-image-preview'],
+				},
+			},
+			description: 'Add reference images for generation (max 14 images)',
+			options: [
+				{
+					displayName: 'Images',
+					name: 'images',
+					type: 'collection',
+					default: {},
+					placeholder: 'Add Image',
+					options: [
+						{
+							displayName: 'Type',
+							name: 'type',
+							type: 'options',
+							default: 'url',
+							options: [
+								{ name: 'URL / Base64', value: 'url' },
+								{ name: 'Binary', value: 'binary' },
+							],
+						},
+						{
+							displayName: 'Image URL / Base64',
+							name: 'url',
+							type: 'string',
+							default: '',
+							displayOptions: {
+								show: {
+									type: ['url'],
+								},
+							},
+							placeholder: 'https://example.com/image.jpg or data:image/jpeg;base64,...',
+						},
+						{
+							displayName: 'Binary Property',
+							name: 'binary',
+							type: 'string',
+							default: '',
+							displayOptions: {
+								show: {
+									type: ['binary'],
+								},
+							},
+							placeholder: 'Enter binary property name, e.g., data',
+						},
+					],
+				},
+			],
+		},
 		// Nano Banana - Number of Images
 		{
 			displayName: 'Number of Images',
@@ -1410,7 +1469,7 @@ export class AIMediaGen implements INodeType {
 		}
 
 		// Validate input image for image-to-image mode
-		if (mode === 'image-to-image' && !inputImage) {
+		if (mode === 'image-to-image' && model !== 'gemini-3-pro-image-preview' && !inputImage) {
 			throw new NodeOperationError(
 				context.getNode(),
 				'Input image is required for image-to-image mode',
@@ -1418,13 +1477,156 @@ export class AIMediaGen implements INodeType {
 			);
 		}
 
+		// For Gemini 3 Pro, collect all reference images
+		let referenceImages: string[] = [];
+		if (model === 'gemini-3-pro-image-preview') {
+			try {
+				const refImagesData = context.getNodeParameter('nbReferenceImages', itemIndex) as {
+					images?: Array<{ type: string; url?: string; binary?: string }>;
+				};
+
+				if (refImagesData.images && refImagesData.images.length > 0) {
+					const items = context.getInputData();
+					const binaryData = items[itemIndex].binary;
+
+					for (const img of refImagesData.images) {
+						let imageData = '';
+						if (img.type === 'binary' && img.binary && binaryData) {
+							const binary = binaryData[img.binary] as { data: string; mimeType: string };
+							if (binary && binary.data) {
+								imageData = `data:${binary.mimeType || 'image/jpeg'};base64,${binary.data}`;
+							}
+						} else if (img.type === 'url' && img.url) {
+							imageData = img.url;
+						}
+
+						if (imageData) {
+							referenceImages.push(imageData);
+						}
+					}
+				}
+
+				// Validate max 14 images
+				if (referenceImages.length > 14) {
+					throw new NodeOperationError(
+						context.getNode(),
+						`Maximum 14 reference images allowed. You provided ${referenceImages.length}.`,
+						{ itemIndex }
+					);
+				}
+
+				console.log('[Gemini 3 Pro] Reference images loaded', {
+					count: referenceImages.length,
+				});
+			} catch (error) {
+				// No reference images or error accessing them
+				console.log('[Gemini 3 Pro] No reference images or error loading them', {
+					error: error instanceof Error ? error.message : String(error),
+				});
+			}
+		}
+
 		const controller = new AbortController();
 		const timeoutId = setTimeout(() => controller.abort(), timeout);
 
 		try {
-			let imageUrl: string;
+			let imageUrl: string = '';
 
-			if (mode === 'text-to-image') {
+			// Use Gemini native format for Gemini 3 Pro
+			if (model === 'gemini-3-pro-image-preview') {
+				const aspectRatio = context.getNodeParameter('nbAspectRatio', itemIndex) as string || '1:1';
+				const resolution = context.getNodeParameter('nbResolution', itemIndex) as string || '1K';
+
+				// Build contents array with prompt and reference images
+				const contents: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }> = [
+					{ text: prompt.trim() },
+				];
+
+				// Add reference images
+				for (const refImage of referenceImages) {
+					if (refImage.startsWith('data:')) {
+						// Base64 image
+						const [mimeType, base64Data] = refImage.split(';base64,');
+						contents.push({
+							inlineData: {
+								mimeType: mimeType.replace('data:', '') || 'image/jpeg',
+								data: base64Data,
+							},
+						});
+					} else {
+						// URL - for Gemini API, we might need to fetch and convert, or the API might handle URLs
+						// For now, skip URLs in native format
+						console.warn('[Gemini 3 Pro] URL images not supported in native format, skipping');
+					}
+				}
+
+				const requestBody = {
+					contents,
+					config: {
+						responseModalities: ['TEXT', 'IMAGE'],
+						imageConfig: {
+							aspectRatio,
+							imageSize: resolution,
+						},
+					},
+				};
+
+				console.log('[Gemini 3 Pro] Sending generation request', {
+					model,
+					aspectRatio,
+					resolution,
+					imagesCount: referenceImages.length,
+					prompt: prompt.substring(0, 50) + '...',
+				});
+
+				const response = await fetch(`${baseUrl}/v1/models/${model}:generateContent`, {
+					method: 'POST',
+					headers: {
+						'Authorization': `Bearer ${credentials.apiKey}`,
+						'Content-Type': 'application/json',
+					},
+					body: JSON.stringify(requestBody),
+					signal: controller.signal,
+				});
+
+				clearTimeout(timeoutId);
+
+				if (!response.ok) {
+					const errorText = await response.text();
+					console.error('[Gemini 3 Pro] API error', {
+						status: response.status,
+						statusText: response.statusText,
+						body: errorText,
+					});
+					throw new MediaGenError(
+						`API request failed: ${response.status} ${response.statusText}`,
+						'API_ERROR'
+					);
+				}
+
+				const data = await response.json() as any;
+
+				// Parse Gemini response format
+				if (data.candidates && data.candidates.length > 0) {
+					const candidate = data.candidates[0];
+					if (candidate.content && candidate.content.parts) {
+						for (const part of candidate.content.parts) {
+							if (part.inlineData && part.inlineData.data) {
+								imageUrl = `data:image/png;base64,${part.inlineData.data}`;
+								break;
+							}
+						}
+					}
+				}
+
+				if (!imageUrl) {
+					throw new MediaGenError('No image returned from Gemini 3 Pro API', 'API_ERROR');
+				}
+
+				console.log('[Gemini 3 Pro] Generation completed', {
+					imageUrl: imageUrl.substring(0, 50) + '...',
+				});
+			} else if (mode === 'text-to-image') {
 				// POST /v1/images/generations (OpenAI DALL-E format)
 				const requestBody = {
 					model,
