@@ -194,11 +194,6 @@ export class AIMediaGen implements INodeType {
 					description: 'Third-party second generation model',
 				},
 				{
-					name: 'Gemini 2.5 Flash Image',
-					value: 'gemini-2.5-flash-image',
-					description: 'Google fast generation model',
-				},
-				{
 					name: 'Gemini 3 Pro Image Preview',
 					value: 'gemini-3-pro-image-preview',
 					description: 'Google high quality Pro model',
@@ -331,7 +326,7 @@ export class AIMediaGen implements INodeType {
 			displayOptions: {
 				show: {
 					operation: ['nanoBanana'],
-					nbModel: ['nano-banana', 'gemini-2.5-flash-image'],
+					nbModel: ['nano-banana'],
 				},
 			},
 		},
@@ -1312,7 +1307,7 @@ export class AIMediaGen implements INodeType {
 		// Determine size based on model type
 		let size = '1024x1024';
 		const proModels = ['nano-banana-2', 'gemini-3-pro-image-preview'];
-		const standardModels = ['nano-banana', 'gemini-2.5-flash-image'];
+		const standardModels = ['nano-banana'];
 
 		if (proModels.includes(model)) {
 			// For Pro models, get aspect ratio and resolution
@@ -1565,7 +1560,8 @@ export class AIMediaGen implements INodeType {
 				// Add text prompt at the end
 				parts.push({ text: prompt.trim() });
 
-				const requestBody = {
+				// Build request body - standard models support size parameter
+				const requestBody: Record<string, unknown> = {
 					contents: [
 						{
 							parts,
