@@ -225,13 +225,8 @@ export class AIMediaGen implements INodeType {
 					value: 'nano-banana-2',
 					description: 'Third-party second generation model',
 				},
-				{
-					name: 'Gemini 3 Pro Image Preview',
-					value: 'gemini-3-pro-image-preview',
-					description: 'Google high quality Pro model',
-				},
 			],
-			default: 'nano-banana',
+			default: 'nano-banana-2',
 			description: 'Select model to use',
 			displayOptions: {
 				show: {
@@ -292,7 +287,7 @@ export class AIMediaGen implements INodeType {
 				},
 			],
 		},
-		// Nano Banana - Aspect Ratio (for Pro models)
+		// Nano Banana - Aspect Ratio
 		{
 			displayName: 'Aspect Ratio',
 			name: 'nbAspectRatio',
@@ -310,15 +305,14 @@ export class AIMediaGen implements INodeType {
 				{ name: '16:9', value: '16:9' },
 				{ name: '21:9', value: '21:9' },
 			],
-			description: 'Select aspect ratio (for Pro models)',
+			description: 'Select aspect ratio',
 			displayOptions: {
 				show: {
 					operation: ['nanoBanana'],
-					nbModel: ['nano-banana-2', 'gemini-3-pro-image-preview'],
 				},
 			},
 		},
-		// Nano Banana - Resolution (for Pro models)
+		// Nano Banana - Resolution (for Nano Banana 2)
 		{
 			displayName: 'Resolution',
 			name: 'nbResolution',
@@ -329,37 +323,11 @@ export class AIMediaGen implements INodeType {
 				{ name: '2K', value: '2K' },
 				{ name: '4K', value: '4K' },
 			],
-			description: 'Select resolution (for Pro models)',
+			description: 'Select resolution (determines the model to use: 1K=nano-banana-2, 2K=nano-banana-2-2k, 4K=nano-banana-2-4k)',
 			displayOptions: {
 				show: {
 					operation: ['nanoBanana'],
-					nbModel: ['nano-banana-2', 'gemini-3-pro-image-preview'],
-				},
-			},
-		},
-		// Nano Banana - Size (for standard models)
-		{
-			displayName: 'Aspect Ratio',
-			name: 'nbSize',
-			type: 'options',
-			default: '1024x1024',
-			options: [
-				{ name: '1:1 (1024x1024)', value: '1024x1024' },
-				{ name: '2:3 (832x1248)', value: '832x1248' },
-				{ name: '3:2 (1248x832)', value: '1248x832' },
-				{ name: '3:4 (864x1184)', value: '864x1184' },
-				{ name: '4:3 (1184x864)', value: '1184x864' },
-				{ name: '4:5 (896x1152)', value: '896x1152' },
-				{ name: '5:4 (1152x896)', value: '1152x896' },
-				{ name: '9:16 (768x1344)', value: '768x1344' },
-				{ name: '16:9 (1344x768)', value: '1344x768' },
-				{ name: '21:9 (1536x672)', value: '1536x672' },
-			],
-			description: 'Image aspect ratio (1K resolution)',
-			displayOptions: {
-				show: {
-					operation: ['nanoBanana'],
-					nbModel: ['nano-banana'],
+					nbModel: ['nano-banana-2'],
 				},
 			},
 		},
@@ -634,13 +602,88 @@ export class AIMediaGen implements INodeType {
 					}
 
 					const timerId = performanceMonitor.startTimer('nanoBanana');
-					result = await AIMediaGen.executeNanoBananaRequest(this, i, credentials);
+
+					// Check cache if enabled
+					if (enableCache) {
+						const model = this.getNodeParameter('nbModel', i) as string;
+						const mode = this.getNodeParameter('nbMode', i) as string;
+						const prompt = this.getNodeParameter('nbPrompt', i) as string;
+
+						// Build cache parameters
+						const cacheParams: Record<string, unknown> = {
+							mode,
+							model,
+						};
+
+						// Add parameters based on model type
+						if (model === 'nano-banana-2') {
+							cacheParams.aspectRatio = this.getNodeParameter('nbAspectRatio', i);
+							cacheParams.resolution = this.getNodeParameter('nbResolution', i);
+						} else {
+							cacheParams.aspectRatio = this.getNodeParameter('nbAspectRatio', i);
+						}
+
+						// Add reference images (if any)
+						if (mode === 'image-to-image') {
+							const imagesData = this.getNodeParameter('nbInputImages', i) as {
+								image?: Array<{ url: string }>;
+							};
+							if (imagesData.image && imagesData.image.length > 0) {
+								cacheParams.images = imagesData.image.map(img => img.url).join('|');
+							}
+						}
+
+						const cacheKey = CacheKeyGenerator.forGeneration(
+							'nanoBanana',
+							model,
+							prompt,
+							cacheParams
+						);
+						const cached = await cacheManager.get(cacheKey);
+
+						if (cached) {
+							this.logger?.info('Cache hit', { model, cacheKey });
+							result = {
+								json: {
+									success: true,
+									...cached as Record<string, unknown>,
+									_metadata: {
+										model,
+										cached: true,
+										timestamp: new Date().toISOString(),
+									},
+								},
+							};
+						} else {
+							this.logger?.info('Cache miss', { model, cacheKey });
+							result = await AIMediaGen.executeNanoBananaRequest(this, i, credentials);
+
+							// Safely get cacheTtl
+							let cacheTtl: number = CONSTANTS.DEFAULTS.CACHE_TTL_SECONDS;
+							try {
+								cacheTtl = this.getNodeParameter('options.cacheTtl', i) as number;
+							} catch (error) {
+								this.logger?.debug('Options cacheTtl not set, using default', {
+									index: i,
+									defaultValue: CONSTANTS.DEFAULTS.CACHE_TTL_SECONDS
+								});
+								cacheTtl = CONSTANTS.DEFAULTS.CACHE_TTL_SECONDS;
+							}
+
+							if (result.json.success) {
+								await cacheManager.set(cacheKey, result.json, cacheTtl);
+							}
+						}
+					} else {
+						result = await AIMediaGen.executeNanoBananaRequest(this, i, credentials);
+					}
+
 					const elapsed = performanceMonitor.endTimer(timerId);
 
 					performanceMonitor.recordMetric({
 						timestamp: Date.now().toString(),
 						provider: 'nanoBanana',
-						model: this.getNodeParameter('nbModel', i) as string,
+						model: result.json.model as string,
 						mediaType: 'image',
 						duration: elapsed,
 						success: result.json.success as boolean,
@@ -648,7 +691,7 @@ export class AIMediaGen implements INodeType {
 					});
 
 					this.logger?.info('Execution completed', {
-						model: this.getNodeParameter('nbModel', i),
+						model: result.json.model,
 						duration: elapsed,
 						success: result.json.success,
 					});
@@ -1278,6 +1321,163 @@ export class AIMediaGen implements INodeType {
 	}
 
 	/**
+	 * Builds and executes a Gemini API request for image generation
+	 *
+	 * @param baseUrl - API base URL
+	 * @param credentials - API credentials
+	 * @param model - Model name
+	 * @param prompt - Text prompt for generation
+	 * @param referenceImages - Array of reference images (base64 or URLs)
+	 * @param aspectRatio - Aspect ratio for generation
+	 * @param resolution - Resolution (for Pro models) or null (for standard models)
+	 * @param timeout - Request timeout in milliseconds
+	 * @param signal - AbortSignal for cancellation
+	 * @param logger - Optional logger for debugging
+	 * @returns Promise resolving to image URL (base64 data URL or HTTP URL)
+	 * @throws MediaGenError for API errors
+	 */
+	private static async executeGeminiRequest(
+		baseUrl: string,
+		credentials: GooglePalmApiCredentials,
+		model: string,
+		prompt: string,
+		referenceImages: string[],
+		aspectRatio: string,
+		resolution: string | null,
+		signal: AbortSignal,
+		logger?: IExecuteFunctions['logger']
+	): Promise<string> {
+		// Build parts array
+		const parts: Array<{ inlineData?: { mimeType: string; data: string }; text?: string }> = [];
+
+		// Add reference images first
+		for (const refImage of referenceImages) {
+			if (refImage.startsWith('data:')) {
+				// Base64 image
+				const [mimeType, base64Data] = refImage.split(';base64,');
+				parts.push({
+					inlineData: {
+						mimeType: mimeType.replace('data:', '') || 'image/jpeg',
+						data: base64Data,
+					},
+				});
+			} else {
+				// URL - skip for now
+				logger?.warn(`[${model}] URL images not supported in native format, skipping`);
+			}
+		}
+
+		// Add text prompt at the end
+		parts.push({ text: prompt.trim() });
+
+		// Build generation config based on model type
+		const generationConfig: Record<string, unknown> = {
+			imageConfig: {
+				aspectRatio,
+			},
+		};
+
+		// Add imageSize for Pro models only
+		if (resolution) {
+			(generationConfig.imageConfig as Record<string, string>).imageSize = resolution;
+		}
+
+		const requestBody = {
+			contents: [{ parts, role: 'user' }],
+			generationConfig,
+		};
+
+		logger?.info(`[${model}] Sending generation request`, {
+			requestBody: {
+				contents: referenceImages.length > 0 ? '[with images]' : prompt.substring(0, 50) + '...',
+				generationConfig,
+			},
+			baseUrl,
+			fullUrl: `${baseUrl}/v1beta/models/${model}:generateContent`,
+			model,
+		});
+
+		const response = await fetch(`${baseUrl}/v1beta/models/${model}:generateContent`, {
+			method: 'POST',
+			headers: {
+				'x-goog-api-key': credentials.apiKey,
+				'Content-Type': 'application/json',
+			},
+			body: JSON.stringify(requestBody),
+			signal,
+		});
+
+		if (!response.ok) {
+			const errorText = await response.text();
+			logger?.error(`[${model}] API error`, {
+				status: response.status,
+				statusText: response.statusText,
+				body: errorText,
+			});
+
+			// Try to parse error response for more details
+			let errorMessage = `API request failed: ${response.status} ${response.statusText}`;
+			try {
+				const errorData = JSON.parse(errorText);
+				if (errorData.error?.message) {
+					errorMessage = errorData.error.message;
+				}
+			} catch {
+				// Use default error message
+			}
+
+			throw new MediaGenError(errorMessage, 'API_ERROR', {
+				statusCode: response.status,
+				statusText: response.statusText,
+				body: errorText,
+			});
+		}
+
+		const data = await response.json() as any;
+
+		// Parse standard Gemini API response format
+		let imageUrl = '';
+		if (data.candidates && data.candidates.length > 0) {
+			const candidate = data.candidates[0];
+			if (candidate.content && candidate.content.parts) {
+				for (const part of candidate.content.parts) {
+					// Method 1: Inline base64 image data
+					if (part.inlineData && part.inlineData.data) {
+						const mimeType = part.inlineData.mimeType || 'image/png';
+						imageUrl = `data:${mimeType};base64,${part.inlineData.data}`;
+						break;
+					}
+					// Method 2: Extract image URL from Markdown text
+					if (part.text) {
+						// Match Markdown image syntax: ![alt](url)
+						const markdownImageMatch = part.text.match(/!\[.*?\]\((https?:\/\/[^\)]+)\)/);
+						if (markdownImageMatch && markdownImageMatch[1]) {
+							imageUrl = markdownImageMatch[1];
+							break;
+						}
+						// Match plain URL (ends with image extensions)
+						const urlMatch = part.text.match(/(https?:\/\/[^\s]+\.(png|jpg|jpeg|gif|webp))/i);
+						if (urlMatch && urlMatch[1]) {
+							imageUrl = urlMatch[1];
+							break;
+						}
+					}
+				}
+			}
+		}
+
+		if (!imageUrl) {
+			throw new MediaGenError('No image returned from API', 'API_ERROR');
+		}
+
+		logger?.info(`[${model}] Generation completed`, {
+			imageUrl: imageUrl.substring(0, 50) + '...',
+		});
+
+		return imageUrl;
+	}
+
+	/**
 	 * Executes Nano Banana API request using OpenAI DALL-E format
 	 *
 	 * @param context - n8n execution context
@@ -1301,53 +1501,52 @@ export class AIMediaGen implements INodeType {
 			baseUrl,
 		});
 
-		// Resolution map for Nano Banana Pro (aspect ratio -> resolution)
-		const PRO_RESOLUTION_MAP: Record<string, Record<string, string>> = {
-			'1:1': { '1K': '1024x1024', '2K': '2048x2048', '4K': '4096x4096' },
-			'2:3': { '1K': '848x1264', '2K': '1696x2528', '4K': '3392x5056' },
-			'3:2': { '1K': '1264x848', '2K': '2528x1696', '4K': '5056x3392' },
-			'3:4': { '1K': '896x1200', '2K': '1792x2400', '4K': '3584x4800' },
-			'4:3': { '1K': '1200x896', '2K': '2400x1792', '4K': '4800x3584' },
-			'4:5': { '1K': '928x1152', '2K': '1856x2304', '4K': '3712x4608' },
-			'5:4': { '1K': '1152x928', '2K': '2304x1856', '4K': '4608x3712' },
-			'9:16': { '1K': '768x1376', '2K': '1536x2752', '4K': '3072x5504' },
-			'16:9': { '1K': '1376x768', '2K': '2752x1536', '4K': '5504x3072' },
-			'21:9': { '1K': '1584x672', '2K': '3168x1344', '4K': '6336x2688' },
-		};
-
 		// Get parameters
 		const mode = context.getNodeParameter('nbMode', itemIndex) as string;
 		const model = context.getNodeParameter('nbModel', itemIndex) as string;
 		const prompt = context.getNodeParameter('nbPrompt', itemIndex) as string;
 
-		// Determine size based on model type
-		let size = '1024x1024';
-		const proModels = ['nano-banana-2', 'gemini-3-pro-image-preview'];
-		const standardModels = ['nano-banana'];
+		// Determine aspect ratio and model based on selection
+		let aspectRatio = '1:1';
+		let actualModel = model;
+		let resolution: string | null = null;
 
-		if (proModels.includes(model)) {
-			// For Pro models, get aspect ratio and resolution
-			const aspectRatio = context.getNodeParameter('nbAspectRatio', itemIndex) as string || '1:1';
-			const resolution = context.getNodeParameter('nbResolution', itemIndex) as string || '1K';
+		if (model === 'nano-banana-2') {
+			// Nano Banana 2: map resolution to actual model name
+			try {
+				aspectRatio = context.getNodeParameter('nbAspectRatio', itemIndex) as string;
+				const selectedResolution = context.getNodeParameter('nbResolution', itemIndex) as string;
+				context.logger?.info(`[Nano Banana 2] Resolution selected`, { aspectRatio, resolution: selectedResolution });
 
-			if (PRO_RESOLUTION_MAP[aspectRatio] && PRO_RESOLUTION_MAP[aspectRatio][resolution]) {
-				size = PRO_RESOLUTION_MAP[aspectRatio][resolution];
-			} else {
-				size = '1024x1024';
+				// Map resolution to actual model
+				const resolutionModelMap: Record<string, string> = {
+					'1K': 'nano-banana-2',
+					'2K': 'nano-banana-2-2k',
+					'4K': 'nano-banana-2-4k',
+				};
+				actualModel = resolutionModelMap[selectedResolution] || 'nano-banana-2';
+				resolution = selectedResolution;
+
+				context.logger?.info('[Nano Banana 2] Using model', {
+					selectedResolution,
+					actualModel,
+					aspectRatio,
+				});
+			} catch (error) {
+				context.logger?.error(`[Nano Banana 2] Failed to read parameters`, { error: error instanceof Error ? error.message : String(error) });
+				actualModel = 'nano-banana-2';
+				aspectRatio = '1:1';
+				resolution = '1K';
 			}
-
-			context.logger?.info('[Pro Model] Using calculated size', {
-				model,
-				aspectRatio,
-				resolution,
-				size,
-			});
-		} else if (standardModels.includes(model)) {
-			// For standard models, get size directly
-			size = context.getNodeParameter('nbSize', itemIndex) as string || '1024x1024';
 		} else {
-			// Unknown model, use default
-			size = '1024x1024';
+			// Nano Banana (standard): use aspect ratio directly
+			try {
+				aspectRatio = context.getNodeParameter('nbAspectRatio', itemIndex) as string;
+				context.logger?.info(`[Nano Banana] Using aspect ratio`, { aspectRatio });
+			} catch (error) {
+				context.logger?.error(`[Nano Banana] Failed to read aspect ratio`, { error: error instanceof Error ? error.message : String(error) });
+				aspectRatio = '1:1';
+			}
 		}
 
 		// Get timeout
@@ -1367,12 +1566,13 @@ export class AIMediaGen implements INodeType {
 			);
 		}
 
-		// Collect input images from fixedCollection
+		// Collect input images from fixedCollection (only for image-to-image mode)
 		const referenceImages: string[] = [];
-		try {
-			const imagesData = context.getNodeParameter('nbInputImages', itemIndex) as {
-				image?: Array<{ url: string }>;
-			};
+		if (mode === 'image-to-image') {
+			try {
+				const imagesData = context.getNodeParameter('nbInputImages', itemIndex) as {
+					image?: Array<{ url: string }>;
+				};
 
 			if (imagesData.image && imagesData.image.length > 0) {
 				const items = context.getInputData();
@@ -1401,325 +1601,47 @@ export class AIMediaGen implements INodeType {
 			}
 
 			// Validate max images based on model
-			const proModels = ['nano-banana-2', 'gemini-3-pro-image-preview'];
-			const maxImages = proModels.includes(model) ? 14 : 4;
+			// All Nano Banana 2 variants (including 2k and 4k) support up to 14 images
+			const proModels = ['nano-banana-2', 'nano-banana-2-2k', 'nano-banana-2-4k'];
+			const maxImages = proModels.includes(actualModel) ? 14 : 4;
 			if (referenceImages.length > maxImages) {
 				throw new NodeOperationError(
 					context.getNode(),
-					`Maximum ${maxImages} reference images allowed for ${model}. You provided ${referenceImages.length}.`,
+					`Maximum ${maxImages} reference images allowed for ${actualModel}. You provided ${referenceImages.length}.`,
 					{ itemIndex }
 				);
 			}
 
 			if (referenceImages.length > 0) {
-				console.log(`[${model}] Reference images loaded`, {
+				context.logger?.info(`[${actualModel}] Reference images loaded`, {
 					count: referenceImages.length,
 					maxAllowed: maxImages,
 				});
 			}
 		} catch (error) {
 			// No reference images or error accessing them
-			console.log(`[${model}] No reference images or error loading them`, {
+			context.logger?.info(`[${actualModel}] No reference images or error loading them`, {
 				error: error instanceof Error ? error.message : String(error),
 			});
+		}
 		}
 
 		const controller = new AbortController();
 		const timeoutId = setTimeout(() => controller.abort(), timeout);
 
 		try {
-			let imageUrl: string = '';
-
-			// All Gemini models use Gemini native format
-			const isProModel = ['nano-banana-2', 'gemini-3-pro-image-preview'].includes(model);
-
-			if (isProModel) {
-				// Pro models: use aspectRatio and imageSize
-				const aspectRatio = context.getNodeParameter('nbAspectRatio', itemIndex) as string || '1:1';
-				const resolution = context.getNodeParameter('nbResolution', itemIndex) as string || '1K';
-
-				// Build parts array: images first, then text
-				const parts: Array<{ inlineData?: { mimeType: string; data: string }; text?: string }> = [];
-
-				// Add reference images first
-				for (const refImage of referenceImages) {
-					if (refImage.startsWith('data:')) {
-						// Base64 image
-						const [mimeType, base64Data] = refImage.split(';base64,');
-						parts.push({
-							inlineData: {
-								mimeType: mimeType.replace('data:', '') || 'image/jpeg',
-								data: base64Data,
-							},
-						});
-					} else {
-						// URL - skip for now
-						console.warn(`[${model}] URL images not supported in native format, skipping`);
-					}
-				}
-
-				// Add text prompt at the end
-				parts.push({ text: prompt.trim() });
-
-				const requestBody = {
-					contents: [
-						{
-							parts,
-							role: 'user',
-						},
-					],
-					generationConfig: {
-						responseModalities: ['IMAGE'],
-						imageConfig: {
-							aspectRatio,
-							imageSize: resolution,
-						},
-					},
-				};
-
-				console.log(`[${model}] Sending generation request`, {
-					requestBody: {
-						contents: [{ parts: [{ text: prompt.substring(0, 50) + '...' }], role: 'user' }],
-						generationConfig: {
-							responseModalities: ['IMAGE'],
-							imageConfig: {
-								aspectRatio,
-								imageSize: resolution,
-							},
-						},
-					},
-					baseUrl,
-					fullUrl: `${baseUrl}/v1beta/models/${model}:generateContent`,
-					model,
-				});
-
-				const response = await fetch(`${baseUrl}/v1beta/models/${model}:generateContent`, {
-					method: 'POST',
-					headers: {
-						'x-goog-api-key': credentials.apiKey,
-						'Content-Type': 'application/json',
-					},
-					body: JSON.stringify(requestBody),
-					signal: controller.signal,
-				});
-
-				clearTimeout(timeoutId);
-
-				if (!response.ok) {
-					const errorText = await response.text();
-					console.error(`[${model}] API error`, {
-						status: response.status,
-						statusText: response.statusText,
-						body: errorText,
-					});
-
-					// Try to parse error response for more details
-					let errorMessage = `API request failed: ${response.status} ${response.statusText}`;
-					try {
-						const errorData = JSON.parse(errorText);
-						if (errorData.error?.message) {
-							errorMessage = errorData.error.message;
-						}
-					} catch {
-						// Use default error message
-					}
-
-					throw new MediaGenError(errorMessage, 'API_ERROR', {
-						statusCode: response.status,
-						statusText: response.statusText,
-						body: errorText,
-					});
-				}
-
-				const data = await response.json() as any;
-
-				// Parse standard Gemini API response format
-				if (data.candidates && data.candidates.length > 0) {
-					const candidate = data.candidates[0];
-					if (candidate.content && candidate.content.parts) {
-						for (const part of candidate.content.parts) {
-							// Method 1: Inline base64 image data
-							if (part.inlineData && part.inlineData.data) {
-								const mimeType = part.inlineData.mimeType || 'image/png';
-								imageUrl = `data:${mimeType};base64,${part.inlineData.data}`;
-								break;
-							}
-							// Method 2: Extract image URL from Markdown text
-							if (part.text) {
-								// Match Markdown image syntax: ![alt](url)
-								const markdownImageMatch = part.text.match(/!\[.*?\]\((https?:\/\/[^\)]+)\)/);
-								if (markdownImageMatch && markdownImageMatch[1]) {
-									imageUrl = markdownImageMatch[1];
-									break;
-								}
-								// Match plain URL (ends with image extensions)
-							 const urlMatch = part.text.match(/(https?:\/\/[^\s]+\.(png|jpg|jpeg|gif|webp))/i);
-								if (urlMatch && urlMatch[1]) {
-									imageUrl = urlMatch[1];
-									break;
-								}
-							}
-						}
-					}
-				}
-
-				if (!imageUrl) {
-					throw new MediaGenError('No image returned from API', 'API_ERROR');
-				}
-
-				console.log(`[${model}] Generation completed`, {
-					imageUrl: imageUrl.substring(0, 50) + '...',
-				});
-			} else {
-				// Standard models (nano-banana): convert size to aspect ratio
-				// Build parts array: images first, then text
-				const parts: Array<{ inlineData?: { mimeType: string; data: string }; text?: string }> = [];
-
-				// Add reference images first
-				for (const refImage of referenceImages) {
-					if (refImage.startsWith('data:')) {
-						// Base64 image
-						const [mimeType, base64Data] = refImage.split(';base64,');
-						parts.push({
-							inlineData: {
-								mimeType: mimeType.replace('data:', '') || 'image/jpeg',
-								data: base64Data,
-							},
-						});
-					} else {
-						// URL - skip for now
-						console.warn(`[${model}] URL images not supported in native format, skipping`);
-					}
-				}
-
-				// Add text prompt at the end
-				parts.push({ text: prompt.trim() });
-
-				// Convert size resolution to aspect ratio string
-				const sizeToAspectRatio: Record<string, string> = {
-					'1024x1024': '1:1',
-					'832x1248': '2:3',
-					'1248x832': '3:2',
-					'864x1184': '3:4',
-					'1184x864': '4:3',
-					'896x1152': '4:5',
-					'1152x896': '5:4',
-					'768x1344': '9:16',
-					'1344x768': '16:9',
-					'1536x672': '21:9',
-				};
-
-				// Build request body - all models use aspect ratio
-				const requestBody: Record<string, unknown> = {
-					contents: [
-						{
-							parts,
-							role: 'user',
-						},
-					],
-					generationConfig: {
-						responseModalities: ['IMAGE'],
-						imageConfig: {
-							aspectRatio: sizeToAspectRatio[size] || '1:1',
-						},
-					},
-				};
-
-				console.log(`[${model}] Sending generation request`, {
-					requestBody: {
-						contents: [{ parts: [{ text: prompt.substring(0, 50) + '...' }], role: 'user' }],
-						generationConfig: {
-							responseModalities: ['IMAGE'],
-							imageConfig: {
-								aspectRatio: sizeToAspectRatio[size],
-							},
-						},
-					},
-					baseUrl,
-					fullUrl: `${baseUrl}/v1beta/models/${model}:generateContent`,
-					model,
-				});
-
-				const response = await fetch(`${baseUrl}/v1beta/models/${model}:generateContent`, {
-					method: 'POST',
-					headers: {
-						'x-goog-api-key': credentials.apiKey,
-						'Content-Type': 'application/json',
-					},
-					body: JSON.stringify(requestBody),
-					signal: controller.signal,
-				});
-
-				console.log(`[${model}] Request body`, JSON.stringify(requestBody, null, 2));
-
-				clearTimeout(timeoutId);
-
-				if (!response.ok) {
-					const errorText = await response.text();
-					console.error(`[${model}] API error`, {
-						status: response.status,
-						statusText: response.statusText,
-						body: errorText,
-					});
-
-					// Try to parse error response for more details
-					let errorMessage = `API request failed: ${response.status} ${response.statusText}`;
-					try {
-						const errorData = JSON.parse(errorText);
-						if (errorData.error?.message) {
-							errorMessage = errorData.error.message;
-						}
-					} catch {
-						// Use default error message
-					}
-
-					throw new MediaGenError(errorMessage, 'API_ERROR', {
-						statusCode: response.status,
-						statusText: response.statusText,
-						body: errorText,
-					});
-				}
-
-				const data = await response.json() as any;
-
-				// Parse standard Gemini API response format
-				if (data.candidates && data.candidates.length > 0) {
-					const candidate = data.candidates[0];
-					if (candidate.content && candidate.content.parts) {
-						for (const part of candidate.content.parts) {
-							// Method 1: Inline base64 image data
-							if (part.inlineData && part.inlineData.data) {
-								const mimeType = part.inlineData.mimeType || 'image/png';
-								imageUrl = `data:${mimeType};base64,${part.inlineData.data}`;
-								break;
-							}
-							// Method 2: Extract image URL from Markdown text
-							if (part.text) {
-								// Match Markdown image syntax: ![alt](url)
-								const markdownImageMatch = part.text.match(/!\[.*?\]\((https?:\/\/[^\)]+)\)/);
-								if (markdownImageMatch && markdownImageMatch[1]) {
-									imageUrl = markdownImageMatch[1];
-									break;
-								}
-								// Match plain URL (ends with image extensions)
-							 const urlMatch = part.text.match(/(https?:\/\/[^\s]+\.(png|jpg|jpeg|gif|webp))/i);
-								if (urlMatch && urlMatch[1]) {
-									imageUrl = urlMatch[1];
-									break;
-								}
-							}
-						}
-					}
-				}
-
-				if (!imageUrl) {
-					throw new MediaGenError('No image returned from API', 'API_ERROR');
-				}
-
-				console.log(`[${model}] Generation completed`, {
-					imageUrl: imageUrl.substring(0, 50) + '...',
-				});
-			}
+			// Call the common Gemini request function
+			const imageUrl = await AIMediaGen.executeGeminiRequest(
+				baseUrl,
+				credentials,
+				actualModel,
+				prompt,
+				referenceImages,
+				aspectRatio,
+				resolution,
+				controller.signal,
+				context.logger
+			);
 
 			// Download image binary data
 			let binaryData: { data: string; mimeType: string } | undefined;
@@ -1747,7 +1669,7 @@ export class AIMediaGen implements INodeType {
 
 						const bufferObj = Buffer.from(buffer);
 						const dimensions = getImageDimensions(bufferObj);
-						console.log(`[${model}] Image downloaded`, {
+						context.logger?.info(`[${actualModel}] Image downloaded`, {
 							mimeType,
 							fileSize: buffer.byteLength,
 							dimensions: dimensions ? `${dimensions.width}x${dimensions.height}` : 'unknown',
@@ -1755,11 +1677,11 @@ export class AIMediaGen implements INodeType {
 						});
 					}
 				} catch (error) {
-					console.warn(`[${model}] Failed to download image`, { error: error instanceof Error ? error.message : String(error) });
+					context.logger?.warn(`[${actualModel}] Failed to download image`, { error: error instanceof Error ? error.message : String(error) });
 				}
 			} else if (imageUrl && imageUrl.startsWith('data:')) {
 				// Already base64, extract data
-				const match = imageUrl.match(/data:([^;]+);base64,(.+)/);
+				const match = imageUrl.match(/data:([^;]+);base64,(.+)/s);
 				if (match) {
 					binaryData = { data: match[2], mimeType: match[1] };
 				}
@@ -1769,7 +1691,7 @@ export class AIMediaGen implements INodeType {
 				json: {
 					success: true,
 					imageUrl,
-					model,
+					model: actualModel,
 					mode,
 					_metadata: {
 						timestamp: new Date().toISOString(),
@@ -1783,7 +1705,7 @@ export class AIMediaGen implements INodeType {
 					data: {
 						data: binaryData.data,
 						mimeType: binaryData.mimeType,
-						fileName: `generated-${model}-${Date.now()}.${binaryData.mimeType.split('/')[1] || 'png'}`,
+						fileName: `generated-${actualModel}-${Date.now()}.${binaryData.mimeType.split('/')[1] || 'png'}`,
 					},
 				};
 			}
