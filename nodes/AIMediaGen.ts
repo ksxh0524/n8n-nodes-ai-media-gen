@@ -487,13 +487,18 @@ export class AIMediaGen implements INodeType {
 		const prompt = context.getNodeParameter('prompt', itemIndex) as string;
 		const size = context.getNodeParameter('size', itemIndex) as string;
 		const seed = context.getNodeParameter('seed', itemIndex) as number;
-		const steps = context.getNodeParameter('steps', itemIndex) as number;
 		const numImages = context.getNodeParameter('numImages', itemIndex) as number;
 		const maxRetries = context.getNodeParameter('options.maxRetries', itemIndex) as number;
 
+		// Get steps only for generation models (not Edit model)
+		const isEditModel = model === 'Qwen-Image-Edit-2511';
+		let steps = 30; // default
+		if (!isEditModel) {
+			steps = context.getNodeParameter('steps', itemIndex) as number;
+		}
+
 		// Get input image based on type
 		let inputImage = '';
-		const isEditModel = model === 'Qwen-Image-Edit-2511';
 
 		if (isEditModel) {
 			const inputImageType = context.getNodeParameter('inputImageType', itemIndex) as string;

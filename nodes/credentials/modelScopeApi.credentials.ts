@@ -20,9 +20,9 @@ export class modelScopeApi implements ICredentialType {
 			displayName: 'Base URL',
 			name: 'baseUrl',
 			type: 'string',
-			default: 'https://api.modelscope.cn/v1',
+			default: 'https://api-inference.modelscope.cn/v1',
 			required: false,
-			placeholder: 'https://api.modelscope.cn/v1',
+			placeholder: 'https://api-inference.modelscope.cn/v1',
 			description: 'Custom base URL (optional, uses ModelScope default if empty)',
 		},
 	];
@@ -32,7 +32,7 @@ export class modelScopeApi implements ICredentialType {
 	 */
 	test: ICredentialTestRequest = {
 		request: {
-			baseURL: '={{$credentials.baseUrl || "https://api.modelscope.cn/v1"}}',
+			baseURL: '={{$credentials.baseUrl || "https://api-inference.modelscope.cn/v1"}}',
 			url: '/models',
 			method: 'GET' as const,
 			headers: {

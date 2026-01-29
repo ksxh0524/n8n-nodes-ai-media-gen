@@ -73,7 +73,7 @@ export const HASH = {
  */
 export const API_ENDPOINTS = {
 	MODELSCOPE: {
-		BASE_URL: 'https://api.modelscope.cn/v1',
+		BASE_URL: 'https://api-inference.modelscope.cn/v1',
 		FILES_GENERATION: '/files/generation',
 	},
 } as const;
