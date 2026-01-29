@@ -83,17 +83,24 @@ export const API_ENDPOINTS = {
  */
 export const MODEL_CONSTRAINTS = {
 	'Tongyi-MAI/Z-Image': {
-		supportedSizes: ['512x512', '768x768', '1024x1024'],
+		supportedSizes: [
+			'2048x2048', // 1:1
+			'2048x1152', // 16:9
+			'1152x2048', // 9:16
+			'2048x1536', // 4:3
+			'1536x2048', // 3:4
+			'1024x2048', // 1:2
+		],
 		supportsNumImages: true,
 		supportsSeed: true,
 	},
 	'Qwen-Image-2512': {
-		supportedSizes: ['1024x1024', '1152x896', '896x1152', '1216x832', '832x1216', '1344x768', '768x1344', '1536x640', '640x1536'],
+		supportedSizes: ['1328x1328', '1664x928', '928x1664', '1472x1104', '1104x1472', '1584x1056', '1056x1584'],
 		supportsNumImages: true,
 		supportsSeed: true,
 	},
 	'Qwen-Image-Edit-2511': {
-		supportedSizes: ['1024x1024', '1152x896', '896x1152', '1216x832', '832x1216', '1344x768', '768x1344'],
+		supportedSizes: [], // Edit model doesn't use size parameter
 		supportsNumImages: false,
 		supportsSeed: false,
 	},

@@ -1,4 +1,4 @@
-import { ICredentialType, INodeProperties } from 'n8n-workflow';
+import { ICredentialType, INodeProperties, ICredentialTestRequest } from 'n8n-workflow';
 
 export class modelScopeApi implements ICredentialType {
 	name = 'modelScopeApi';
@@ -26,4 +26,18 @@ export class modelScopeApi implements ICredentialType {
 			description: 'Custom base URL (optional, uses ModelScope default if empty)',
 		},
 	];
+
+	/**
+	 * Test the credentials by making a simple API call
+	 */
+	test: ICredentialTestRequest = {
+		request: {
+			baseURL: '={{$credentials.baseUrl || "https://api.modelscope.cn/v1"}}',
+			url: '/models',
+			method: 'GET' as const,
+			headers: {
+				Authorization: 'Bearer {{$credentials.apiKey}}',
+			},
+		},
+	};
 }

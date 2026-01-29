@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="msGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3B82F6;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#8B5CF6;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+
+  <!-- Background hexagon -->
+  <path d="M32 4 L56 18 L56 46 L32 60 L8 46 L8 18 Z"
+        fill="url(#msGradient)" opacity="0.1"/>
+  <path d="M32 4 L56 18 L56 46 L32 60 L8 46 L8 18 Z"
+        fill="none" stroke="url(#msGradient)" stroke-width="2"/>
+
+  <!-- AI neural network nodes -->
+  <circle cx="32" cy="32" r="6" fill="url(#msGradient)"/>
+
+  <!-- Connected nodes -->
+  <circle cx="20" cy="24" r="4" fill="url(#msGradient)" opacity="0.7"/>
+  <circle cx="44" cy="24" r="4" fill="url(#msGradient)" opacity="0.7"/>
+  <circle cx="20" cy="40" r="4" fill="url(#msGradient)" opacity="0.7"/>
+  <circle cx="44" cy="40" r="4" fill="url(#msGradient)" opacity="0.7"/>
+
+  <!-- Connection lines -->
+  <line x1="32" y1="32" x2="20" y2="24" stroke="url(#msGradient)" stroke-width="2" opacity="0.5"/>
+  <line x1="32" y1="32" x2="44" y2="24" stroke="url(#msGradient)" stroke-width="2" opacity="0.5"/>
+  <line x1="32" y1="32" x2="20" y2="40" stroke="url(#msGradient)" stroke-width="2" opacity="0.5"/>
+  <line x1="32" y1="32" x2="44" y2="40" stroke="url(#msGradient)" stroke-width="2" opacity="0.5"/>
+
+  <!-- Outer connections -->
+  <line x1="20" y1="24" x2="44" y2="24" stroke="url(#msGradient)" stroke-width="1" opacity="0.3"/>
+  <line x1="20" y1="40" x2="44" y2="40" stroke="url(#msGradient)" stroke-width="1" opacity="0.3"/>
+  <line x1="20" y1="24" x2="20" y2="40" stroke="url(#msGradient)" stroke-width="1" opacity="0.3"/>
+  <line x1="44" y1="24" x2="44" y2="40" stroke="url(#msGradient)" stroke-width="1" opacity="0.3"/>
+
+  <!-- "MS" text -->
+  <text x="32" y="37" font-size="8" fill="white" text-anchor="middle" font-weight="bold">MS</text>
+</svg>

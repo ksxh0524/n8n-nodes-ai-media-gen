@@ -9,7 +9,7 @@ import { CacheManager, CacheKeyGenerator } from './utils/cache';
 import { PerformanceMonitor } from './utils/monitoring';
 import { withRetry, MediaGenError } from './utils/errors';
 import * as CONSTANTS from './utils/constants';
-import { validateNumImages, validateSizeForModel, validateInputImage } from './utils/validators';
+import { validateModelRequest } from './utils/validators';
 
 /**
  * Metadata for execution results
@@ -82,18 +82,13 @@ export class AIMediaGen implements INodeType {
 			required: true,
 			options: [
 				{
-					name: 'Generate Image',
-					value: 'generate',
-					description: 'Generate a new image from text prompt',
-				},
-				{
-					name: 'Edit Image',
-					value: 'edit',
-					description: 'Edit an existing image',
+					name: 'modelscope',
+					value: 'modelscope',
+					description: 'Generate and edit images using ModelScope AI models',
 				},
 			],
-			default: 'generate',
-			description: 'Select the operation to perform',
+			default: 'modelscope',
+			description: 'Select operation to perform',
 		},
 		{
 			displayName: 'Model',
@@ -121,7 +116,7 @@ export class AIMediaGen implements INodeType {
 			description: 'Select the AI model to use',
 			displayOptions: {
 				show: {
-					operation: ['generate', 'edit'],
+					operation: ['modelscope'],
 				},
 			},
 		},
@@ -138,39 +133,102 @@ export class AIMediaGen implements INodeType {
 			description: 'Text description for generation or editing',
 			displayOptions: {
 				show: {
-					operation: ['generate', 'edit'],
+					operation: ['modelscope'],
 				},
 			},
 		},
-		// Input Image - only for Edit model
+		// Input Image Type - only for Edit model
+		{
+			displayName: 'Input Image Type',
+			name: 'inputImageType',
+			type: 'options',
+			default: 'url',
+			options: [
+				{ name: 'URL / Base64', value: 'url' },
+				{ name: 'Binary File', value: 'binary' },
+			],
+			description: 'Choose how to provide the input image',
+			displayOptions: {
+				show: {
+					operation: ['modelscope'],
+					model: ['Qwen-Image-Edit-2511'],
+				},
+			},
+		},
+		// Input Image URL/Base64 - only for Edit model
 		{
 			displayName: 'Input Image',
 			name: 'inputImage',
 			type: 'string',
 			default: '',
-			description: 'URL or base64 of the image to edit (required for Edit operation)',
 			displayOptions: {
 				show: {
-					operation: ['edit'],
+					operation: ['modelscope'],
+					model: ['Qwen-Image-Edit-2511'],
+					inputImageType: ['url'],
 				},
 			},
+			description: 'URL or base64 of the image to edit',
 			placeholder: 'https://example.com/image.jpg or data:image/jpeg;base64,...',
 		},
-		// Size for Z-Image
+		// Input Image Binary File - only for Edit model
+		{
+			displayName: 'Input Image File',
+			name: 'inputImageBinary',
+			type: 'string',
+			default: '',
+			displayOptions: {
+				show: {
+					operation: ['modelscope'],
+					model: ['Qwen-Image-Edit-2511'],
+					inputImageType: ['binary'],
+				},
+			},
+			description: 'Binary property containing the image file to edit',
+			placeholder: 'Enter a property name containing the binary data, e.g., data',
+		},
+		// Size for Z-Image (max 2k, various aspect ratios - high resolution only)
 		{
 			displayName: 'Size',
 			name: 'size',
 			type: 'options',
-			default: '1024x1024',
+			default: '2048x2048',
 			options: [
-				{ name: '512x512', value: '512x512' },
-				{ name: '768x768', value: '768x768' },
-				{ name: '1024x1024', value: '1024x1024' },
+				{ name: '1:1 (2048x2048)', value: '2048x2048' },
+				{ name: '16:9 (2048x1152)', value: '2048x1152' },
+				{ name: '9:16 (1152x2048)', value: '1152x2048' },
+				{ name: '4:3 (2048x1536)', value: '2048x1536' },
+				{ name: '3:4 (1536x2048)', value: '1536x2048' },
+				{ name: '1:2 (1024x2048)', value: '1024x2048' },
 			],
-			description: 'Image size (supports up to 1024x1024)',
+			description: 'Image size (max 2K, various aspect ratios: 1:1, 16:9, 9:16, 4:3, 3:4, 1:2)',
 			displayOptions: {
 				show: {
-					operation: ['generate', 'edit'],
+					operation: ['modelscope'],
+					model: ['Tongyi-MAI/Z-Image'],
+				},
+			},
+		},
+		// Size for Qwen-Image-2512 (aspect ratio based sizes)
+		{
+			displayName: 'Size',
+			name: 'size',
+			type: 'options',
+			default: '1328x1328',
+			options: [
+				{ name: '1:1 (1328x1328)', value: '1328x1328' },
+				{ name: '16:9 (1664x928)', value: '1664x928' },
+				{ name: '9:16 (928x1664)', value: '928x1664' },
+				{ name: '4:3 (1472x1104)', value: '1472x1104' },
+				{ name: '3:4 (1104x1472)', value: '1104x1472' },
+				{ name: '3:2 (1584x1056)', value: '1584x1056' },
+				{ name: '2:3 (1056x1584)', value: '1056x1584' },
+			],
+			description: 'Image size with various aspect ratios',
+			displayOptions: {
+				show: {
+					operation: ['modelscope'],
+					model: ['Qwen-Image-2512'],
 				},
 			},
 		},
@@ -182,7 +240,8 @@ export class AIMediaGen implements INodeType {
 			description: 'Random seed for reproducibility (0 = random)',
 			displayOptions: {
 				show: {
-					operation: ['generate'],
+					operation: ['modelscope'],
+					model: ['Tongyi-MAI/Z-Image', 'Qwen-Image-2512'],
 				},
 			},
 		},
@@ -198,7 +257,8 @@ export class AIMediaGen implements INodeType {
 			description: 'Number of images to generate (1-4)',
 			displayOptions: {
 				show: {
-					operation: ['generate'],
+					operation: ['modelscope'],
+					model: ['Tongyi-MAI/Z-Image', 'Qwen-Image-2512'],
 				},
 			},
 		},
@@ -292,12 +352,11 @@ export class AIMediaGen implements INodeType {
 				const timerId = performanceMonitor.startTimer('aiMediaGen');
 				let result: INodeExecutionData;
 
-				const operation = this.getNodeParameter('operation', i) as string;
 				const model = this.getNodeParameter('model', i) as string;
 				const size = this.getNodeParameter('size', i) as string;
 				const seed = this.getNodeParameter('seed', i) as number;
 				const numImages = this.getNodeParameter('numImages', i) as number;
-				const inputImage = operation === 'edit' ? this.getNodeParameter('inputImage', i) as string : '';
+				const inputImage = this.getNodeParameter('inputImage', i) as string || '';
 				const timeout = this.getNodeParameter('options.timeout', i) as number;
 
 				if (enableCache) {
@@ -407,13 +466,44 @@ export class AIMediaGen implements INodeType {
 		credentials: ModelScopeApiCredentials,
 		timeout: number
 	): Promise<INodeExecutionData> {
-		const operation = context.getNodeParameter('operation', itemIndex) as string;
 		const model = context.getNodeParameter('model', itemIndex) as string;
 		const prompt = context.getNodeParameter('prompt', itemIndex) as string;
 		const size = context.getNodeParameter('size', itemIndex) as string;
 		const seed = context.getNodeParameter('seed', itemIndex) as number;
 		const numImages = context.getNodeParameter('numImages', itemIndex) as number;
-		const maxRetries = context.getNodeParameter('options.maxRetries', CONSTANTS.INDICES.FIRST_ITEM) as number;
+		const maxRetries = context.getNodeParameter('options.maxRetries', itemIndex) as number;
+
+		// Get input image based on type
+		let inputImage = '';
+		const isEditModel = model === 'Qwen-Image-Edit-2511';
+
+		if (isEditModel) {
+			const inputImageType = context.getNodeParameter('inputImageType', itemIndex) as string;
+			if (inputImageType === 'binary') {
+				// Get binary file from input
+				const binaryPropertyName = context.getNodeParameter('inputImageBinary', itemIndex) as string;
+				const items = context.getInputData();
+				const item = items[itemIndex];
+				const binaryData = item.binary;
+
+				if (!binaryData || !binaryData[binaryPropertyName]) {
+					throw new NodeOperationError(
+						context.getNode(),
+						`Binary property '${binaryPropertyName}' not found. Make sure to include a binary file in your input.`,
+						{ itemIndex }
+					);
+				}
+
+				const binary = binaryData[binaryPropertyName] as { data: string; mimeType: string };
+				// Convert buffer to base64 if needed
+				if (binary.data) {
+					inputImage = `data:${binary.mimeType || 'image/jpeg'};base64,${binary.data}`;
+				}
+			} else {
+				// Get URL or base64 string
+				inputImage = context.getNodeParameter('inputImage', itemIndex) as string || '';
+			}
+		}
 
 		if (!prompt || prompt.trim() === '') {
 			throw new NodeOperationError(
@@ -423,23 +513,10 @@ export class AIMediaGen implements INodeType {
 			);
 		}
 
-		// Validate numImages range (for models that support it)
-		const isEditModel = operation === 'edit';
-		if (!isEditModel) {
-			validateNumImages(numImages);
-		}
-
-		// Validate size matches model
-		validateSizeForModel(model, size);
+		// Use centralized validation
+		validateModelRequest(model, size, numImages, inputImage);
 
 		const baseUrl = credentials.baseUrl || CONSTANTS.API_ENDPOINTS.MODELSCOPE.BASE_URL;
-
-		let inputImage = '';
-		if (operation === 'edit') {
-			inputImage = context.getNodeParameter('inputImage', itemIndex) as string || '';
-			// Validate input image format
-			validateInputImage(inputImage);
-		}
 
 		return await withRetry(
 			() => AIMediaGen.makeModelScopeRequest(
@@ -491,14 +568,18 @@ export class AIMediaGen implements INodeType {
 				input,
 			};
 
-			if (parameters.size) {
+			// Edit model (Qwen-Image-Edit-2511) doesn't use size parameter
+			const isEditModel = model === 'Qwen-Image-Edit-2511';
+
+			if (parameters.size && !isEditModel) {
 				requestBody.parameters = {
 					size: parameters.size,
 					seed: parameters.seed,
 				};
 			}
 
-			if (parameters.num_images && parameters.input_image === undefined) {
+			// Only include num_images for models that support it and when it's set
+			if (parameters.num_images && parameters.num_images > 1 && !isEditModel) {
 				(requestBody.parameters as Record<string, unknown>).num_images = parameters.num_images;
 			}
 
