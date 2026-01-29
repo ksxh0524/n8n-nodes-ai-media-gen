@@ -39,17 +39,6 @@ function buildDev() {
     .pipe(gulp.dest('dist'));
 }
 
-function buildDev() {
-  return tsProject.src()
-    .pipe(sourcemaps.init())
-    .pipe(tsProject())
-    .pipe(sourcemaps.write('.', {
-      includeContent: false,
-      sourceRoot: '../nodes'
-    }))
-    .pipe(gulp.dest('dist'));
-}
-
 function watchFiles() {
   gulp.watch('nodes/**/*.ts', buildDev);
 }

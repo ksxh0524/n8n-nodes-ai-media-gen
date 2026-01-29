@@ -1,3 +1,5 @@
+/* eslint-disable @n8n/community-nodes/no-restricted-globals */
+// Test setup file - requires access to global and process
 global.console = {
 	...console,
 	error: jest.fn(),

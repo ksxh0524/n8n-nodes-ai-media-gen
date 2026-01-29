@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-ai-media-gen",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "n8n node for AI media generation with extensible architecture. Supports ModelScope, Nano Banana (Gemini), and Doubao Seedream APIs.",
   "keywords": [
     "n8n",
