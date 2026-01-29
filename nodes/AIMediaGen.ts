@@ -52,8 +52,8 @@ interface ModelScopeAsyncTaskResponse {
  *
  * Generates and edits images using ModelScope AI models including:
  * - Z-Image: High-quality text-to-image generation
- * - Qwen-Image-2512: Advanced text-to-image generation
- * - Qwen-Image-Edit-2511: Image editing model
+ * - Qwen/Qwen-Image-2512: Advanced text-to-image generation
+ * - Qwen/Qwen-Image-Edit-2511: Image editing model
  */
 export class AIMediaGen implements INodeType {
 	description: INodeTypeDescription = {
@@ -104,13 +104,13 @@ export class AIMediaGen implements INodeType {
 					description: 'High-quality text-to-image generation model',
 				},
 				{
-					name: 'Qwen-Image-2512',
-					value: 'Qwen-Image-2512',
+					name: 'Qwen/Qwen-Image-2512',
+					value: 'Qwen/Qwen/Qwen-Image-2512',
 					description: 'Advanced text-to-image generation model',
 				},
 				{
-					name: 'Qwen-Image-Edit-2511',
-					value: 'Qwen-Image-Edit-2511',
+					name: 'Qwen/Qwen-Image-Edit-2511',
+					value: 'Qwen/Qwen/Qwen-Image-Edit-2511',
 					description: 'Image editing model',
 				},
 			],
@@ -153,7 +153,7 @@ export class AIMediaGen implements INodeType {
 			displayOptions: {
 				show: {
 					operation: ['modelscope'],
-					model: ['Qwen-Image-Edit-2511'],
+					model: ['Qwen/Qwen-Image-Edit-2511'],
 				},
 			},
 		},
@@ -166,7 +166,7 @@ export class AIMediaGen implements INodeType {
 			displayOptions: {
 				show: {
 					operation: ['modelscope'],
-					model: ['Qwen-Image-Edit-2511'],
+					model: ['Qwen/Qwen-Image-Edit-2511'],
 					inputImageType: ['url'],
 				},
 			},
@@ -182,7 +182,7 @@ export class AIMediaGen implements INodeType {
 			displayOptions: {
 				show: {
 					operation: ['modelscope'],
-					model: ['Qwen-Image-Edit-2511'],
+					model: ['Qwen/Qwen-Image-Edit-2511'],
 					inputImageType: ['binary'],
 				},
 			},
@@ -211,7 +211,7 @@ export class AIMediaGen implements INodeType {
 				},
 			},
 		},
-		// Size for Qwen-Image-2512 (aspect ratio based sizes)
+		// Size for Qwen/Qwen-Image-2512 (aspect ratio based sizes)
 		{
 			displayName: 'Size',
 			name: 'size',
@@ -230,7 +230,7 @@ export class AIMediaGen implements INodeType {
 			displayOptions: {
 				show: {
 					operation: ['modelscope'],
-					model: ['Qwen-Image-2512'],
+					model: ['Qwen/Qwen-Image-2512'],
 				},
 			},
 		},
@@ -243,7 +243,7 @@ export class AIMediaGen implements INodeType {
 			displayOptions: {
 				show: {
 					operation: ['modelscope'],
-					model: ['Tongyi-MAI/Z-Image', 'Qwen-Image-2512'],
+					model: ['Tongyi-MAI/Z-Image', 'Qwen/Qwen-Image-2512'],
 				},
 			},
 		},
@@ -260,7 +260,7 @@ export class AIMediaGen implements INodeType {
 			displayOptions: {
 				show: {
 					operation: ['modelscope'],
-					model: ['Tongyi-MAI/Z-Image', 'Qwen-Image-2512'],
+					model: ['Tongyi-MAI/Z-Image', 'Qwen/Qwen-Image-2512'],
 				},
 			},
 		},
@@ -277,7 +277,7 @@ export class AIMediaGen implements INodeType {
 			displayOptions: {
 				show: {
 					operation: ['modelscope'],
-					model: ['Tongyi-MAI/Z-Image', 'Qwen-Image-2512'],
+					model: ['Tongyi-MAI/Z-Image', 'Qwen/Qwen-Image-2512'],
 				},
 			},
 		},
@@ -392,9 +392,9 @@ export class AIMediaGen implements INodeType {
 				this.logger?.info('[AI Media Gen] Processing item', { index: i, model });
 
 				// Determine model type
-				const isEditModel = model === 'Qwen-Image-Edit-2511';
+				const isEditModel = model === 'Qwen/Qwen-Image-Edit-2511';
 				const isZImage = model === 'Tongyi-MAI/Z-Image';
-				const isQwenImage = model === 'Qwen-Image-2512';
+				const isQwenImage = model === 'Qwen/Qwen-Image-2512';
 
 				// Get parameters based on model type with safe defaults
 				let size = '1024x1024';
@@ -616,9 +616,9 @@ export class AIMediaGen implements INodeType {
 		}
 
 		// Get steps only for generation models (not Edit model)
-		const isEditModel = model === 'Qwen-Image-Edit-2511';
+		const isEditModel = model === 'Qwen/Qwen-Image-Edit-2511';
 		const isZImage = model === 'Tongyi-MAI/Z-Image';
-		const isQwenImage = model === 'Qwen-Image-2512';
+		const isQwenImage = model === 'Qwen/Qwen-Image-2512';
 
 		// Get parameters based on model type with safe defaults
 		let size = '1024x1024';
@@ -860,8 +860,8 @@ export class AIMediaGen implements INodeType {
 				prompt: input.prompt,
 			};
 
-			// Edit model (Qwen-Image-Edit-2511) doesn't use size parameter
-			const isEditModel = model === 'Qwen-Image-Edit-2511';
+			// Edit model (Qwen/Qwen-Image-Edit-2511) doesn't use size parameter
+			const isEditModel = model === 'Qwen/Qwen-Image-Edit-2511';
 
 			// Add size for generation models
 			if (parameters.size && !isEditModel) {
@@ -869,7 +869,7 @@ export class AIMediaGen implements INodeType {
 			}
 
 			// Add n (number of images) for models that support it
-			if ((model === 'Tongyi-MAI/Z-Image' || model === 'Qwen-Image-2512') && parameters.num_images && parameters.num_images > 1) {
+			if ((model === 'Tongyi-MAI/Z-Image' || model === 'Qwen/Qwen-Image-2512') && parameters.num_images && parameters.num_images > 1) {
 				requestBody.n = parameters.num_images;
 			}
 

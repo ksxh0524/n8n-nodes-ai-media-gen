@@ -104,12 +104,12 @@ export const MODEL_CONSTRAINTS = {
 		supportsNumImages: true,
 		supportsSeed: true,
 	},
-	'Qwen-Image-2512': {
+	'Qwen/Qwen-Image-2512': {
 		supportedSizes: ['1328x1328', '1664x928', '928x1664', '1472x1104', '1104x1472', '1584x1056', '1056x1584'],
 		supportsNumImages: true,
 		supportsSeed: true,
 	},
-	'Qwen-Image-Edit-2511': {
+	'Qwen/Qwen-Image-Edit-2511': {
 		supportedSizes: [], // Edit model doesn't use size parameter
 		supportsNumImages: false,
 		supportsSeed: false,

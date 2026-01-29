@@ -29,7 +29,7 @@ export function validateSizeForModel(model: string, size: string): void {
 	}
 
 	// Skip size validation for Edit model (doesn't use size parameter)
-	if (model === 'Qwen-Image-Edit-2511') {
+	if (model === 'Qwen/Qwen-Image-Edit-2511') {
 		return;
 	}
 
@@ -94,10 +94,10 @@ export function validateModelRequest(
 	}
 
 	// Validate input image for edit models - REQUIRED field
-	if (model === 'Qwen-Image-Edit-2511') {
+	if (model === 'Qwen/Qwen-Image-Edit-2511') {
 		if (!inputImage || inputImage.trim() === '') {
 			throw new MediaGenError(
-				'Input image is required for Qwen-Image-Edit-2511 model',
+				'Input image is required for Qwen/Qwen-Image-Edit-2511 model',
 				'INVALID_IMAGE_INPUT'
 			);
 		}
