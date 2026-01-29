@@ -52,8 +52,8 @@ interface ModelScopeAsyncTaskResponse {
  *
  * Generates and edits images using ModelScope AI models including:
  * - Z-Image: High-quality text-to-image generation
- * - Qwen/Qwen-Image-2512: Advanced text-to-image generation
- * - Qwen/Qwen-Image-Edit-2511: Image editing model
+ * - Qwen-Image-2512: Advanced text-to-image generation
+ * - Qwen-Image-Edit-2511: Image editing model
  */
 export class AIMediaGen implements INodeType {
 	description: INodeTypeDescription = {
@@ -104,13 +104,13 @@ export class AIMediaGen implements INodeType {
 					description: 'High-quality text-to-image generation model',
 				},
 				{
-					name: 'Qwen/Qwen-Image-2512',
-					value: 'Qwen/Qwen/Qwen-Image-2512',
+					name: 'Qwen-Image-2512',
+					value: 'Qwen/Qwen-Image-2512',
 					description: 'Advanced text-to-image generation model',
 				},
 				{
-					name: 'Qwen/Qwen-Image-Edit-2511',
-					value: 'Qwen/Qwen/Qwen-Image-Edit-2511',
+					name: 'Qwen-Image-Edit-2511',
+					value: 'Qwen/Qwen-Image-Edit-2511',
 					description: 'Image editing model',
 				},
 			],
@@ -211,7 +211,7 @@ export class AIMediaGen implements INodeType {
 				},
 			},
 		},
-		// Size for Qwen/Qwen-Image-2512 (aspect ratio based sizes)
+		// Size for Qwen-Image-2512 (aspect ratio based sizes)
 		{
 			displayName: 'Size',
 			name: 'size',
@@ -860,7 +860,7 @@ export class AIMediaGen implements INodeType {
 				prompt: input.prompt,
 			};
 
-			// Edit model (Qwen/Qwen-Image-Edit-2511) doesn't use size parameter
+			// Edit model (Qwen-Image-Edit-2511) doesn't use size parameter
 			const isEditModel = model === 'Qwen/Qwen-Image-Edit-2511';
 
 			// Add size for generation models
