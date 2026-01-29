@@ -37,7 +37,7 @@ export class doubaoApi implements ICredentialType {
 			url: '/seedream/text2image/v1',
 			method: 'POST' as const,
 			body: {
-				model: 'doubao-seedream-4.5',
+				model: 'doubao-seedream-4-5-251128',
 				prompt: 'test',
 				size: '512x512',
 				response_format: 'url',

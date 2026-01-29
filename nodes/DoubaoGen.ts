@@ -89,16 +89,16 @@ export class DoubaoGen implements INodeType {
 				options: [
 					{
 						name: 'Doubao Seedream 4.5',
-						value: 'doubao-seedream-4.5',
-						description: 'Latest high-quality image generation model',
+						value: 'doubao-seedream-4-5-251128',
+						description: 'Latest high-quality image generation model (2025-01-28)',
 					},
 					{
 						name: 'Doubao Seedream 4.0',
-						value: 'doubao-seedream-4.0',
-						description: 'Previous generation model',
+						value: 'doubao-seedream-4-0-250828',
+						description: 'Previous generation model (2024-08-28)',
 					},
 				],
-				default: 'doubao-seedream-4.5',
+				default: 'doubao-seedream-4-5-251128',
 				description: 'Select Doubao model to use',
 			},
 			{
