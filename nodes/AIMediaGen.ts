@@ -832,18 +832,30 @@ export class AIMediaGen implements INodeType {
 							cacheParams.responseFormat = 'url';
 						}
 
-						// Add input image for image-to-image mode
+						// Add input images for image-to-image mode
 						if (mode === 'image-to-image') {
 							try {
 								const imagesData = this.getNodeParameter('doubaoInputImages', i) as {
 									image?: Array<{ url: string }>;
 								};
 								if (imagesData.image && imagesData.image.length > 0) {
+									// Validate max images for cache
+									const maxImages = 14;
+									if (imagesData.image.length > maxImages) {
+										this.logger?.warn('[Doubao] Image count exceeds maximum for cache', {
+											count: imagesData.image.length,
+											max: maxImages,
+										});
+									}
 									// Create hash of all image URLs for cache key
 									cacheParams.images = imagesData.image.map(img => img.url).join('|');
+									cacheParams.imageCount = imagesData.image.length;
 								}
 							} catch (error) {
 								// No reference images
+								this.logger?.debug('[Doubao] No reference images for cache', {
+									error: error instanceof Error ? error.message : String(error),
+								});
 							}
 						}
 
@@ -2103,7 +2115,7 @@ export class AIMediaGen implements INodeType {
 		}
 
 		// Get input image(s) for image-to-image mode
-		let inputImage = '';
+		let inputImages: string[] = [];
 		if (mode === 'image-to-image') {
 			try {
 				const imagesData = context.getNodeParameter('doubaoInputImages', itemIndex) as {
@@ -2124,10 +2136,13 @@ export class AIMediaGen implements INodeType {
 						);
 					}
 
-					// Use the first image as the main input image
-					const firstImage = imagesData.image[0];
-					if (firstImage.url && firstImage.url.trim()) {
-						let imageData = firstImage.url.trim();
+					// Process all images
+					for (const img of imagesData.image) {
+						if (!img.url || !img.url.trim()) {
+							continue;
+						}
+
+						let imageData = img.url.trim();
 
 						// Check if it's a binary property name (not a URL or base64)
 						if (!imageData.startsWith('http') && !imageData.startsWith('data:')) {
@@ -2135,16 +2150,16 @@ export class AIMediaGen implements INodeType {
 							if (binaryData && binaryData[imageData]) {
 								const binary = binaryData[imageData] as { data: string; mimeType: string };
 								if (binary && binary.data) {
-									inputImage = `data:${binary.mimeType || 'image/jpeg'};base64,${binary.data}`;
+									imageData = `data:${binary.mimeType || 'image/jpeg'};base64,${binary.data}`;
 								}
 							}
-						} else {
-							inputImage = imageData;
 						}
+
+						inputImages.push(imageData);
 					}
 
 					context.logger?.info('[Doubao] Reference images loaded', {
-						count: imagesData.image.length,
+						count: inputImages.length,
 						maxAllowed: maxImages,
 					});
 				}
@@ -2156,8 +2171,8 @@ export class AIMediaGen implements INodeType {
 			}
 		}
 
-		// Validate input image for image-to-image mode
-		if (mode === 'image-to-image' && !inputImage) {
+		// Validate input images for image-to-image mode
+		if (mode === 'image-to-image' && inputImages.length === 0) {
 			throw new NodeOperationError(
 				context.getNode(),
 				'At least one input image is required for image-to-image mode',
@@ -2243,21 +2258,25 @@ export class AIMediaGen implements INodeType {
 					formData.append('seed', seed.toString());
 				}
 
-				// Add input image
-				if (inputImage.startsWith('data:')) {
-					// Base64 image
-					const base64Data = inputImage.split(',')[1];
-					const byteCharacters = atob(base64Data);
-					const byteNumbers = new Array(byteCharacters.length);
-					for (let i = 0; i < byteCharacters.length; i++) {
-						byteNumbers[i] = byteCharacters.charCodeAt(i);
+				// Add all input images
+				let imageIndex = 0;
+				for (const img of inputImages) {
+					if (img.startsWith('data:')) {
+						// Base64 image
+						const base64Data = img.split(',')[1];
+						const byteCharacters = atob(base64Data);
+						const byteNumbers = new Array(byteCharacters.length);
+						for (let i = 0; i < byteCharacters.length; i++) {
+							byteNumbers[i] = byteCharacters.charCodeAt(i);
+						}
+						const byteArray = new Uint8Array(byteNumbers);
+						const blob = new Blob([byteArray], { type: 'image/jpeg' });
+						formData.append('image', blob, `image_${imageIndex}.jpg`);
+					} else {
+						// URL - append as-is
+						formData.append('image_url', img);
 					}
-					const byteArray = new Uint8Array(byteNumbers);
-					const blob = new Blob([byteArray], { type: 'image/jpeg' });
-					formData.append('image', blob, 'image.jpg');
-				} else {
-					// URL - append as-is
-					formData.append('image_url', inputImage);
+					imageIndex++;
 				}
 
 				context.logger?.info('[Doubao] Sending image-to-image request', {
@@ -2265,6 +2284,7 @@ export class AIMediaGen implements INodeType {
 					prompt: prompt.substring(0, 50) + '...',
 					size,
 					responseFormat,
+					imageCount: inputImages.length,
 				});
 
 				const response = await fetch(`${baseUrl}/seedream/image2image/v1`, {
@@ -2318,6 +2338,11 @@ export class AIMediaGen implements INodeType {
 					timestamp: new Date().toISOString(),
 				},
 			};
+
+			// Add image count for image-to-image mode
+			if (mode === 'image-to-image') {
+				jsonData._metadata.inputImageCount = inputImages.length;
+			}
 
 			const binaryData: any = {};
 
