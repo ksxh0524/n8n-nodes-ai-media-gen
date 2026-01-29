@@ -21,10 +21,15 @@ interface DoubaoApiCredentials {
  * Seedream image generation response
  */
 interface SeedreamResponse {
-	request_id: string;
+	data?: Array<{
+		url?: string;
+		b64_json?: string;
+		revised_prompt?: string;
+	}>;
+	request_id?: string;
 	output_url?: string;
 	b64_json?: string;
-	status: string;
+	status?: string;
 }
 
 /**
@@ -399,18 +404,24 @@ export class DoubaoGen implements INodeType {
 
 				const data = await response.json() as SeedreamResponse;
 
-				// Parse response based on format
-				if (responseFormat === 'b64_json' && data.b64_json) {
-					imageUrl = `data:image/png;base64,${data.b64_json}`;
+				// Parse response - support both OpenAI format and legacy format
+				if (data.data && data.data.length > 0 && data.data[0].url) {
+					// OpenAI-compatible format: { data: [{ url: "..." }] }
+					imageUrl = data.data[0].url;
+				} else if (data.data && data.data.length > 0 && data.data[0].b64_json) {
+					// OpenAI-compatible format with base64
+					imageUrl = `data:image/png;base64,${data.data[0].b64_json}`;
 				} else if (data.output_url) {
+					// Legacy format: { output_url: "..." }
 					imageUrl = data.output_url;
 				} else {
+					context.logger?.error('[Doubao] Unexpected response format', { data });
 					throw new MediaGenError('No image data returned from API', 'API_ERROR');
 				}
 
 				context.logger?.info('[Doubao] Generation completed', {
 					requestId: data.request_id,
-					hasImageUrl: !!imageUrl,
+					imageUrl: imageUrl.substring(0, 50) + '...',
 				});
 			} else {
 				// Image to Image
@@ -475,18 +486,24 @@ export class DoubaoGen implements INodeType {
 
 				const data = await response.json() as SeedreamResponse;
 
-				// Parse response based on format
-				if (responseFormat === 'b64_json' && data.b64_json) {
-					imageUrl = `data:image/png;base64,${data.b64_json}`;
+				// Parse response - support both OpenAI format and legacy format
+				if (data.data && data.data.length > 0 && data.data[0].url) {
+					// OpenAI-compatible format: { data: [{ url: "..." }] }
+					imageUrl = data.data[0].url;
+				} else if (data.data && data.data.length > 0 && data.data[0].b64_json) {
+					// OpenAI-compatible format with base64
+					imageUrl = `data:image/png;base64,${data.data[0].b64_json}`;
 				} else if (data.output_url) {
+					// Legacy format: { output_url: "..." }
 					imageUrl = data.output_url;
 				} else {
+					context.logger?.error('[Doubao] Unexpected response format', { data });
 					throw new MediaGenError('No image data returned from API', 'API_ERROR');
 				}
 
 				context.logger?.info('[Doubao] Edit completed', {
 					requestId: data.request_id,
-					hasImageUrl: !!imageUrl,
+					imageUrl: imageUrl.substring(0, 50) + '...',
 				});
 			}
 

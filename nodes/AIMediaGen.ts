@@ -71,10 +71,15 @@ interface ModelScopeAsyncTaskResponse {
  * Seedream image generation response
  */
 interface SeedreamResponse {
-	request_id: string;
+	data?: Array<{
+		url?: string;
+		b64_json?: string;
+		revised_prompt?: string;
+	}>;
+	request_id?: string;
 	output_url?: string;
 	b64_json?: string;
-	status: string;
+	status?: string;
 }
 
 /**
@@ -2204,11 +2209,17 @@ export class AIMediaGen implements INodeType {
 
 				const data = await response.json() as SeedreamResponse;
 
-				if (!data.output_url) {
+				// Parse response - support both OpenAI format and legacy format
+				if (data.data && data.data.length > 0 && data.data[0].url) {
+					// OpenAI-compatible format: { data: [{ url: "..." }] }
+					imageUrl = data.data[0].url;
+				} else if (data.output_url) {
+					// Legacy format: { output_url: "..." }
+					imageUrl = data.output_url;
+				} else {
+					context.logger?.error('[Doubao] Unexpected response format', { data });
 					throw new MediaGenError('No image URL returned from API', 'API_ERROR');
 				}
-
-				imageUrl = data.output_url;
 
 				context.logger?.info('[Doubao] Generation completed', {
 					requestId: data.request_id,
@@ -2280,11 +2291,17 @@ export class AIMediaGen implements INodeType {
 
 				const data = await response.json() as SeedreamResponse;
 
-				if (!data.output_url) {
+				// Parse response - support both OpenAI format and legacy format
+				if (data.data && data.data.length > 0 && data.data[0].url) {
+					// OpenAI-compatible format: { data: [{ url: "..." }] }
+					imageUrl = data.data[0].url;
+				} else if (data.output_url) {
+					// Legacy format: { output_url: "..." }
+					imageUrl = data.output_url;
+				} else {
+					context.logger?.error('[Doubao] Unexpected response format', { data });
 					throw new MediaGenError('No image URL returned from API', 'API_ERROR');
 				}
-
-				imageUrl = data.output_url;
 
 				context.logger?.info('[Doubao] Edit completed', {
 					requestId: data.request_id,
