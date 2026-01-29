@@ -493,23 +493,6 @@ export class AIMediaGen implements INodeType {
 				},
 			},
 		},
-		// Doubao - Response Format
-		{
-			displayName: 'Response Format',
-			name: 'doubaoResponseFormat',
-			type: 'options',
-			default: 'url',
-			options: [
-				{ name: 'URL', value: 'url' },
-				{ name: 'Base64', value: 'b64_json' },
-			],
-			description: 'Response format: URL or Base64',
-			displayOptions: {
-				show: {
-					operation: ['doubao'],
-				},
-			},
-		},
 		// Doubao - Seed
 		{
 			displayName: 'Seed',
@@ -823,13 +806,6 @@ export class AIMediaGen implements INodeType {
 							cacheParams.seed = this.getNodeParameter('doubaoSeed', i);
 						} catch (error) {
 							cacheParams.seed = 0;
-						}
-
-						// Add response format
-						try {
-							cacheParams.responseFormat = this.getNodeParameter('doubaoResponseFormat', i);
-						} catch (error) {
-							cacheParams.responseFormat = 'url';
 						}
 
 						// Add input images for image-to-image mode
@@ -2095,7 +2071,6 @@ export class AIMediaGen implements INodeType {
 		const model = context.getNodeParameter('doubaoModel', itemIndex) as string;
 		const prompt = context.getNodeParameter('doubaoPrompt', itemIndex) as string;
 		const size = context.getNodeParameter('doubaoSize', itemIndex) as string || '2048x2048';
-		const responseFormat = context.getNodeParameter('doubaoResponseFormat', itemIndex) as string || 'url';
 		const seed = context.getNodeParameter('doubaoSeed', itemIndex) as number || 0;
 
 		let timeout = 60000;
@@ -2192,7 +2167,6 @@ export class AIMediaGen implements INodeType {
 					model: model,
 					prompt: prompt.trim(),
 					size,
-					response_format: responseFormat,
 					stream: false,
 					watermark: false,
 					seed: seed > 0 ? seed : undefined,
@@ -2202,7 +2176,6 @@ export class AIMediaGen implements INodeType {
 					model,
 					prompt: prompt.substring(0, 50) + '...',
 					size,
-					responseFormat,
 				});
 
 				const response = await fetch(`${baseUrl}/seedream/text2image/v1`, {
@@ -2232,18 +2205,15 @@ export class AIMediaGen implements INodeType {
 
 				const data = await response.json() as SeedreamResponse;
 
-				// Parse response based on format
-				if (responseFormat === 'b64_json' && data.b64_json) {
-					imageUrl = `data:image/png;base64,${data.b64_json}`;
-				} else if (data.output_url) {
-					imageUrl = data.output_url;
-				} else {
-					throw new MediaGenError('No image data returned from API', 'API_ERROR');
+				if (!data.output_url) {
+					throw new MediaGenError('No image URL returned from API', 'API_ERROR');
 				}
+
+				imageUrl = data.output_url;
 
 				context.logger?.info('[Doubao] Generation completed', {
 					requestId: data.request_id,
-					hasImageUrl: !!imageUrl,
+					imageUrl: imageUrl.substring(0, 50) + '...',
 				});
 			} else {
 				// Image to Image
@@ -2251,7 +2221,6 @@ export class AIMediaGen implements INodeType {
 				formData.append('model', model);
 				formData.append('prompt', prompt);
 				formData.append('size', size);
-				formData.append('response_format', responseFormat);
 				formData.append('stream', 'false');
 				formData.append('watermark', 'false');
 				if (seed > 0) {
@@ -2283,7 +2252,6 @@ export class AIMediaGen implements INodeType {
 					model,
 					prompt: prompt.substring(0, 50) + '...',
 					size,
-					responseFormat,
 					imageCount: inputImages.length,
 				});
 
@@ -2313,18 +2281,15 @@ export class AIMediaGen implements INodeType {
 
 				const data = await response.json() as SeedreamResponse;
 
-				// Parse response based on format
-				if (responseFormat === 'b64_json' && data.b64_json) {
-					imageUrl = `data:image/png;base64,${data.b64_json}`;
-				} else if (data.output_url) {
-					imageUrl = data.output_url;
-				} else {
-					throw new MediaGenError('No image data returned from API', 'API_ERROR');
+				if (!data.output_url) {
+					throw new MediaGenError('No image URL returned from API', 'API_ERROR');
 				}
+
+				imageUrl = data.output_url;
 
 				context.logger?.info('[Doubao] Edit completed', {
 					requestId: data.request_id,
-					hasImageUrl: !!imageUrl,
+					imageUrl: imageUrl.substring(0, 50) + '...',
 				});
 			}
 
