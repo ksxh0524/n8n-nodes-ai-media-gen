@@ -39,7 +39,7 @@ export class doubaoApi implements ICredentialType {
 			body: {
 				model: 'doubao-seedream-4-5-251128',
 				prompt: 'test',
-				size: '512x512',
+				size: '2048x2048',
 				response_format: 'url',
 				stream: false,
 				watermark: false,

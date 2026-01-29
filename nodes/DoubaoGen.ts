@@ -160,18 +160,18 @@ export class DoubaoGen implements INodeType {
 				displayName: 'Size',
 				name: 'size',
 				type: 'options',
-				default: '2K',
+				default: '2048x2048',
 				options: [
-					{ name: '2K (2048x2048)', value: '2K' },
-					{ name: '4K (4096x4096)', value: '4K' },
-					{ name: '1080P (1920x1080)', value: '1080P' },
-					{ name: '1024x1024', value: '1024x1024' },
-					{ name: '768x1024', value: '768x1024' },
-					{ name: '1024x768', value: '1024x768' },
-					{ name: '768x768', value: '768x768' },
-					{ name: '512x512', value: '512x512' },
+					{ name: '1:1 (2048x2048)', value: '2048x2048' },
+					{ name: '4:3 (2304x1728)', value: '2304x1728' },
+					{ name: '3:4 (1728x2304)', value: '1728x2304' },
+					{ name: '16:9 (2560x1440)', value: '2560x1440' },
+					{ name: '9:16 (1440x2560)', value: '1440x2560' },
+					{ name: '3:2 (2496x1664)', value: '2496x1664' },
+					{ name: '2:3 (1664x2496)', value: '1664x2496' },
+					{ name: '21:9 (3024x1296)', value: '3024x1296' },
 				],
-				description: 'Image size/resolution',
+				description: 'Image size and aspect ratio',
 			},
 			{
 				displayName: 'Response Format',
@@ -292,7 +292,7 @@ export class DoubaoGen implements INodeType {
 		const mode = context.getNodeParameter('mode', itemIndex) as string;
 		const model = context.getNodeParameter('model', itemIndex) as string;
 		const prompt = context.getNodeParameter('prompt', itemIndex) as string;
-		const size = context.getNodeParameter('size', itemIndex) as string || '2K';
+		const size = context.getNodeParameter('size', itemIndex) as string || '2048x2048';
 		const responseFormat = context.getNodeParameter('responseFormat', itemIndex) as string || 'url';
 		const seed = context.getNodeParameter('seed', itemIndex) as number || 0;
 
