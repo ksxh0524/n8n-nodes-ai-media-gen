@@ -32,17 +32,19 @@ interface ModelScopeApiCredentials {
 }
 
 /**
- * ModelScope API response structure
+ * ModelScope async task submission response
  */
-interface ModelScopeApiResponse {
-	/** Output data containing the image URL */
-	output?: { url?: string };
-	/** Alternative URL field */
-	url?: string;
-	/** Alternative image URL field */
-	image_url?: string;
-	/** Error message if the request failed */
-	error?: string;
+interface ModelScopeAsyncSubmitResponse {
+	task_id: string;
+}
+
+/**
+ * ModelScope async task status response
+ */
+interface ModelScopeAsyncTaskResponse {
+	task_status: 'PENDING' | 'RUNNING' | 'SUCCEED' | 'FAILED';
+	output_images?: Array<{ url: string }>;
+	message?: string;
 }
 
 /**
@@ -385,25 +387,104 @@ export class AIMediaGen implements INodeType {
 				const timerId = performanceMonitor.startTimer('aiMediaGen');
 				let result: INodeExecutionData;
 
+				// Get model first to determine which parameters to access
 				const model = this.getNodeParameter('model', i) as string;
-				const size = this.getNodeParameter('size', i) as string;
-				const seed = this.getNodeParameter('seed', i) as number;
-				const numImages = this.getNodeParameter('numImages', i) as number;
-				const inputImage = this.getNodeParameter('inputImage', i) as string || '';
-				const timeout = this.getNodeParameter('options.timeout', i) as number;
+				this.logger?.info('[AI Media Gen] Processing item', { index: i, model });
+
+				// Determine model type
+				const isEditModel = model === 'Qwen-Image-Edit-2511';
+				const isZImage = model === 'Tongyi-MAI/Z-Image';
+				const isQwenImage = model === 'Qwen-Image-2512';
+
+				// Get parameters based on model type with safe defaults
+				let size = '1024x1024';
+				let seed = 0;
+				let steps = 30;
+				let numImages = 1;
+				let inputImage = '';
+
+				// Get size for generation models only
+				if (!isEditModel) {
+					try {
+						size = this.getNodeParameter('size', i) as string;
+					} catch (error) {
+						size = isZImage ? '2048x2048' : '1328x1328';
+						this.logger?.debug('[AI Media Gen] Using default size', { index: i, size });
+					}
+				}
+
+				// Get seed for generation models only
+				if (!isEditModel) {
+					try {
+						seed = this.getNodeParameter('seed', i) as number;
+					} catch (error) {
+						this.logger?.debug('[AI Media Gen] Using default seed', { index: i, seed });
+					}
+				}
+
+				// Get steps for generation models only
+				if (!isEditModel) {
+					try {
+						steps = this.getNodeParameter('steps', i) as number;
+					} catch (error) {
+						this.logger?.debug('[AI Media Gen] Using default steps', { index: i, steps });
+					}
+				}
+
+				// Get numImages only for Z-Image and Qwen-2512
+				if (isZImage || isQwenImage) {
+					try {
+						numImages = this.getNodeParameter('numImages', i) as number;
+					} catch (error) {
+						this.logger?.debug('[AI Media Gen] Using default numImages', { index: i, numImages });
+					}
+				}
+
+				// Get inputImage only for Edit model
+				if (isEditModel) {
+					try {
+						inputImage = this.getNodeParameter('inputImage', i) as string || '';
+					} catch (error) {
+						this.logger?.warn('[AI Media Gen] Could not get inputImage for Edit model', { index: i, error });
+					}
+				}
+
+				// Safely get timeout with try-catch
+				let timeout: number = CONSTANTS.DEFAULTS.TIMEOUT_MS;
+				try {
+					timeout = this.getNodeParameter('options.timeout', i) as number;
+				} catch (error) {
+					this.logger?.debug('Options timeout not set, using default', {
+						index: i,
+						defaultValue: CONSTANTS.DEFAULTS.TIMEOUT_MS
+					});
+					timeout = CONSTANTS.DEFAULTS.TIMEOUT_MS;
+				}
 
 				if (enableCache) {
 					const prompt = this.getNodeParameter('prompt', i) as string || '';
+
+					// Build cache parameters based on model type
+					const cacheParams: Record<string, unknown> = {
+						size: size || '1024x1024',
+						seed: seed || 0,
+					};
+
+					// Only include num_images for models that support it
+					if (isZImage || isQwenImage) {
+						cacheParams.num_images = numImages || 1;
+					}
+
+					// Only include input_image for Edit model
+					if (isEditModel) {
+						cacheParams.input_image = inputImage;
+					}
+
 					const cacheKey = CacheKeyGenerator.forGeneration(
 						'modelscope',
 						model,
 						prompt,
-						{
-							size: size || '1024x1024',
-							seed: seed || 0,
-							num_images: numImages || 1,
-							input_image: inputImage,
-						}
+						cacheParams
 					);
 					const cached = await cacheManager.get(cacheKey);
 
@@ -424,8 +505,20 @@ export class AIMediaGen implements INodeType {
 						this.logger?.info('Cache miss', { model, cacheKey });
 						result = await AIMediaGen.executeModelRequest(this, i, credentials, timeout);
 
+						// Safely get cacheTtl
+						let cacheTtl: number = CONSTANTS.DEFAULTS.CACHE_TTL_SECONDS;
+						try {
+							cacheTtl = this.getNodeParameter('options.cacheTtl', i) as number;
+						} catch (error) {
+							this.logger?.debug('Options cacheTtl not set, using default', {
+								index: i,
+								defaultValue: CONSTANTS.DEFAULTS.CACHE_TTL_SECONDS
+							});
+							cacheTtl = CONSTANTS.DEFAULTS.CACHE_TTL_SECONDS;
+						}
+
 						if (result.json.success) {
-							await cacheManager.set(cacheKey, result.json, this.getNodeParameter('options.cacheTtl', i) as number);
+							await cacheManager.set(cacheKey, result.json, cacheTtl);
 						}
 					}
 				} else {
@@ -452,12 +545,16 @@ export class AIMediaGen implements INodeType {
 
 				results.push(result);
 			} catch (error) {
+				const errorCode = error instanceof MediaGenError ? error.code : 'UNKNOWN';
+				const errorDetails = error instanceof MediaGenError ? error.details : undefined;
+
 				this.logger?.error('Execution failed', {
 					model: this.getNodeParameter('model', i),
 					error: error instanceof Error ? error.message : String(error),
+					errorCode,
+					errorDetails,
 				});
 
-				const errorCode = error instanceof MediaGenError ? error.code : 'UNKNOWN';
 				results.push({
 					json: {
 						success: false,
@@ -508,11 +605,14 @@ export class AIMediaGen implements INodeType {
 		context.logger?.info('[AI Media Gen] Prompt retrieved', { promptLength: prompt?.length, itemIndex });
 
 		// Safely get maxRetries
-		let maxRetries = 3;
+		let maxRetries: number = CONSTANTS.DEFAULTS.MAX_RETRIES;
 		try {
 			maxRetries = context.getNodeParameter('options.maxRetries', itemIndex) as number;
 		} catch (error) {
-			context.logger?.warn('[AI Media Gen] Could not get maxRetries, using default', { itemIndex, error });
+			context.logger?.warn('[AI Media Gen] Could not get maxRetries, using default', {
+				itemIndex,
+				defaultValue: CONSTANTS.DEFAULTS.MAX_RETRIES
+			});
 		}
 
 		// Get steps only for generation models (not Edit model)
@@ -634,6 +734,100 @@ export class AIMediaGen implements INodeType {
 	}
 
 	/**
+	 * Polls the status of an async task until completion
+	 *
+	 * Continuously checks the task status until it succeeds, fails, or times out.
+	 * Implements proper delay between polls to avoid overwhelming the API.
+	 *
+	 * @param baseUrl - API base URL
+	 * @param apiKey - API key for authentication
+	 * @param taskId - Task ID to poll
+	 * @param timeout - Maximum polling time in milliseconds
+	 * @returns Promise resolving to image URL when task succeeds
+	 * @throws MediaGenError for API errors, task failures, or timeout
+	 */
+	private static async pollTaskStatus(
+		baseUrl: string,
+		apiKey: string,
+		taskId: string,
+		timeout: number
+	): Promise<string> {
+		const startTime = Date.now();
+		const pollUrl = `${baseUrl}/${CONSTANTS.API_ENDPOINTS.MODELSCOPE.TASK_STATUS}/${taskId}`;
+
+		console.log('[AI Media Gen] Starting async task polling', { taskId, timeout });
+
+		let pollCount = 0;
+		while (Date.now() - startTime < timeout) {
+			pollCount++;
+			const elapsed = Date.now() - startTime;
+
+			// Wait before polling (except first time)
+			if (pollCount > 1) {
+				await new Promise(resolve => setTimeout(resolve, CONSTANTS.ASYNC.POLL_INTERVAL_MS));
+			}
+
+			console.log('[AI Media Gen] Polling task status', { pollCount, elapsed, taskId });
+
+			const response = await fetch(pollUrl, {
+				method: 'GET',
+				headers: {
+					'Authorization': `Bearer ${apiKey}`,
+					'X-ModelScope-Task-Type': 'image_generation',
+				},
+			});
+
+			const data = await response.json().catch(() => null) as ModelScopeAsyncTaskResponse | null;
+
+			console.log('[AI Media Gen] Task status response', {
+				statusCode: response.status,
+				taskStatus: data?.task_status,
+				hasOutputImages: !!data?.output_images?.length,
+			});
+
+			if (!response.ok) {
+				console.error('[AI Media Gen] Task status check failed', {
+					statusCode: response.status,
+					statusText: response.statusText,
+					data,
+				});
+				throw new MediaGenError(
+					`Failed to check task status: ${response.status} ${response.statusText}`,
+					'API_ERROR'
+				);
+			}
+
+			if (!data || !data.task_status) {
+				console.error('[AI Media Gen] Invalid task status response', { data });
+				throw new MediaGenError('Invalid task status response', 'API_ERROR');
+			}
+
+			switch (data.task_status) {
+				case 'SUCCEED':
+					console.log('[AI Media Gen] Task succeeded', { taskId, pollCount, elapsed });
+					if (data.output_images && data.output_images.length > 0) {
+						return data.output_images[0].url;
+					}
+					throw new MediaGenError('Task succeeded but no image URL returned', 'API_ERROR');
+				case 'FAILED':
+					console.error('[AI Media Gen] Task failed', { taskId, message: data.message });
+					throw new MediaGenError(data.message || 'Task failed', 'API_ERROR');
+				case 'PENDING':
+				case 'RUNNING':
+					console.log('[AI Media Gen] Task still processing', { taskStatus: data.task_status, pollCount, elapsed });
+					// Continue polling
+					continue;
+				default:
+					console.error('[AI Media Gen] Unknown task status', { taskStatus: data.task_status });
+					throw new MediaGenError(`Unknown task status: ${data.task_status}`, 'API_ERROR');
+			}
+		}
+
+		console.error('[AI Media Gen] Task polling timeout', { taskId, pollCount, timeout });
+		throw new MediaGenError('Task polling timeout', 'TIMEOUT');
+	}
+
+	/**
 	 * Makes a request to the ModelScope API
 	 *
 	 * Builds and sends an HTTP request to the ModelScope generation endpoint.
@@ -660,39 +854,47 @@ export class AIMediaGen implements INodeType {
 		const timeoutId = setTimeout(() => controller.abort(), timeout);
 
 		try {
+			// Build OpenAI-compatible request body
 			const requestBody: Record<string, unknown> = {
 				model,
-				input,
+				prompt: input.prompt,
 			};
 
 			// Edit model (Qwen-Image-Edit-2511) doesn't use size parameter
 			const isEditModel = model === 'Qwen-Image-Edit-2511';
 
-			// Generate random seed when seed is 0
-			const actualSeed = parameters.seed === 0 ? Math.floor(Math.random() * 2147483647) : parameters.seed;
-
+			// Add size for generation models
 			if (parameters.size && !isEditModel) {
-				requestBody.parameters = {
-					size: parameters.size,
-					seed: actualSeed,
-					steps: parameters.steps,
-				};
+				requestBody.size = parameters.size;
 			}
 
-			// Only include num_images for models that support it and when it's set
-			if (parameters.num_images && parameters.num_images > 1 && !isEditModel) {
-				(requestBody.parameters as Record<string, unknown>).num_images = parameters.num_images;
+			// Add n (number of images) for models that support it
+			if ((model === 'Tongyi-MAI/Z-Image' || model === 'Qwen-Image-2512') && parameters.num_images && parameters.num_images > 1) {
+				requestBody.n = parameters.num_images;
 			}
 
+			// Add image for edit models
 			if (parameters.input_image) {
-				(input as Record<string, unknown>).image = parameters.input_image;
+				requestBody.image = parameters.input_image;
 			}
 
-			const response = await fetch(`${baseUrl}${CONSTANTS.API_ENDPOINTS.MODELSCOPE.FILES_GENERATION}`, {
+			// Build URL, avoiding double slashes
+			const baseUrlWithoutTrailingSlash = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
+			const url = `${baseUrlWithoutTrailingSlash}/${CONSTANTS.API_ENDPOINTS.MODELSCOPE.IMAGES_GENERATIONS}`;
+
+			console.log('[AI Media Gen] Submitting async task', {
+				url,
+				model,
+				promptLength: input.prompt?.length,
+				hasAsyncHeader: true,
+			});
+
+			const response = await fetch(url, {
 				method: 'POST',
 				headers: {
 					'Authorization': `Bearer ${apiKey}`,
 					'Content-Type': 'application/json',
+					'X-ModelScope-Async-Mode': 'true',  // Enable async mode
 				},
 				body: JSON.stringify(requestBody),
 				signal: controller.signal,
@@ -700,11 +902,27 @@ export class AIMediaGen implements INodeType {
 
 			clearTimeout(timeoutId);
 
-			const data = await response.json().catch(() => null) as ModelScopeApiResponse | null;
+			console.log('[AI Media Gen] Task submission response', {
+				statusCode: response.status,
+				statusText: response.statusText,
+				ok: response.ok,
+			});
 
 			if (!response.ok) {
 				let errorMessage = 'Failed to generate image';
 				let errorCode = 'API_ERROR';
+
+				// Log detailed error information for debugging
+				console.error('[AI Media Gen] API Request Failed', {
+					statusCode: response.status,
+					statusText: response.statusText,
+					requestUrl: url,
+					requestBody: {
+						model,
+						prompt: input.prompt?.substring(0, 50) + '...',
+						size: parameters.size,
+					},
+				});
 
 				if (response.status === 401) {
 					errorMessage = 'Authentication failed. Please check your API Key.';
@@ -718,18 +936,36 @@ export class AIMediaGen implements INodeType {
 				} else if (response.status === 503) {
 					errorMessage = 'Service temporarily unavailable. Please try again later.';
 					errorCode = 'SERVICE_UNAVAILABLE';
-				} else if (data?.error) {
-					errorMessage = data.error;
 				}
 
 				throw new MediaGenError(errorMessage, errorCode, { statusCode: response.status });
 			}
 
-			const imageUrl = data?.output?.url || data?.url || data?.image_url;
+			// Parse task submission response
+			const submitData = await response.json().catch(() => null) as ModelScopeAsyncSubmitResponse | null;
 
-			if (!imageUrl) {
-				throw new MediaGenError('No image URL returned from API', 'API_ERROR');
+			console.log('[AI Media Gen] Task submission data', {
+				hasData: !!submitData,
+				hasTaskId: !!submitData?.task_id,
+				taskId: submitData?.task_id,
+			});
+
+			if (!submitData || !submitData.task_id) {
+				throw new MediaGenError('No task ID returned from API', 'API_ERROR');
 			}
+
+			// Poll for task completion
+			const imageUrl = await AIMediaGen.pollTaskStatus(
+				baseUrlWithoutTrailingSlash,
+				apiKey,
+				submitData.task_id,
+				CONSTANTS.ASYNC.POLL_TIMEOUT_MS
+			);
+
+			console.log('[AI Media Gen] Image generation completed', {
+				imageUrl,
+				model,
+			});
 
 			// Validate URL format
 			if (!CONSTANTS.VALIDATION.URL_PATTERN.test(imageUrl)) {

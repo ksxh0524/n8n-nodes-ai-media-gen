@@ -74,8 +74,18 @@ export const HASH = {
 export const API_ENDPOINTS = {
 	MODELSCOPE: {
 		BASE_URL: 'https://api-inference.modelscope.cn/v1',
-		FILES_GENERATION: '/files/generation',
+		IMAGES_GENERATIONS: 'images/generations',
+		TASK_STATUS: 'tasks',  // for polling async task status
 	},
+} as const;
+
+/**
+ * Async polling configuration (in milliseconds)
+ */
+export const ASYNC = {
+	POLL_INTERVAL_MS: 2000,      // Check status every 2 seconds
+	POLL_TIMEOUT_MS: 300000,     // Max 5 minutes total
+	INITIAL_DELAY_MS: 1000,      // Wait 1 second before first poll
 } as const;
 
 /**
