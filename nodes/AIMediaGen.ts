@@ -58,6 +58,38 @@ interface ModelScopeAsyncTaskResponse {
 }
 
 /**
+ * Parse image dimensions from buffer
+ */
+function getImageDimensions(buffer: Buffer): { width: number; height: number } | null {
+	// Check for PNG
+	if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47) {
+		// PNG dimensions are at bytes 16-23 (big-endian)
+		const width = buffer.readUInt32BE(16);
+		const height = buffer.readUInt32BE(20);
+		return { width, height };
+	}
+
+	// Check for JPEG
+	if (buffer[0] === 0xff && buffer[1] === 0xd8) {
+		let i = 2;
+		while (i < buffer.length) {
+			// Find SOF markers (SOF0, SOF1, SOF2, etc.)
+			if (buffer[i] === 0xff && buffer[i + 1] >= 0xc0 && buffer[i + 1] <= 0xcf && buffer[i + 1] !== 0xc4 && buffer[i + 1] !== 0xc8) {
+				const height = buffer.readUInt16BE(i + 5);
+				const width = buffer.readUInt16BE(i + 7);
+				return { width, height };
+			}
+			// Skip to next marker
+			i += 2;
+			const length = buffer.readUInt16BE(i);
+			i += length;
+		}
+	}
+
+	return null;
+}
+
+/**
  * AI Media Generation Node
  *
  * Generates and edits images using multiple AI platforms:
@@ -236,6 +268,7 @@ export class AIMediaGen implements INodeType {
 			displayOptions: {
 				show: {
 					operation: ['nanoBanana'],
+					nbMode: ['image-to-image'],
 				},
 			},
 			description: 'Reference images to guide generation (optional, max: 4 for standard models, 14 for Pro models). Supports: URL, base64, or binary property name.',
@@ -327,23 +360,6 @@ export class AIMediaGen implements INodeType {
 				show: {
 					operation: ['nanoBanana'],
 					nbModel: ['nano-banana'],
-				},
-			},
-		},
-		// Nano Banana - Response Format
-		{
-			displayName: 'Response Format',
-			name: 'nbResponseFormat',
-			type: 'options',
-			default: 'url',
-			options: [
-				{ name: 'URL', value: 'url' },
-				{ name: 'Base64', value: 'b64_json' },
-			],
-			description: 'The format in which the generated images are returned',
-			displayOptions: {
-				show: {
-					operation: ['nanoBanana'],
 				},
 			},
 		},
@@ -1462,10 +1478,16 @@ export class AIMediaGen implements INodeType {
 				};
 
 				console.log(`[${model}] Sending generation request`, {
-					aspectRatio,
-					resolution,
-					imagesCount: referenceImages.length,
-					prompt: prompt.substring(0, 50) + '...',
+					requestBody: {
+						contents: [{ parts: [{ text: prompt.substring(0, 50) + '...' }], role: 'user' }],
+						generationConfig: {
+							responseModalities: ['IMAGE'],
+							imageConfig: {
+								aspectRatio,
+								imageSize: resolution,
+							},
+						},
+					},
 					baseUrl,
 					fullUrl: `${baseUrl}/v1beta/models/${model}:generateContent`,
 					model,
@@ -1604,10 +1626,15 @@ export class AIMediaGen implements INodeType {
 				};
 
 				console.log(`[${model}] Sending generation request`, {
-					size,
-					aspectRatio: sizeToAspectRatio[size],
-					imagesCount: referenceImages.length,
-					prompt: prompt.substring(0, 50) + '...',
+					requestBody: {
+						contents: [{ parts: [{ text: prompt.substring(0, 50) + '...' }], role: 'user' }],
+						generationConfig: {
+							responseModalities: ['IMAGE'],
+							imageConfig: {
+								aspectRatio: sizeToAspectRatio[size],
+							},
+						},
+					},
 					baseUrl,
 					fullUrl: `${baseUrl}/v1beta/models/${model}:generateContent`,
 					model,
@@ -1717,7 +1744,15 @@ export class AIMediaGen implements INodeType {
 						}
 
 						binaryData = { data: base64, mimeType };
-						console.log(`[${model}] Image downloaded`, { mimeType, size: buffer.byteLength });
+
+						const bufferObj = Buffer.from(buffer);
+						const dimensions = getImageDimensions(bufferObj);
+						console.log(`[${model}] Image downloaded`, {
+							mimeType,
+							fileSize: buffer.byteLength,
+							dimensions: dimensions ? `${dimensions.width}x${dimensions.height}` : 'unknown',
+							fileName: imageUrl.split('/').pop()?.split('?')[0],
+						});
 					}
 				} catch (error) {
 					console.warn(`[${model}] Failed to download image`, { error: error instanceof Error ? error.message : String(error) });
