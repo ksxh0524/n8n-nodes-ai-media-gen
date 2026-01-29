@@ -11,42 +11,44 @@ import { MediaGenError } from './utils/errors';
  * Google Gemini API credentials (reused for Nano Banana)
  */
 interface GoogleGeminiCredentials {
-	/** API key from Google AI Studio */
+	/** API key from Google AI Studio or compatible service */
 	apiKey: string;
+	/** Optional custom base URL */
+	baseUrl?: string;
 }
 
 /**
- * Nano Banana API request response
+ * OpenAI DALL-E format image generation response
  */
-interface NanoBananaApiResponse {
-	data: {
-		id: string;
-		results: Array<{
-			url: string;
-			content: string;
-		}>;
-		progress: number;
-		status: 'running' | 'succeeded' | 'failed';
-		failure_reason: string | null;
-		error: string | null;
-		credits_cost: number;
-	};
+interface DalleImage {
+	b64_json?: string;
+	url?: string;
+	revised_prompt?: string;
+}
+
+interface DalleResponse {
+	created: number;
+	data: DalleImage[];
 }
 
 /**
  * Nano Banana Image Generation Node
  *
- * Generates and edits images using Google's Nano Banana AI model:
- * - Text-to-image: Generate images from text descriptions
- * - Image-to-image: Edit images with text instructions
- * - Supports multiple aspect ratios and image sizes (1K, 2K, 4K)
+ * Generates and edits images using Google's Nano Banana AI model (Gemini 2.5 Flash Image)
+ * through an OpenAI DALL-E compatible API.
+ *
+ * Features:
+ * - Text-to-image generation
+ * - Image-to-image editing
+ * - Multiple aspect ratios
+ * - 1K/2K/4K resolution support
  */
 export class NanoBananaGen implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'Nano Banana Generation',
 		name: 'nanoBananaGen',
 		icon: 'file:ai-media-gen.svg',
-		description: 'Generate and edit images using Google Nano Banana AI model',
+		description: 'Generate and edit images using Google Nano Banana (Gemini 2.5 Flash) AI model',
 		version: 1.0,
 		group: ['transform'],
 		subtitle: '={{$parameter.mode}}',
@@ -90,19 +92,14 @@ export class NanoBananaGen implements INodeType {
 				required: true,
 				options: [
 					{
-						name: 'Nano Banana Fast',
-						value: 'nano-banana-fast',
-						description: 'Fast generation (5 credits)',
-					},
-					{
-						name: 'Nano Banana',
+						name: 'Nano Banana (Standard)',
 						value: 'nano-banana',
-						description: 'Balanced quality and speed (15 credits)',
+						description: 'Standard quality generation',
 					},
 					{
-						name: 'Nano Banana Pro',
-						value: 'nano-banana-pro',
-						description: 'Highest quality (20 credits)',
+						name: 'Nano Banana HD',
+						value: 'nano-banana-hd',
+						description: 'High quality 4K output',
 					},
 				],
 				default: 'nano-banana',
@@ -164,37 +161,8 @@ export class NanoBananaGen implements INodeType {
 				placeholder: 'Enter a property name containing the binary data, e.g., data',
 			},
 			{
-				displayName: 'Aspect Ratio',
-				name: 'aspectRatio',
-				type: 'options',
-				default: 'auto',
-				options: [
-					{ name: 'Auto', value: 'auto' },
-					{ name: '1:1', value: '1:1' },
-					{ name: '16:9', value: '16:9' },
-					{ name: '9:16', value: '9:16' },
-					{ name: '4:3', value: '4:3' },
-					{ name: '3:4', value: '3:4' },
-					{ name: '3:2', value: '3:2' },
-					{ name: '2:3', value: '2:3' },
-				],
-				description: 'Image aspect ratio',
-			},
-			{
-				displayName: 'Image Size',
-				name: 'imageSize',
-				type: 'options',
-				default: '1K',
-				options: [
-					{ name: '1K (1024x1024)', value: '1K' },
-					{ name: '2K (2048x2048)', value: '2K' },
-					{ name: '4K (4096x4096)', value: '4K' },
-				],
-				description: 'Output image resolution (Pro model supports up to 4K)',
-			},
-			{
 				displayName: 'Number of Images',
-				name: 'numImages',
+				name: 'n',
 				type: 'number',
 				default: 1,
 				typeOptions: {
@@ -202,6 +170,31 @@ export class NanoBananaGen implements INodeType {
 					maxValue: 4,
 				},
 				description: 'Number of images to generate (1-4)',
+			},
+			{
+				displayName: 'Size',
+				name: 'size',
+				type: 'options',
+				default: '1024x1024',
+				options: [
+					{ name: '256x256', value: '256x256' },
+					{ name: '512x512', value: '512x512' },
+					{ name: '1024x1024', value: '1024x1024' },
+					{ name: '1792x1024', value: '1792x1024' },
+					{ name: '1024x1792', value: '1024x1792' },
+				],
+				description: 'Image size (Note: HD model supports up to 4K)',
+			},
+			{
+				displayName: 'Response Format',
+				name: 'responseFormat',
+				type: 'options',
+				default: 'url',
+				options: [
+					{ name: 'URL', value: 'url' },
+					{ name: 'Base64', value: 'b64_json' },
+				],
+				description: 'The format in which the generated images are returned',
 			},
 			{
 				displayName: 'Options',
@@ -215,11 +208,11 @@ export class NanoBananaGen implements INodeType {
 						name: 'timeout',
 						type: 'number',
 						typeOptions: {
-							minValue: 1000,
-							maxValue: 600000,
+							minValue: 5000,
+							maxValue: 300000,
 						},
-						default: 120000,
-						description: 'Request timeout in milliseconds (default: 2 minutes)',
+						default: 60000,
+						description: 'Request timeout in milliseconds (default: 60 seconds)',
 					},
 				],
 			},
@@ -253,9 +246,9 @@ export class NanoBananaGen implements INodeType {
 				const mode = this.getNodeParameter('mode', i) as string;
 				const model = this.getNodeParameter('model', i) as string;
 				const prompt = this.getNodeParameter('prompt', i) as string;
-				const aspectRatio = this.getNodeParameter('aspectRatio', i) as string || 'auto';
-				const imageSize = this.getNodeParameter('imageSize', i) as string || '1K';
-				const numImages = this.getNodeParameter('numImages', i) as number || 1;
+				const n = this.getNodeParameter('n', i) as number || 1;
+				const size = this.getNodeParameter('size', i) as string || '1024x1024';
+				const responseFormat = this.getNodeParameter('responseFormat', i) as string || 'url';
 
 				let inputImage = '';
 				if (mode === 'image-to-image') {
@@ -281,7 +274,7 @@ export class NanoBananaGen implements INodeType {
 					}
 				}
 
-				let timeout = 120000;
+				let timeout = 60000;
 				try {
 					timeout = this.getNodeParameter('options.timeout', i) as number;
 				} catch (error) {
@@ -307,14 +300,14 @@ export class NanoBananaGen implements INodeType {
 				const result = await NanoBananaGen.executeGeneration(
 					this,
 					i,
-					credentials.apiKey,
+					credentials,
 					{
 						mode,
 						model,
 						prompt: prompt.trim(),
-						aspectRatio,
-						imageSize,
-						numImages,
+						n,
+						size,
+						responseFormat,
 						inputImage,
 					},
 					timeout
@@ -351,169 +344,198 @@ export class NanoBananaGen implements INodeType {
 	}
 
 	/**
-	 * Executes Nano Banana API generation
+	 * Executes Nano Banana API generation using OpenAI DALL-E format
 	 */
 	private static async executeGeneration(
 		context: IExecuteFunctions,
 		itemIndex: number,
-		apiKey: string,
+		credentials: GoogleGeminiCredentials,
 		params: {
 			mode: string;
 			model: string;
 			prompt: string;
-			aspectRatio: string;
-			imageSize: string;
-			numImages: number;
+			n: number;
+			size: string;
+			responseFormat: string;
 			inputImage: string;
 		},
 		timeout: number
 	): Promise<INodeExecutionData> {
-		const baseUrl = 'https://nanobananapro.cloud';
+		// Use baseUrl from credentials or default to Google official
+		const baseUrl = credentials.baseUrl || 'https://generativelanguage.googleapis.com';
 
 		context.logger?.info('[Nano Banana] Starting generation', {
 			itemIndex,
 			mode: params.mode,
 			model: params.model,
+			baseUrl,
 		});
 
-		// Submit generation task
-		const formData = new FormData();
-		formData.append('prompt', params.prompt);
-		formData.append('model', params.model);
-		formData.append('mode', params.mode);
-		formData.append('aspectRatio', params.aspectRatio);
-		formData.append('imageSize', params.imageSize);
+		console.log('[Nano Banana] Using base URL', { baseUrl });
 
-		if (params.mode === 'image-to-image' && params.inputImage) {
-			formData.append('imageUrl', params.inputImage);
-		}
+		const controller = new AbortController();
+		const timeoutId = setTimeout(() => controller.abort(), timeout);
 
-		console.log('[Nano Banana] Submitting task', {
-			url: `${baseUrl}/api/v1/image/nano-banana`,
-			model: params.model,
-			mode: params.mode,
-		});
+		try {
+			let imageUrl: string;
 
-		const submitResponse = await fetch(`${baseUrl}/api/v1/image/nano-banana`, {
-			method: 'POST',
-			headers: {
-				'Authorization': `Bearer ${apiKey}`,
-			},
-			body: formData,
-		});
+			if (params.mode === 'text-to-image') {
+				// POST /v1/images/generations (OpenAI DALL-E format)
+				const requestBody = {
+					model: params.model,
+					prompt: params.prompt,
+					n: params.n,
+					size: params.size,
+					response_format: params.responseFormat,
+				};
 
-		if (!submitResponse.ok) {
+				console.log('[Nano Banana] Sending text-to-image request', {
+					model: params.model,
+					prompt: params.prompt.substring(0, 50) + '...',
+				});
+
+				const response = await fetch(`${baseUrl}/v1/images/generations`, {
+					method: 'POST',
+					headers: {
+						'Authorization': `Bearer ${credentials.apiKey}`,
+						'Content-Type': 'application/json',
+					},
+					body: JSON.stringify(requestBody),
+					signal: controller.signal,
+				});
+
+				clearTimeout(timeoutId);
+
+				if (!response.ok) {
+					const errorText = await response.text();
+					console.error('[Nano Banana] API error', {
+						status: response.status,
+						statusText: response.statusText,
+						body: errorText,
+					});
+					throw new MediaGenError(
+						`API request failed: ${response.status} ${response.statusText}`,
+						'API_ERROR'
+					);
+				}
+
+				const data = await response.json() as DalleResponse;
+
+				if (!data.data || data.data.length === 0) {
+					throw new MediaGenError('No images returned from API', 'API_ERROR');
+				}
+
+				// Get first image
+				const firstImage = data.data[0];
+				imageUrl = firstImage.url || firstImage.b64_json || '';
+
+				if (!imageUrl) {
+					throw new MediaGenError('No image URL or base64 data returned', 'API_ERROR');
+				}
+
+				console.log('[Nano Banana] Generation completed', {
+					imageUrl: imageUrl.substring(0, 50) + '...',
+				});
+
+			} else {
+				// POST /v1/images/edits (OpenAI DALL-E Edits format)
+				const formData = new FormData();
+				formData.append('model', params.model);
+				formData.append('prompt', params.prompt);
+				formData.append('n', params.n.toString());
+				formData.append('size', params.size);
+				formData.append('response_format', params.responseFormat);
+
+				// Add input image
+				if (params.inputImage.startsWith('data:')) {
+					// It's base64 - convert to blob
+					const base64Data = params.inputImage.split(',')[1];
+					const byteCharacters = atob(base64Data);
+					const byteNumbers = new Array(byteCharacters.length);
+					for (let i = 0; i < byteCharacters.length; i++) {
+						byteNumbers[i] = byteCharacters.charCodeAt(i);
+					}
+					const byteArray = new Uint8Array(byteNumbers);
+					const blob = new Blob([byteArray], { type: 'image/jpeg' });
+					formData.append('image', blob, 'image.jpg');
+				} else {
+					// It's a URL - append as-is
+					formData.append('image', params.inputImage);
+				}
+
+				console.log('[Nano Banana] Sending image-to-image request', {
+					model: params.model,
+					prompt: params.prompt.substring(0, 50) + '...',
+				});
+
+				const response = await fetch(`${baseUrl}/v1/images/edits`, {
+					method: 'POST',
+					headers: {
+						'Authorization': `Bearer ${credentials.apiKey}`,
+					},
+					body: formData,
+					signal: controller.signal,
+				});
+
+				clearTimeout(timeoutId);
+
+				if (!response.ok) {
+					const errorText = await response.text();
+					console.error('[Nano Banana] API error', {
+						status: response.status,
+						statusText: response.statusText,
+						body: errorText,
+					});
+					throw new MediaGenError(
+						`API request failed: ${response.status} ${response.statusText}`,
+						'API_ERROR'
+					);
+				}
+
+				const data = await response.json() as DalleResponse;
+
+				if (!data.data || data.data.length === 0) {
+					throw new MediaGenError('No images returned from API', 'API_ERROR');
+				}
+
+				const firstImage = data.data[0];
+				imageUrl = firstImage.url || firstImage.b64_json || '';
+
+				if (!imageUrl) {
+					throw new MediaGenError('No image URL or base64 data returned', 'API_ERROR');
+				}
+
+				console.log('[Nano Banana] Edit completed', {
+					imageUrl: imageUrl.substring(0, 50) + '...',
+				});
+			}
+
+			return {
+				json: {
+					success: true,
+					imageUrl,
+					model: params.model,
+					mode: params.mode,
+					_metadata: {
+						timestamp: new Date().toISOString(),
+					},
+				},
+			};
+		} catch (error) {
+			clearTimeout(timeoutId);
+
+			if (error instanceof Error && error.name === 'AbortError') {
+				throw new MediaGenError('Request timeout', 'TIMEOUT');
+			}
+
+			if (error instanceof MediaGenError) {
+				throw error;
+			}
+
 			throw new MediaGenError(
-				`Failed to submit task: ${submitResponse.status} ${submitResponse.statusText}`,
-				'API_ERROR'
+				error instanceof Error ? error.message : String(error),
+				'NETWORK_ERROR'
 			);
 		}
-
-		const submitData = await submitResponse.json() as NanoBananaApiResponse;
-
-		if (!submitData.data || !submitData.data.id) {
-			throw new MediaGenError('No task ID returned from API', 'API_ERROR');
-		}
-
-		const taskId = submitData.data.id;
-
-		console.log('[Nano Banana] Task submitted', { taskId });
-
-		// Poll for result
-		const imageUrl = await NanoBananaGen.pollForResult(
-			baseUrl,
-			apiKey,
-			taskId,
-			timeout
-		);
-
-		console.log('[Nano Banana] Generation completed', { imageUrl });
-
-		return {
-			json: {
-				success: true,
-				imageUrl,
-				model: params.model,
-				mode: params.mode,
-				_metadata: {
-					timestamp: new Date().toISOString(),
-				},
-			},
-		};
-	}
-
-	/**
-	 * Polls for task result
-	 */
-	private static async pollForResult(
-		baseUrl: string,
-		apiKey: string,
-		taskId: string,
-		timeout: number
-	): Promise<string> {
-		const startTime = Date.now();
-		const pollInterval = 2000; // 2 seconds
-
-		console.log('[Nano Banana] Starting polling', { taskId, timeout });
-
-		let pollCount = 0;
-		while (Date.now() - startTime < timeout) {
-			pollCount++;
-			const elapsed = Date.now() - startTime;
-
-			if (pollCount > 1) {
-				await new Promise(resolve => setTimeout(resolve, pollInterval));
-			}
-
-			console.log('[Nano Banana] Polling result', { pollCount, elapsed, taskId });
-
-			const response = await fetch(`${baseUrl}/api/v1/image/nano-banana/result`, {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json',
-					'Authorization': `Bearer ${apiKey}`,
-				},
-				body: JSON.stringify({ taskId }),
-			});
-
-			if (!response.ok) {
-				throw new MediaGenError(
-					`Failed to check result: ${response.status} ${response.statusText}`,
-					'API_ERROR'
-				);
-			}
-
-			const data = await response.json() as NanoBananaApiResponse;
-
-			console.log('[Nano Banana] Poll response', {
-				status: data.data.status,
-				progress: data.data.progress,
-			});
-
-			if (data.data.status === 'succeeded') {
-				if (data.data.results && data.data.results.length > 0) {
-					console.log('[Nano Banana] Task succeeded', { taskId, pollCount, elapsed });
-					return data.data.results[0].url;
-				}
-				throw new MediaGenError('Task succeeded but no image URL returned', 'API_ERROR');
-			}
-
-			if (data.data.status === 'failed') {
-				console.error('[Nano Banana] Task failed', {
-					taskId,
-					reason: data.data.failure_reason,
-					error: data.data.error,
-				});
-				throw new MediaGenError(
-					data.data.failure_reason || data.data.error || 'Task failed',
-					'API_ERROR'
-				);
-			}
-
-			// Continue polling for 'running' status
-		}
-
-		console.error('[Nano Banana] Polling timeout', { taskId, pollCount, timeout });
-		throw new MediaGenError('Task polling timeout', 'TIMEOUT');
 	}
 }
