@@ -24,6 +24,21 @@ function copyPackageJson() {
   return gulp.src('package.json').pipe(gulp.dest('dist'));
 }
 
+function copyIcons() {
+  return gulp.src(['nodes/**/*.svg', 'nodes/icons/**/*.svg'], { base: 'nodes' }).pipe(gulp.dest('dist/nodes'));
+}
+
+function buildDev() {
+  return tsProject.src()
+    .pipe(sourcemaps.init())
+    .pipe(tsProject())
+    .pipe(sourcemaps.write('.', {
+      includeContent: false,
+      sourceRoot: '../nodes'
+    }))
+    .pipe(gulp.dest('dist'));
+}
+
 function buildDev() {
   return tsProject.src()
     .pipe(sourcemaps.init())
@@ -39,8 +54,8 @@ function watchFiles() {
   gulp.watch('nodes/**/*.ts', buildDev);
 }
 
-exports.build = gulp.series(clean, build, copyPackageJson);
-exports.buildDev = gulp.series(clean, buildDev, copyPackageJson);
-exports.dev = gulp.series(clean, buildDev, copyPackageJson, watchFiles);
+exports.build = gulp.series(clean, build, copyPackageJson, copyIcons);
+exports.buildDev = gulp.series(clean, buildDev, copyPackageJson, copyIcons);
+exports.dev = gulp.series(clean, buildDev, copyPackageJson, copyIcons, watchFiles);
 exports.clean = clean;
 exports.default = build;

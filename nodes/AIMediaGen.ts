@@ -351,12 +351,28 @@ export class AIMediaGen implements INodeType {
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
 		const items = this.getInputData();
 		const results: INodeExecutionData[] = [];
-		const enableCache = this.getNodeParameter('options.enableCache', CONSTANTS.INDICES.FIRST_ITEM) as boolean;
+
+		// Safely get enableCache with try-catch
+		let enableCache = true;
+		try {
+			enableCache = this.getNodeParameter('options.enableCache', CONSTANTS.INDICES.FIRST_ITEM) as boolean;
+		} catch (error) {
+			// If options doesn't exist, use default
+			this.logger?.debug('Options not set, using default enableCache=true');
+			enableCache = true;
+		}
+
 		const cacheManager = new CacheManager();
 		const performanceMonitor = new PerformanceMonitor();
 
+		this.logger?.info('Starting AI Media Generation execution', {
+			itemCount: items.length,
+			enableCache,
+		});
+
 		for (let i = 0; i < items.length; i++) {
 			try {
+				this.logger?.debug('Processing item', { index: i });
 				const credentials = await this.getCredentials<ModelScopeApiCredentials>('modelScopeApi');
 				if (!credentials || !credentials.apiKey) {
 					throw new NodeOperationError(
@@ -483,9 +499,21 @@ export class AIMediaGen implements INodeType {
 		credentials: ModelScopeApiCredentials,
 		timeout: number
 	): Promise<INodeExecutionData> {
+		context.logger?.info('[AI Media Gen] Starting model request', { itemIndex });
+
 		const model = context.getNodeParameter('model', itemIndex) as string;
+		context.logger?.info('[AI Media Gen] Model selected', { model, itemIndex });
+
 		const prompt = context.getNodeParameter('prompt', itemIndex) as string;
-		const maxRetries = context.getNodeParameter('options.maxRetries', itemIndex) as number;
+		context.logger?.info('[AI Media Gen] Prompt retrieved', { promptLength: prompt?.length, itemIndex });
+
+		// Safely get maxRetries
+		let maxRetries = 3;
+		try {
+			maxRetries = context.getNodeParameter('options.maxRetries', itemIndex) as number;
+		} catch (error) {
+			context.logger?.warn('[AI Media Gen] Could not get maxRetries, using default', { itemIndex, error });
+		}
 
 		// Get steps only for generation models (not Edit model)
 		const isEditModel = model === 'Qwen-Image-Edit-2511';
@@ -503,9 +531,11 @@ export class AIMediaGen implements INodeType {
 		if (!isEditModel) {
 			try {
 				size = context.getNodeParameter('size', itemIndex) as string;
+				context.logger?.info('[AI Media Gen] Size retrieved', { size, itemIndex });
 			} catch (error) {
 				// Use default size if parameter not set
 				size = isZImage ? '2048x2048' : '1328x1328';
+				context.logger?.warn('[AI Media Gen] Could not get size, using default', { size, itemIndex });
 			}
 		}
 
@@ -513,8 +543,10 @@ export class AIMediaGen implements INodeType {
 		if (!isEditModel) {
 			try {
 				seed = context.getNodeParameter('seed', itemIndex) as number;
+				context.logger?.info('[AI Media Gen] Seed retrieved', { seed, itemIndex });
 			} catch (error) {
 				seed = 0;
+				context.logger?.warn('[AI Media Gen] Could not get seed, using default', { seed, itemIndex });
 			}
 		}
 
@@ -522,8 +554,10 @@ export class AIMediaGen implements INodeType {
 		if (!isEditModel) {
 			try {
 				steps = context.getNodeParameter('steps', itemIndex) as number;
+				context.logger?.info('[AI Media Gen] Steps retrieved', { steps, itemIndex });
 			} catch (error) {
 				steps = 30;
+				context.logger?.warn('[AI Media Gen] Could not get steps, using default', { steps, itemIndex });
 			}
 		}
 
@@ -531,8 +565,10 @@ export class AIMediaGen implements INodeType {
 		if (isZImage || isQwenImage) {
 			try {
 				numImages = context.getNodeParameter('numImages', itemIndex) as number;
+				context.logger?.info('[AI Media Gen] NumImages retrieved', { numImages, itemIndex });
 			} catch (error) {
 				numImages = 1;
+				context.logger?.warn('[AI Media Gen] Could not get numImages, using default', { numImages, itemIndex });
 			}
 		}
 
