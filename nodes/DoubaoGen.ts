@@ -161,34 +161,61 @@ export class DoubaoGen implements INodeType {
 				description: 'Binary property containing the image file to edit',
 				placeholder: 'Enter a property name containing the binary data, e.g., data',
 			},
-			{
-				displayName: 'Size',
-				name: 'size',
-				type: 'options',
-				default: '2048x2048',
-				options: [
-					{ name: '1:1 (2048x2048)', value: '2048x2048' },
-					{ name: '4:3 (2304x1728)', value: '2304x1728' },
-					{ name: '3:4 (1728x2304)', value: '1728x2304' },
-					{ name: '16:9 (2560x1440)', value: '2560x1440' },
-					{ name: '9:16 (1440x2560)', value: '1440x2560' },
-					{ name: '3:2 (2496x1664)', value: '2496x1664' },
-					{ name: '2:3 (1664x2496)', value: '1664x2496' },
-					{ name: '21:9 (3024x1296)', value: '3024x1296' },
-				],
-				description: 'Image size and aspect ratio',
+		{
+			displayName: 'Resolution Level',
+			name: 'resolutionLevel',
+			type: 'options',
+			default: '2K',
+			options: [
+				{ name: '2K', value: '2K' },
+				{ name: '4K', value: '4K' },
+			],
+			description: 'Select resolution level',
+		},
+		{
+			displayName: 'Size (2K)',
+			name: 'size2K',
+			type: 'options',
+			default: '2048x2048',
+			options: [
+				{ name: '1:1 (2048x2048)', value: '2048x2048' },
+				{ name: '4:3 (2304x1728)', value: '2304x1728' },
+				{ name: '3:4 (1728x2304)', value: '1728x2304' },
+				{ name: '16:9 (2560x1440)', value: '2560x1440' },
+				{ name: '9:16 (1440x2560)', value: '1440x2560' },
+				{ name: '3:2 (2496x1664)', value: '2496x1664' },
+				{ name: '2:3 (1664x2496)', value: '1664x2496' },
+				{ name: '21:9 (3024x1296)', value: '3024x1296' },
+			],
+			description: 'Image size and aspect ratio (2K)',
+			displayOptions: {
+				show: {
+					resolutionLevel: ['2K'],
+				},
 			},
-			{
-				displayName: 'Response Format',
-				name: 'responseFormat',
-				type: 'options',
-				default: 'url',
-				options: [
-					{ name: 'URL', value: 'url' },
-					{ name: 'Base64', value: 'b64_json' },
-				],
-				description: 'Response format: URL or Base64',
+		},
+		{
+			displayName: 'Size (4K)',
+			name: 'size4K',
+			type: 'options',
+			default: '4096x4096',
+			options: [
+				{ name: '1:1 (4096x4096)', value: '4096x4096' },
+				{ name: '4:3 (4608x3456)', value: '4608x3456' },
+				{ name: '3:4 (3456x4608)', value: '3456x4608' },
+				{ name: '16:9 (5120x2880)', value: '5120x2880' },
+				{ name: '9:16 (2880x5120)', value: '2880x5120' },
+				{ name: '3:2 (4992x3328)', value: '4992x3328' },
+				{ name: '2:3 (3328x4992)', value: '3328x4992' },
+				{ name: '21:9 (6048x2592)', value: '6048x2592' },
+			],
+			description: 'Image size and aspect ratio (4K)',
+			displayOptions: {
+				show: {
+					resolutionLevel: ['4K'],
+				},
 			},
+		},
 			{
 				displayName: 'Seed',
 				name: 'seed',
@@ -297,8 +324,16 @@ export class DoubaoGen implements INodeType {
 		const mode = context.getNodeParameter('mode', itemIndex) as string;
 		const model = context.getNodeParameter('model', itemIndex) as string;
 		const prompt = context.getNodeParameter('prompt', itemIndex) as string;
-		const size = context.getNodeParameter('size', itemIndex) as string || '2048x2048';
-		const responseFormat = context.getNodeParameter('responseFormat', itemIndex) as string || 'url';
+		const resolutionLevel = context.getNodeParameter('resolutionLevel', itemIndex) as string || '2K';
+
+		// Get size based on resolution level
+		let size: string;
+		if (resolutionLevel === '2K') {
+			size = context.getNodeParameter('size2K', itemIndex) as string || '2048x2048';
+		} else {
+			size = context.getNodeParameter('size4K', itemIndex) as string || '4096x4096';
+		}
+
 		const seed = context.getNodeParameter('seed', itemIndex) as number || 0;
 
 		let timeout = 60000;
@@ -364,7 +399,6 @@ export class DoubaoGen implements INodeType {
 					model: model,
 					prompt: prompt.trim(),
 					size,
-					response_format: responseFormat,
 					stream: false,
 					watermark: false,
 					seed: seed > 0 ? seed : undefined,
@@ -374,7 +408,6 @@ export class DoubaoGen implements INodeType {
 					model,
 					prompt: prompt.substring(0, 50) + '...',
 					size,
-					responseFormat,
 				});
 
 				const response = await fetch(`${baseUrl}/images/generations`, {
@@ -429,7 +462,6 @@ export class DoubaoGen implements INodeType {
 				formData.append('model', model);
 				formData.append('prompt', prompt);
 				formData.append('size', size);
-				formData.append('response_format', responseFormat);
 				formData.append('stream', 'false');
 				formData.append('watermark', 'false');
 				if (seed > 0) {
@@ -457,7 +489,7 @@ export class DoubaoGen implements INodeType {
 					model,
 					prompt: prompt.substring(0, 50) + '...',
 					size,
-					responseFormat,
+					
 				});
 
 				const response = await fetch(`${baseUrl}/images/edits`, {

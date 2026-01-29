@@ -475,10 +475,27 @@ export class AIMediaGen implements INodeType {
 				},
 			],
 		},
-		// Doubao - Size
+		// Doubao - Resolution Level
+		{
+			displayName: 'Resolution Level',
+			name: 'doubaoResolutionLevel',
+			type: 'options',
+			default: '2K',
+			options: [
+				{ name: '2K', value: '2K' },
+				{ name: '4K', value: '4K' },
+			],
+			description: 'Select resolution level',
+			displayOptions: {
+				show: {
+					operation: ['doubao'],
+				},
+			},
+		},
+		// Doubao - Size (2K)
 		{
 			displayName: 'Size',
-			name: 'doubaoSize',
+			name: 'doubaoSize2K',
 			type: 'options',
 			default: '2048x2048',
 			options: [
@@ -491,10 +508,35 @@ export class AIMediaGen implements INodeType {
 				{ name: '2:3 (1664x2496)', value: '1664x2496' },
 				{ name: '21:9 (3024x1296)', value: '3024x1296' },
 			],
-			description: 'Image size and aspect ratio',
+			description: 'Image size and aspect ratio (2K)',
 			displayOptions: {
 				show: {
 					operation: ['doubao'],
+					doubaoResolutionLevel: ['2K'],
+				},
+			},
+		},
+		// Doubao - Size (4K)
+		{
+			displayName: 'Size',
+			name: 'doubaoSize4K',
+			type: 'options',
+			default: '4096x4096',
+			options: [
+				{ name: '1:1 (4096x4096)', value: '4096x4096' },
+				{ name: '4:3 (4608x3456)', value: '4608x3456' },
+				{ name: '3:4 (3456x4608)', value: '3456x4608' },
+				{ name: '16:9 (5120x2880)', value: '5120x2880' },
+				{ name: '9:16 (2880x5120)', value: '2880x5120' },
+				{ name: '3:2 (4992x3328)', value: '4992x3328' },
+				{ name: '2:3 (3328x4992)', value: '3328x4992' },
+				{ name: '21:9 (6048x2592)', value: '6048x2592' },
+			],
+			description: 'Image size and aspect ratio (4K)',
+			displayOptions: {
+				show: {
+					operation: ['doubao'],
+					doubaoResolutionLevel: ['4K'],
 				},
 			},
 		},
@@ -799,10 +841,18 @@ export class AIMediaGen implements INodeType {
 							model,
 						};
 
-						// Add size
+						// Add resolution level and size
 						try {
-							cacheParams.size = this.getNodeParameter('doubaoSize', i);
+							const resolutionLevel = this.getNodeParameter('doubaoResolutionLevel', i) as string || '2K';
+							cacheParams.resolutionLevel = resolutionLevel;
+
+							if (resolutionLevel === '2K') {
+								cacheParams.size = this.getNodeParameter('doubaoSize2K', i) || '2048x2048';
+							} else {
+								cacheParams.size = this.getNodeParameter('doubaoSize4K', i) || '4096x4096';
+							}
 						} catch (error) {
+							cacheParams.resolutionLevel = '2K';
 							cacheParams.size = '2048x2048';
 						}
 
@@ -2075,7 +2125,16 @@ export class AIMediaGen implements INodeType {
 		const mode = context.getNodeParameter('doubaoMode', itemIndex) as string;
 		const model = context.getNodeParameter('doubaoModel', itemIndex) as string;
 		const prompt = context.getNodeParameter('doubaoPrompt', itemIndex) as string;
-		const size = context.getNodeParameter('doubaoSize', itemIndex) as string || '2048x2048';
+		const resolutionLevel = context.getNodeParameter('doubaoResolutionLevel', itemIndex) as string || '2K';
+
+		// Get size based on resolution level
+		let size: string;
+		if (resolutionLevel === '2K') {
+			size = context.getNodeParameter('doubaoSize2K', itemIndex) as string || '2048x2048';
+		} else {
+			size = context.getNodeParameter('doubaoSize4K', itemIndex) as string || '4096x4096';
+		}
+
 		const seed = context.getNodeParameter('doubaoSeed', itemIndex) as number || 0;
 
 		let timeout = 60000;
