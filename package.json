@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-ai-media-gen",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "description": "n8n node for AI media generation with extensible architecture. Supports ModelScope, Nano Banana (Gemini), and Doubao Seedream APIs.",
   "keywords": [
     "n8n",
@@ -18,7 +18,8 @@
   "license": "MIT",
   "homepage": "https://github.com/n8n-nodes-ai-media-gen",
   "author": {
-    "name": "n8n-nodes-ai-media-gen contributors"
+    "name": "wwrs",
+    "email": "ksxh0524@outlook.com"
   },
   "repository": {
     "type": "git",

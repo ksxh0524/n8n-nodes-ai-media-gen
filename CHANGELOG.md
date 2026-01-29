@@ -5,6 +5,15 @@ All notable changes to the n8n-nodes-ai-media-gen project will be documented in 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.2] - 2025-01-29
+
+### Fixed
+- **Security**: Fixed ESLint violations for n8n community node package compliance
+  - Removed duplicate `buildDev` function declaration in gulpfile.js
+  - Added ESLint disable comments for restricted globals in jest.setup.js
+  - All n8n security checks now pass
+- Updated package.json version to 0.0.2
+
 ## [1.1.0] - 2025-01-28
 
 ### Added
