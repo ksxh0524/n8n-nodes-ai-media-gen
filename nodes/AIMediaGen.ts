@@ -246,6 +246,23 @@ export class AIMediaGen implements INodeType {
 			},
 		},
 		{
+			displayName: 'Steps',
+			name: 'steps',
+			type: 'number',
+			default: 30,
+			typeOptions: {
+				minValue: 1,
+				maxValue: 100,
+			},
+			description: 'Number of sampling steps for generation (1-100, default: 30)',
+			displayOptions: {
+				show: {
+					operation: ['modelscope'],
+					model: ['Tongyi-MAI/Z-Image', 'Qwen-Image-2512'],
+				},
+			},
+		},
+		{
 			displayName: 'Number of Images',
 			name: 'numImages',
 			type: 'number',
@@ -470,6 +487,7 @@ export class AIMediaGen implements INodeType {
 		const prompt = context.getNodeParameter('prompt', itemIndex) as string;
 		const size = context.getNodeParameter('size', itemIndex) as string;
 		const seed = context.getNodeParameter('seed', itemIndex) as number;
+		const steps = context.getNodeParameter('steps', itemIndex) as number;
 		const numImages = context.getNodeParameter('numImages', itemIndex) as number;
 		const maxRetries = context.getNodeParameter('options.maxRetries', itemIndex) as number;
 
@@ -527,6 +545,7 @@ export class AIMediaGen implements INodeType {
 				{
 					size: size || '1024x1024',
 					seed: seed || 0,
+					steps: steps || 30,
 					num_images: numImages || 1,
 					input_image: inputImage,
 				},
@@ -556,7 +575,7 @@ export class AIMediaGen implements INodeType {
 		apiKey: string,
 		model: string,
 		input: { prompt: string },
-		parameters: { size?: string; seed: number; num_images?: number; input_image?: string },
+		parameters: { size?: string; seed: number; steps: number; num_images?: number; input_image?: string },
 		timeout: number
 	): Promise<INodeExecutionData> {
 		const controller = new AbortController();
@@ -578,6 +597,7 @@ export class AIMediaGen implements INodeType {
 				requestBody.parameters = {
 					size: parameters.size,
 					seed: actualSeed,
+					steps: parameters.steps,
 				};
 			}
 
