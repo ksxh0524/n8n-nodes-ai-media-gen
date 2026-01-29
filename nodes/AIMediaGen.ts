@@ -485,21 +485,58 @@ export class AIMediaGen implements INodeType {
 	): Promise<INodeExecutionData> {
 		const model = context.getNodeParameter('model', itemIndex) as string;
 		const prompt = context.getNodeParameter('prompt', itemIndex) as string;
-		const size = context.getNodeParameter('size', itemIndex) as string;
-		const seed = context.getNodeParameter('seed', itemIndex) as number;
-		const numImages = context.getNodeParameter('numImages', itemIndex) as number;
 		const maxRetries = context.getNodeParameter('options.maxRetries', itemIndex) as number;
 
 		// Get steps only for generation models (not Edit model)
 		const isEditModel = model === 'Qwen-Image-Edit-2511';
-		let steps = 30; // default
+		const isZImage = model === 'Tongyi-MAI/Z-Image';
+		const isQwenImage = model === 'Qwen-Image-2512';
+
+		// Get parameters based on model type with safe defaults
+		let size = '1024x1024';
+		let seed = 0;
+		let steps = 30;
+		let numImages = 1;
+		let inputImage = '';
+
+		// Get size for generation models
 		if (!isEditModel) {
-			steps = context.getNodeParameter('steps', itemIndex) as number;
+			try {
+				size = context.getNodeParameter('size', itemIndex) as string;
+			} catch (error) {
+				// Use default size if parameter not set
+				size = isZImage ? '2048x2048' : '1328x1328';
+			}
+		}
+
+		// Get seed for generation models
+		if (!isEditModel) {
+			try {
+				seed = context.getNodeParameter('seed', itemIndex) as number;
+			} catch (error) {
+				seed = 0;
+			}
+		}
+
+		// Get steps for generation models
+		if (!isEditModel) {
+			try {
+				steps = context.getNodeParameter('steps', itemIndex) as number;
+			} catch (error) {
+				steps = 30;
+			}
+		}
+
+		// Get numImages for models that support it
+		if (isZImage || isQwenImage) {
+			try {
+				numImages = context.getNodeParameter('numImages', itemIndex) as number;
+			} catch (error) {
+				numImages = 1;
+			}
 		}
 
 		// Get input image based on type
-		let inputImage = '';
-
 		if (isEditModel) {
 			const inputImageType = context.getNodeParameter('inputImageType', itemIndex) as string;
 			if (inputImageType === 'binary') {
