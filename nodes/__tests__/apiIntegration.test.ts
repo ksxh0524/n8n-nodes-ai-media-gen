@@ -4,6 +4,13 @@ import { API_RESPONSES, HTTP_STATUS } from './fixtures/apiResponses';
 // Mock fetch for API integration tests
 global.fetch = jest.fn();
 
+interface ApiResponse {
+	output?: { url?: string };
+	url?: string;
+	image_url?: string;
+	error?: string;
+}
+
 describe('API Integration Tests', () => {
 	afterEach(() => {
 		jest.resetAllMocks();
@@ -18,7 +25,7 @@ describe('API Integration Tests', () => {
 			});
 
 			const response = await fetch('https://api.modelscope.cn/v1/files/generation');
-			const data = await response.json();
+			const data = await response.json() as ApiResponse;
 
 			expect(data.output?.url).toBeDefined();
 			expect(data.output?.url).toContain('image_');
@@ -32,7 +39,7 @@ describe('API Integration Tests', () => {
 			});
 
 			const response = await fetch('https://api.modelscope.cn/v1/files/generation');
-			const data = await response.json();
+			const data = await response.json() as ApiResponse;
 
 			expect(data.output?.url).toBeDefined();
 		});
@@ -45,7 +52,7 @@ describe('API Integration Tests', () => {
 			});
 
 			const response = await fetch('https://api.modelscope.cn/v1/files/generation');
-			const data = await response.json();
+			const data = await response.json() as ApiResponse;
 
 			expect(data.output?.url).toBeDefined();
 		});
@@ -58,7 +65,7 @@ describe('API Integration Tests', () => {
 			});
 
 			const response = await fetch('https://api.modelscope.cn/v1/files/generation');
-			const data = await response.json();
+			const data = await response.json() as ApiResponse;
 
 			expect(data.url).toBeDefined();
 		});
@@ -71,7 +78,7 @@ describe('API Integration Tests', () => {
 			});
 
 			const response = await fetch('https://api.modelscope.cn/v1/files/generation');
-			const data = await response.json();
+			const data = await response.json() as ApiResponse;
 
 			expect(data.image_url).toBeDefined();
 		});
@@ -153,7 +160,7 @@ describe('API Integration Tests', () => {
 			});
 
 			const response = await fetch('https://api.modelscope.cn/v1/files/generation');
-			const data = await response.json();
+			const data = await response.json() as ApiResponse;
 
 			expect(data.output?.url).toBeUndefined();
 		});

@@ -6,6 +6,7 @@ import { createMockExecuteFunctions, createMockCredentials, createMockFetchRespo
 import { API_RESPONSES, HTTP_STATUS } from './fixtures/apiResponses';
 import { TEST_DATA } from './fixtures/testData';
 import * as CONSTANTS from '../utils/constants';
+import type { IExecuteFunctions } from 'n8n-workflow';
 
 // Mock fetch globally
 global.fetch = jest.fn();
@@ -47,9 +48,10 @@ describe('AIMediaGen', () => {
 		it('should have three model options', () => {
 			const modelProp = node.description.properties.find(p => p.name === 'model');
 			expect(modelProp?.options).toHaveLength(3);
-			expect(modelProp?.options?.[0].value).toBe('Tongyi-MAI/Z-Image');
-			expect(modelProp?.options?.[1].value).toBe('Qwen-Image-2512');
-			expect(modelProp?.options?.[2].value).toBe('Qwen-Image-Edit-2511');
+			const options = modelProp?.options as Array<{ value: string }>;
+			expect(options?.[0].value).toBe('Tongyi-MAI/Z-Image');
+			expect(options?.[1].value).toBe('Qwen-Image-2512');
+			expect(options?.[2].value).toBe('Qwen-Image-Edit-2511');
 		});
 	});
 
@@ -323,7 +325,8 @@ describe('AIMediaGen', () => {
 			const result = await node.execute.call(mockContext as IExecuteFunctions);
 
 			expect(mockCacheManager.get).toHaveBeenCalled();
-			expect(result[0][0].json._metadata.cached).toBe(true);
+			const metadata = result[0][0].json._metadata as { cached?: boolean };
+			expect(metadata?.cached).toBe(true);
 			expect(result[0][0].json.imageUrl).toBe('https://cached.example.com/image.jpg');
 		});
 

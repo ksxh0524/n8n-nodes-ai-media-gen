@@ -1,4 +1,5 @@
-import { MediaGenError, ERROR_CODES, validateCredentials, validateGenerationParams } from '../utils/errors';
+import { MediaGenError, ERROR_CODES } from '../utils/errors';
+import { validateCredentials, validateGenerationParams } from '../utils/helpers';
 
 describe('MediaGenError', () => {
 	test('should create error with code and details', () => {

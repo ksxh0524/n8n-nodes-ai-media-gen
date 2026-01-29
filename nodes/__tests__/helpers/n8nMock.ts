@@ -67,6 +67,9 @@ export function createMockExecuteFunctions(
 			warn: jest.fn(),
 		},
 		continueOnFail: jest.fn().mockReturnValue(false),
+		helpers: {
+			constructExecutionMetaData: jest.fn().mockReturnValue([{ json: {} }]),
+		} as unknown as IExecuteFunctions['helpers'],
 	};
 
 	return mockContext;

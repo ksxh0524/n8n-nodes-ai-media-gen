@@ -28,7 +28,8 @@ export function validateSizeForModel(model: string, size: string): void {
 		throw new MediaGenError(`Unknown model: ${model}`, 'INVALID_MODEL');
 	}
 
-	if (!constraints.supportedSizes.includes(size as any)) {
+	const supportedSizes = constraints.supportedSizes as readonly string[];
+	if (!supportedSizes.includes(size)) {
 		throw new MediaGenError(
 			`Size "${size}" is not supported for model "${model}". Supported sizes: ${constraints.supportedSizes.join(', ')}`,
 			'INVALID_PARAMS'

@@ -142,8 +142,8 @@ export class AIMediaGen implements INodeType {
 				},
 			},
 		},
-			// Input Image - only for Edit model
-			{
+		// Input Image - only for Edit model
+		{
 			displayName: 'Input Image',
 			name: 'inputImage',
 			type: 'string',
@@ -156,8 +156,8 @@ export class AIMediaGen implements INodeType {
 			},
 			placeholder: 'https://example.com/image.jpg or data:image/jpeg;base64,...',
 		},
-			// Size for Z-Image
-			{
+		// Size for Z-Image
+		{
 			displayName: 'Size',
 			name: 'size',
 			type: 'options',
@@ -186,7 +186,7 @@ export class AIMediaGen implements INodeType {
 				},
 			},
 		},
-			{
+		{
 			displayName: 'Number of Images',
 			name: 'numImages',
 			type: 'number',
@@ -533,6 +533,9 @@ export class AIMediaGen implements INodeType {
 				} else if (response.status === 408) {
 					errorMessage = 'Request timeout.';
 					errorCode = 'TIMEOUT';
+				} else if (response.status === 503) {
+					errorMessage = 'Service temporarily unavailable. Please try again later.';
+					errorCode = 'SERVICE_UNAVAILABLE';
 				} else if (data?.error) {
 					errorMessage = data.error;
 				}
@@ -544,6 +547,11 @@ export class AIMediaGen implements INodeType {
 
 			if (!imageUrl) {
 				throw new MediaGenError('No image URL returned from API', 'API_ERROR');
+			}
+
+			// Validate URL format
+			if (!CONSTANTS.VALIDATION.URL_PATTERN.test(imageUrl)) {
+				throw new MediaGenError(`Invalid image URL format: ${imageUrl}`, 'API_ERROR');
 			}
 
 			return {

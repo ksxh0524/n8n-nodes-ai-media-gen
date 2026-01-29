@@ -81,3 +81,81 @@ export function validateAndSanitizeInput(input: {
 		sanitized,
 	};
 }
+
+/**
+ * Validates API credentials
+ * @param credentials - Credentials object to validate
+ * @returns Validation result with valid flag, errors array, and sanitized credentials
+ */
+export function validateCredentials(credentials: { apiKey?: string; apiFormat?: string } | null): {
+	valid: boolean;
+	errors: string[];
+} {
+	const errors: string[] = [];
+
+	if (!credentials) {
+		errors.push('Credentials are required');
+		return { valid: false, errors };
+	}
+
+	if (!credentials.apiKey || typeof credentials.apiKey !== 'string' || credentials.apiKey.trim() === '') {
+		errors.push('API key is required and must be a non-empty string');
+	}
+
+	const validFormats = ['openai', 'gemini', 'bailian', 'replicate', 'huggingface'];
+	if (credentials.apiFormat && !validFormats.includes(credentials.apiFormat)) {
+		errors.push(`API format must be one of: ${validFormats.join(', ')}`);
+	}
+
+	return {
+		valid: errors.length === 0,
+		errors,
+	};
+}
+
+/**
+ * Validates generation parameters
+ * @param params - Parameters to validate
+ * @returns Validation result with valid flag, errors array, and sanitized params
+ */
+export function validateGenerationParams(params: {
+	model?: string;
+	prompt?: string;
+	additionalParams?: string;
+}): {
+	valid: boolean;
+	errors: string[];
+	sanitized: typeof params;
+} {
+	const errors: string[] = [];
+	const sanitized = { ...params };
+
+	if (!sanitized.model || typeof sanitized.model !== 'string' || sanitized.model.trim() === '') {
+		errors.push('Model is required and must be a non-empty string');
+	} else {
+		sanitized.model = sanitized.model.trim();
+	}
+
+	if (!sanitized.prompt || typeof sanitized.prompt !== 'string' || sanitized.prompt.trim() === '') {
+		errors.push('Prompt is required and must be a non-empty string');
+	} else {
+		sanitized.prompt = sanitized.prompt.trim();
+	}
+
+	if (sanitized.additionalParams && typeof sanitized.additionalParams === 'string') {
+		sanitized.additionalParams = sanitized.additionalParams.trim();
+		if (sanitized.additionalParams.length > 0) {
+			try {
+				JSON.parse(sanitized.additionalParams);
+			} catch {
+				errors.push('Additional parameters must be valid JSON');
+			}
+		}
+	}
+
+	return {
+		valid: errors.length === 0,
+		errors,
+		sanitized,
+	};
+}

@@ -156,7 +156,8 @@ export class CacheKeyGenerator {
 	 * @returns A consistent cache key
 	 */
 	static forGeneration(apiFormat: string, model: string, prompt: string, params: Record<string, unknown>): string {
-		const paramsStr = JSON.stringify(params || {});
+		const sortedParams = this.sortObjectKeys(params || {});
+		const paramsStr = JSON.stringify(sortedParams);
 		return `gen:${apiFormat}:${model}:${this.hash(prompt)}:${this.hash(paramsStr)}`;
 	}
 
@@ -168,8 +169,32 @@ export class CacheKeyGenerator {
 	 * @returns A consistent cache key
 	 */
 	static forApiRequest(apiFormat: string, endpoint: string, body: Record<string, unknown>): string {
-		const bodyStr = JSON.stringify(body || {});
+		const sortedBody = this.sortObjectKeys(body || {});
+		const bodyStr = JSON.stringify(sortedBody);
 		return `api:${apiFormat}:${endpoint}:${this.hash(bodyStr)}`;
+	}
+
+	/**
+	 * Recursively sorts object keys for consistent serialization
+	 * @param obj - Object to sort
+	 * @returns New object with sorted keys
+	 */
+	private static sortObjectKeys(obj: unknown): unknown {
+		if (typeof obj !== 'object' || obj === null) {
+			return obj;
+		}
+
+		if (Array.isArray(obj)) {
+			return obj.map(item => this.sortObjectKeys(item));
+		}
+
+		const record = obj as Record<string, unknown>;
+		const sorted: Record<string, unknown> = {};
+		for (const key of Object.keys(record).sort()) {
+			const value = record[key];
+			sorted[key] = this.sortObjectKeys(value);
+		}
+		return sorted;
 	}
 
 	/**
