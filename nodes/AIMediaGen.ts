@@ -545,12 +545,12 @@ export class AIMediaGen implements INodeType {
 			displayName: 'Seed',
 			name: 'doubaoSeed',
 			type: 'number',
-			default: 0,
+			default: -1,
 			typeOptions: {
-				minValue: 0,
+				minValue: -1,
 				maxValue: 4294967295,
 			},
-			description: 'Random seed for generation (0 for random)',
+			description: 'Random seed for generation (-1 for random)',
 			displayOptions: {
 				show: {
 					operation: ['doubao'],
@@ -860,7 +860,7 @@ export class AIMediaGen implements INodeType {
 						try {
 							cacheParams.seed = this.getNodeParameter('doubaoSeed', i);
 						} catch (error) {
-							cacheParams.seed = 0;
+							cacheParams.seed = -1;
 						}
 
 						// Add input images for image-to-image mode
@@ -2135,7 +2135,7 @@ export class AIMediaGen implements INodeType {
 			size = context.getNodeParameter('doubaoSize4K', itemIndex) as string || '4096x4096';
 		}
 
-		const seed = context.getNodeParameter('doubaoSeed', itemIndex) as number || 0;
+		const seed = context.getNodeParameter('doubaoSeed', itemIndex) as number || -1;
 
 		let timeout = 60000;
 		try {
@@ -2292,7 +2292,7 @@ export class AIMediaGen implements INodeType {
 				formData.append('size', size);
 				formData.append('stream', 'false');
 				formData.append('watermark', 'false');
-				if (seed > 0) {
+				if (seed >= 0) {
 					formData.append('seed', seed.toString());
 				}
 

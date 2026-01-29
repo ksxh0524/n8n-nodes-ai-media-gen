@@ -220,12 +220,12 @@ export class DoubaoGen implements INodeType {
 				displayName: 'Seed',
 				name: 'seed',
 				type: 'number',
-				default: 0,
+				default: -1,
 				typeOptions: {
-					minValue: 0,
+					minValue: -1,
 					maxValue: 4294967295,
 				},
-				description: 'Random seed for generation (0 for random)',
+				description: 'Random seed for generation (-1 for random)',
 			},
 			{
 				displayName: 'Options',
@@ -334,7 +334,7 @@ export class DoubaoGen implements INodeType {
 			size = context.getNodeParameter('size4K', itemIndex) as string || '4096x4096';
 		}
 
-		const seed = context.getNodeParameter('seed', itemIndex) as number || 0;
+		const seed = context.getNodeParameter('seed', itemIndex) as number || -1;
 
 		let timeout = 60000;
 		try {
@@ -401,7 +401,7 @@ export class DoubaoGen implements INodeType {
 					size,
 					stream: false,
 					watermark: false,
-					seed: seed > 0 ? seed : undefined,
+					seed: seed >= 0 ? seed : undefined,
 				};
 
 				context.logger?.info('[Doubao] Sending text-to-image request', {
@@ -464,7 +464,7 @@ export class DoubaoGen implements INodeType {
 				formData.append('size', size);
 				formData.append('stream', 'false');
 				formData.append('watermark', 'false');
-				if (seed > 0) {
+				if (seed >= 0) {
 					formData.append('seed', seed.toString());
 				}
 
