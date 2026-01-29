@@ -4,9 +4,7 @@
  */
 
 import { AIMediaGen } from './AIMediaGen';
-import { NanoBananaGen } from './NanoBananaGen';
 
 export const nodeClasses = [
 	AIMediaGen,
-	NanoBananaGen,
 ];

@@ -32,6 +32,16 @@ interface ModelScopeApiCredentials {
 }
 
 /**
+ * Google Palm API credentials (for Nano Banana)
+ */
+interface GooglePalmApiCredentials {
+	/** API key for authentication */
+	apiKey: string;
+	/** Optional custom base URL */
+	baseUrl?: string;
+}
+
+/**
  * ModelScope async task submission response
  */
 interface ModelScopeAsyncSubmitResponse {
@@ -48,22 +58,35 @@ interface ModelScopeAsyncTaskResponse {
 }
 
 /**
+ * OpenAI DALL-E format image generation response (for Nano Banana)
+ */
+interface DalleImage {
+	b64_json?: string;
+	url?: string;
+	revised_prompt?: string;
+}
+
+interface DalleResponse {
+	created: number;
+	data: DalleImage[];
+}
+
+/**
  * AI Media Generation Node
  *
- * Generates and edits images using ModelScope AI models including:
- * - Z-Image: High-quality text-to-image generation
- * - Qwen-Image-2512: Advanced text-to-image generation
- * - Qwen-Image-Edit-2511: Image editing model
+ * Generates and edits images using multiple AI platforms:
+ * - ModelScope: Z-Image, Qwen-Image-2512, Qwen-Image-Edit-2511
+ * - Nano Banana: Google's Gemini 2.5 Flash Image model
  */
 export class AIMediaGen implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'AI Media Generation',
 		name: 'aiMediaGen',
 		icon: 'file:ai-media-gen.svg',
-		description: 'Generate and edit images using ModelScope AI models',
+		description: 'Generate and edit images using AI models (ModelScope, Nano Banana)',
 		version: CONSTANTS.NODE_VERSION,
 		group: ['transform'],
-		subtitle: '={{$parameter.model}}',
+		subtitle: '={{$parameter.operation}}',
 		defaults: {
 			name: 'AI Media Generation',
 		},
@@ -74,6 +97,20 @@ export class AIMediaGen implements INodeType {
 			{
 				name: 'modelScopeApi',
 				required: true,
+				displayOptions: {
+					show: {
+						operation: ['modelscope'],
+					},
+				},
+			},
+			{
+				name: 'googlePalmApi',
+				required: true,
+				displayOptions: {
+					show: {
+						operation: ['nanoBanana'],
+					},
+				},
 			},
 		],
 		properties: [
@@ -84,9 +121,14 @@ export class AIMediaGen implements INodeType {
 			required: true,
 			options: [
 				{
-					name: 'modelscope',
+					name: 'ModelScope',
 					value: 'modelscope',
 					description: 'Generate and edit images using ModelScope AI models',
+				},
+				{
+					name: 'Nano Banana',
+					value: 'nanoBanana',
+					description: 'Generate and edit images using Google Nano Banana (Gemini 2.5 Flash)',
 				},
 			],
 			default: 'modelscope',
@@ -119,6 +161,179 @@ export class AIMediaGen implements INodeType {
 			displayOptions: {
 				show: {
 					operation: ['modelscope'],
+				},
+			},
+		},
+		// Nano Banana - Mode
+		{
+			displayName: 'Mode',
+			name: 'nbMode',
+			type: 'options',
+			required: true,
+			options: [
+				{
+					name: 'Text to Image',
+					value: 'text-to-image',
+					description: 'Generate images from text description',
+				},
+				{
+					name: 'Image to Image',
+					value: 'image-to-image',
+					description: 'Edit images with text instructions',
+				},
+			],
+			default: 'text-to-image',
+			description: 'Select generation mode',
+			displayOptions: {
+				show: {
+					operation: ['nanoBanana'],
+				},
+			},
+		},
+		// Nano Banana - Model
+		{
+			displayName: 'Model',
+			name: 'nbModel',
+			type: 'options',
+			required: true,
+			options: [
+				{
+					name: 'Nano Banana (Standard)',
+					value: 'nano-banana',
+					description: 'Standard quality generation',
+				},
+				{
+					name: 'Nano Banana HD',
+					value: 'nano-banana-hd',
+					description: 'High quality 4K output',
+				},
+			],
+			default: 'nano-banana',
+			description: 'Select model quality level',
+			displayOptions: {
+				show: {
+					operation: ['nanoBanana'],
+				},
+			},
+		},
+		// Nano Banana - Prompt
+		{
+			displayName: 'Prompt',
+			name: 'nbPrompt',
+			type: 'string',
+			typeOptions: {
+				rows: 5,
+			},
+			default: '',
+			required: true,
+			description: 'Text description for generation or editing',
+			displayOptions: {
+				show: {
+					operation: ['nanoBanana'],
+				},
+			},
+		},
+		// Nano Banana - Input Image Type
+		{
+			displayName: 'Input Image Type',
+			name: 'nbInputImageType',
+			type: 'options',
+			default: 'url',
+			options: [
+				{ name: 'URL / Base64', value: 'url' },
+				{ name: 'Binary File', value: 'binary' },
+			],
+			description: 'Choose how to provide the input image',
+			displayOptions: {
+				show: {
+					operation: ['nanoBanana'],
+					nbMode: ['image-to-image'],
+				},
+			},
+		},
+		// Nano Banana - Input Image (URL/Base64)
+		{
+			displayName: 'Input Image',
+			name: 'nbInputImage',
+			type: 'string',
+			default: '',
+			displayOptions: {
+				show: {
+					operation: ['nanoBanana'],
+					nbMode: ['image-to-image'],
+					nbInputImageType: ['url'],
+				},
+			},
+			description: 'URL or base64 of the image to edit',
+			placeholder: 'https://example.com/image.jpg or data:image/jpeg;base64,...',
+		},
+		// Nano Banana - Input Image (Binary)
+		{
+			displayName: 'Input Image File',
+			name: 'nbInputImageBinary',
+			type: 'string',
+			default: '',
+			displayOptions: {
+				show: {
+					operation: ['nanoBanana'],
+					nbMode: ['image-to-image'],
+					nbInputImageType: ['binary'],
+				},
+			},
+			description: 'Binary property containing the image file to edit',
+			placeholder: 'Enter a property name containing the binary data, e.g., data',
+		},
+		// Nano Banana - Number of Images
+		{
+			displayName: 'Number of Images',
+			name: 'nbN',
+			type: 'number',
+			default: 1,
+			typeOptions: {
+				minValue: 1,
+				maxValue: 4,
+			},
+			description: 'Number of images to generate (1-4)',
+			displayOptions: {
+				show: {
+					operation: ['nanoBanana'],
+				},
+			},
+		},
+		// Nano Banana - Size
+		{
+			displayName: 'Size',
+			name: 'nbSize',
+			type: 'options',
+			default: '1024x1024',
+			options: [
+				{ name: '256x256', value: '256x256' },
+				{ name: '512x512', value: '512x512' },
+				{ name: '1024x1024', value: '1024x1024' },
+				{ name: '1792x1024', value: '1792x1024' },
+				{ name: '1024x1792', value: '1024x1792' },
+			],
+			description: 'Image size (Note: HD model supports up to 4K)',
+			displayOptions: {
+				show: {
+					operation: ['nanoBanana'],
+				},
+			},
+		},
+		// Nano Banana - Response Format
+		{
+			displayName: 'Response Format',
+			name: 'nbResponseFormat',
+			type: 'options',
+			default: 'url',
+			options: [
+				{ name: 'URL', value: 'url' },
+				{ name: 'Base64', value: 'b64_json' },
+			],
+			description: 'The format in which the generated images are returned',
+			displayOptions: {
+				show: {
+					operation: ['nanoBanana'],
 				},
 			},
 		},
@@ -342,7 +557,7 @@ export class AIMediaGen implements INodeType {
 	/**
 	 * Executes the AI media generation node
 	 *
-	 * Processes input items and generates/edits images using ModelScope AI models.
+	 * Processes input items and generates/edits images using ModelScope AI models or Nano Banana.
 	 * Each item can have different parameters (model, size, etc.).
 	 * Supports caching to reduce API calls for identical requests.
 	 *
@@ -375,171 +590,193 @@ export class AIMediaGen implements INodeType {
 		for (let i = 0; i < items.length; i++) {
 			try {
 				this.logger?.debug('Processing item', { index: i });
-				const credentials = await this.getCredentials<ModelScopeApiCredentials>('modelScopeApi');
-				if (!credentials || !credentials.apiKey) {
-					throw new NodeOperationError(
-						this.getNode(),
-						'API Key is required. Please configure your ModelScope API credentials.',
-						{ itemIndex: i }
-					);
-				}
 
-				const timerId = performanceMonitor.startTimer('aiMediaGen');
+				// Get operation first
+				const operation = this.getNodeParameter('operation', i) as string;
+
 				let result: INodeExecutionData;
 
-				// Get model first to determine which parameters to access
-				const model = this.getNodeParameter('model', i) as string;
-				this.logger?.info('[AI Media Gen] Processing item', { index: i, model });
-
-				// Determine model type
-				const isEditModel = model === 'Qwen/Qwen-Image-Edit-2511';
-				const isZImage = model === 'Tongyi-MAI/Z-Image';
-				const isQwenImage = model === 'Qwen/Qwen-Image-2512';
-
-				// Get parameters based on model type with safe defaults
-				let size = '1024x1024';
-				let seed = 0;
-				let steps = 30;
-				let numImages = 1;
-				let inputImage = '';
-
-				// Get size for generation models only (Edit model doesn't use size)
-				if (!isEditModel) {
-					try {
-						size = this.getNodeParameter('size', i) as string;
-					} catch (error) {
-						size = isZImage ? '2048x2048' : '1328x1328';
-						this.logger?.debug('[AI Media Gen] Using default size', { index: i, size });
-					}
-				}
-
-				// Get seed for all models (Z-Image, Qwen-2512, Edit-2511)
-				try {
-					seed = this.getNodeParameter('seed', i) as number;
-				} catch (error) {
-					this.logger?.debug('[AI Media Gen] Using default seed', { index: i, seed });
-				}
-
-				// Get steps for all models (Z-Image, Qwen-2512, Edit-2511)
-				try {
-					steps = this.getNodeParameter('steps', i) as number;
-				} catch (error) {
-					this.logger?.debug('[AI Media Gen] Using default steps', { index: i, steps });
-				}
-
-				// Get numImages only for Z-Image and Qwen-2512
-				if (isZImage || isQwenImage) {
-					try {
-						numImages = this.getNodeParameter('numImages', i) as number;
-					} catch (error) {
-						this.logger?.debug('[AI Media Gen] Using default numImages', { index: i, numImages });
-					}
-				}
-
-				// Get inputImage only for Edit model
-				if (isEditModel) {
-					try {
-						inputImage = this.getNodeParameter('inputImage', i) as string || '';
-					} catch (error) {
-						this.logger?.warn('[AI Media Gen] Could not get inputImage for Edit model', { index: i, error });
-					}
-				}
-
-				// Safely get timeout with try-catch
-				let timeout: number = CONSTANTS.DEFAULTS.TIMEOUT_MS;
-				try {
-					timeout = this.getNodeParameter('options.timeout', i) as number;
-				} catch (error) {
-					this.logger?.debug('Options timeout not set, using default', {
-						index: i,
-						defaultValue: CONSTANTS.DEFAULTS.TIMEOUT_MS
-					});
-					timeout = CONSTANTS.DEFAULTS.TIMEOUT_MS;
-				}
-
-				if (enableCache) {
-					const prompt = this.getNodeParameter('prompt', i) as string || '';
-
-					// Build cache parameters based on model type
-					const cacheParams: Record<string, unknown> = {
-						size: size || '1024x1024',
-						seed: seed || 0,
-					};
-
-					// Only include num_images for models that support it
-					if (isZImage || isQwenImage) {
-						cacheParams.num_images = numImages || 1;
+				if (operation === 'nanoBanana') {
+					// Handle Nano Banana operation
+					const credentials = await this.getCredentials<GooglePalmApiCredentials>('googlePalmApi');
+					if (!credentials || !credentials.apiKey) {
+						throw new NodeOperationError(
+							this.getNode(),
+							'API Key is required. Please configure your Google Gemini (PaLM) API credentials.',
+							{ itemIndex: i }
+						);
 					}
 
-					// Only include input_image for Edit model
-					if (isEditModel) {
-						cacheParams.input_image = inputImage;
-					}
-
-					const cacheKey = CacheKeyGenerator.forGeneration(
-						'modelscope',
-						model,
-						prompt,
-						cacheParams
-					);
-					const cached = await cacheManager.get(cacheKey);
-
-					if (cached) {
-						this.logger?.info('Cache hit', { model, cacheKey });
-						result = {
-							json: {
-								success: true,
-								...cached as Record<string, unknown>,
-								_metadata: {
-									model,
-									cached: true,
-									timestamp: new Date().toISOString(),
-								},
-							},
-						};
-					} else {
-						this.logger?.info('Cache miss', { model, cacheKey });
-						result = await AIMediaGen.executeModelRequest(this, i, credentials, timeout);
-
-						// Safely get cacheTtl
-						let cacheTtl: number = CONSTANTS.DEFAULTS.CACHE_TTL_SECONDS;
-						try {
-							cacheTtl = this.getNodeParameter('options.cacheTtl', i) as number;
-						} catch (error) {
-							this.logger?.debug('Options cacheTtl not set, using default', {
-								index: i,
-								defaultValue: CONSTANTS.DEFAULTS.CACHE_TTL_SECONDS
-							});
-							cacheTtl = CONSTANTS.DEFAULTS.CACHE_TTL_SECONDS;
-						}
-
-						if (result.json.success) {
-							await cacheManager.set(cacheKey, result.json, cacheTtl);
-						}
-					}
+					const timerId = performanceMonitor.startTimer('nanoBanana');
+					result = await AIMediaGen.executeNanoBananaRequest(this, i, credentials);
+					performanceMonitor.endTimer(timerId);
 				} else {
-					result = await AIMediaGen.executeModelRequest(this, i, credentials, timeout);
+					// Handle ModelScope operation
+					const credentials = await this.getCredentials<ModelScopeApiCredentials>('modelScopeApi');
+					if (!credentials || !credentials.apiKey) {
+						throw new NodeOperationError(
+							this.getNode(),
+							'API Key is required. Please configure your ModelScope API credentials.',
+							{ itemIndex: i }
+						);
+					}
+
+					const timerId = performanceMonitor.startTimer('aiMediaGen');
+
+					// Get model first to determine which parameters to access
+					const model = this.getNodeParameter('model', i) as string;
+					this.logger?.info('[AI Media Gen] Processing item', { index: i, model });
+
+					// Determine model type
+					const isEditModel = model === 'Qwen/Qwen-Image-Edit-2511';
+					const isZImage = model === 'Tongyi-MAI/Z-Image';
+					const isQwenImage = model === 'Qwen/Qwen-Image-2512';
+
+					// Get parameters based on model type with safe defaults
+					let size = '1024x1024';
+					let seed = 0;
+					let steps = 30;
+					let numImages = 1;
+					let inputImage = '';
+
+					// Get size for generation models only (Edit model doesn't use size)
+					if (!isEditModel) {
+						try {
+							size = this.getNodeParameter('size', i) as string;
+						} catch (error) {
+							size = isZImage ? '2048x2048' : '1328x1328';
+							this.logger?.debug('[AI Media Gen] Using default size', { index: i, size });
+						}
+					}
+
+					// Get seed for all models (Z-Image, Qwen-2512, Edit-2511)
+					try {
+						seed = this.getNodeParameter('seed', i) as number;
+					} catch (error) {
+						this.logger?.debug('[AI Media Gen] Using default seed', { index: i, seed });
+					}
+
+					// Get steps for all models (Z-Image, Qwen-2512, Edit-2511)
+					try {
+						steps = this.getNodeParameter('steps', i) as number;
+					} catch (error) {
+						this.logger?.debug('[AI Media Gen] Using default steps', { index: i, steps });
+					}
+
+					// Get numImages only for Z-Image and Qwen-2512
+					if (isZImage || isQwenImage) {
+						try {
+							numImages = this.getNodeParameter('numImages', i) as number;
+						} catch (error) {
+							this.logger?.debug('[AI Media Gen] Using default numImages', { index: i, numImages });
+						}
+					}
+
+					// Get inputImage only for Edit model
+					if (isEditModel) {
+						try {
+							inputImage = this.getNodeParameter('inputImage', i) as string || '';
+						} catch (error) {
+							this.logger?.warn('[AI Media Gen] Could not get inputImage for Edit model', { index: i, error });
+						}
+					}
+
+					// Safely get timeout with try-catch
+					let timeout: number = CONSTANTS.DEFAULTS.TIMEOUT_MS;
+					try {
+						timeout = this.getNodeParameter('options.timeout', i) as number;
+					} catch (error) {
+						this.logger?.debug('Options timeout not set, using default', {
+							index: i,
+							defaultValue: CONSTANTS.DEFAULTS.TIMEOUT_MS
+						});
+						timeout = CONSTANTS.DEFAULTS.TIMEOUT_MS;
+					}
+
+					if (enableCache) {
+						const prompt = this.getNodeParameter('prompt', i) as string || '';
+
+						// Build cache parameters based on model type
+						const cacheParams: Record<string, unknown> = {
+							size: size || '1024x1024',
+							seed: seed || 0,
+						};
+
+						// Only include num_images for models that support it
+						if (isZImage || isQwenImage) {
+							cacheParams.num_images = numImages || 1;
+						}
+
+						// Only include input_image for Edit model
+						if (isEditModel) {
+							cacheParams.input_image = inputImage;
+						}
+
+						const cacheKey = CacheKeyGenerator.forGeneration(
+							'modelscope',
+							model,
+							prompt,
+							cacheParams
+						);
+						const cached = await cacheManager.get(cacheKey);
+
+						if (cached) {
+							this.logger?.info('Cache hit', { model, cacheKey });
+							result = {
+								json: {
+									success: true,
+									...cached as Record<string, unknown>,
+									_metadata: {
+										model,
+										cached: true,
+										timestamp: new Date().toISOString(),
+									},
+								},
+							};
+						} else {
+							this.logger?.info('Cache miss', { model, cacheKey });
+							result = await AIMediaGen.executeModelRequest(this, i, credentials, timeout);
+
+							// Safely get cacheTtl
+							let cacheTtl: number = CONSTANTS.DEFAULTS.CACHE_TTL_SECONDS;
+							try {
+								cacheTtl = this.getNodeParameter('options.cacheTtl', i) as number;
+							} catch (error) {
+								this.logger?.debug('Options cacheTtl not set, using default', {
+									index: i,
+									defaultValue: CONSTANTS.DEFAULTS.CACHE_TTL_SECONDS
+								});
+								cacheTtl = CONSTANTS.DEFAULTS.CACHE_TTL_SECONDS;
+							}
+
+							if (result.json.success) {
+								await cacheManager.set(cacheKey, result.json, cacheTtl);
+							}
+						}
+					} else {
+						result = await AIMediaGen.executeModelRequest(this, i, credentials, timeout);
+					}
+
+					const elapsed = performanceMonitor.endTimer(timerId);
+
+					performanceMonitor.recordMetric({
+						timestamp: Date.now().toString(),
+						provider: 'modelScope',
+						model,
+						mediaType: 'image',
+						duration: elapsed,
+						success: result.json.success as boolean,
+						fromCache: (result.json._metadata as ResultMetadata)?.cached || false,
+					});
+
+					this.logger?.info('Execution completed', {
+						model,
+						duration: elapsed,
+						success: result.json.success,
+					});
+
+					results.push(result);
 				}
-
-				const elapsed = performanceMonitor.endTimer(timerId);
-
-				performanceMonitor.recordMetric({
-					timestamp: Date.now().toString(),
-					provider: 'modelScope',
-					model,
-					mediaType: 'image',
-					duration: elapsed,
-					success: result.json.success as boolean,
-					fromCache: (result.json._metadata as ResultMetadata)?.cached || false,
-				});
-
-				this.logger?.info('Execution completed', {
-					model,
-					duration: elapsed,
-					success: result.json.success,
-				});
-
-				results.push(result);
 			} catch (error) {
 				const errorCode = error instanceof MediaGenError ? error.code : 'UNKNOWN';
 				const errorDetails = error instanceof MediaGenError ? error.details : undefined;
@@ -969,6 +1206,251 @@ export class AIMediaGen implements INodeType {
 					success: true,
 					imageUrl,
 					model,
+					_metadata: {
+						timestamp: new Date().toISOString(),
+					},
+				},
+			};
+		} catch (error) {
+			clearTimeout(timeoutId);
+
+			if (error instanceof Error && error.name === 'AbortError') {
+				throw new MediaGenError('Request timeout', 'TIMEOUT');
+			}
+
+			if (error instanceof MediaGenError) {
+				throw error;
+			}
+
+			throw new MediaGenError(
+				error instanceof Error ? error.message : String(error),
+				'NETWORK_ERROR'
+			);
+		}
+	}
+
+	/**
+	 * Executes Nano Banana API request using OpenAI DALL-E format
+	 *
+	 * @param context - n8n execution context
+	 * @param itemIndex - Index of the item being processed
+	 * @param credentials - Google Palm API credentials
+	 * @returns Promise resolving to execution data
+	 */
+	private static async executeNanoBananaRequest(
+		context: IExecuteFunctions,
+		itemIndex: number,
+		credentials: GooglePalmApiCredentials
+	): Promise<INodeExecutionData> {
+		const baseUrl = credentials.baseUrl || 'https://generativelanguage.googleapis.com';
+
+		context.logger?.info('[Nano Banana] Starting generation', {
+			itemIndex,
+			baseUrl,
+		});
+
+		// Get parameters
+		const mode = context.getNodeParameter('nbMode', itemIndex) as string;
+		const model = context.getNodeParameter('nbModel', itemIndex) as string;
+		const prompt = context.getNodeParameter('nbPrompt', itemIndex) as string;
+		const n = context.getNodeParameter('nbN', itemIndex) as number || 1;
+		const size = context.getNodeParameter('nbSize', itemIndex) as string || '1024x1024';
+		const responseFormat = context.getNodeParameter('nbResponseFormat', itemIndex) as string || 'url';
+
+		// Get timeout
+		let timeout = 60000;
+		try {
+			timeout = context.getNodeParameter('options.timeout', itemIndex) as number;
+		} catch (error) {
+			// Use default
+		}
+
+		// Validate prompt
+		if (!prompt || prompt.trim() === '') {
+			throw new NodeOperationError(
+				context.getNode(),
+				'Prompt is required',
+				{ itemIndex }
+			);
+		}
+
+		// Get input image for image-to-image mode
+		let inputImage = '';
+		if (mode === 'image-to-image') {
+			const inputImageType = context.getNodeParameter('nbInputImageType', itemIndex) as string;
+			if (inputImageType === 'binary') {
+				const binaryPropertyName = context.getNodeParameter('nbInputImageBinary', itemIndex) as string;
+				const items = context.getInputData();
+				const binaryData = items[itemIndex].binary;
+
+				if (!binaryData || !binaryData[binaryPropertyName]) {
+					throw new NodeOperationError(
+						context.getNode(),
+						`Binary property '${binaryPropertyName}' not found.`,
+						{ itemIndex }
+					);
+				}
+
+				const binary = binaryData[binaryPropertyName] as { data: string; mimeType: string };
+				if (binary.data) {
+					inputImage = `data:${binary.mimeType || 'image/jpeg'};base64,${binary.data}`;
+				}
+			} else {
+				inputImage = context.getNodeParameter('nbInputImage', itemIndex) as string || '';
+			}
+		}
+
+		// Validate input image for image-to-image mode
+		if (mode === 'image-to-image' && !inputImage) {
+			throw new NodeOperationError(
+				context.getNode(),
+				'Input image is required for image-to-image mode',
+				{ itemIndex }
+			);
+		}
+
+		const controller = new AbortController();
+		const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+		try {
+			let imageUrl: string;
+
+			if (mode === 'text-to-image') {
+				// POST /v1/images/generations (OpenAI DALL-E format)
+				const requestBody = {
+					model,
+					prompt: prompt.trim(),
+					n,
+					size,
+					response_format: responseFormat,
+				};
+
+				console.log('[Nano Banana] Sending text-to-image request', {
+					model,
+					prompt: prompt.substring(0, 50) + '...',
+				});
+
+				const response = await fetch(`${baseUrl}/v1/images/generations`, {
+					method: 'POST',
+					headers: {
+						'Authorization': `Bearer ${credentials.apiKey}`,
+						'Content-Type': 'application/json',
+					},
+					body: JSON.stringify(requestBody),
+					signal: controller.signal,
+				});
+
+				clearTimeout(timeoutId);
+
+				if (!response.ok) {
+					const errorText = await response.text();
+					console.error('[Nano Banana] API error', {
+						status: response.status,
+						statusText: response.statusText,
+						body: errorText,
+					});
+					throw new MediaGenError(
+						`API request failed: ${response.status} ${response.statusText}`,
+						'API_ERROR'
+					);
+				}
+
+				const data = await response.json() as DalleResponse;
+
+				if (!data.data || data.data.length === 0) {
+					throw new MediaGenError('No images returned from API', 'API_ERROR');
+				}
+
+				// Get first image
+				const firstImage = data.data[0];
+				imageUrl = firstImage.url || firstImage.b64_json || '';
+
+				if (!imageUrl) {
+					throw new MediaGenError('No image URL or base64 data returned', 'API_ERROR');
+				}
+
+				console.log('[Nano Banana] Generation completed', {
+					imageUrl: imageUrl.substring(0, 50) + '...',
+				});
+			} else {
+				// POST /v1/images/edits (OpenAI DALL-E Edits format)
+				const formData = new FormData();
+				formData.append('model', model);
+				formData.append('prompt', prompt);
+				formData.append('n', n.toString());
+				formData.append('size', size);
+				formData.append('response_format', responseFormat);
+
+				// Add input image
+				if (inputImage.startsWith('data:')) {
+					// It's base64 - convert to blob
+					const base64Data = inputImage.split(',')[1];
+					const byteCharacters = atob(base64Data);
+					const byteNumbers = new Array(byteCharacters.length);
+					for (let i = 0; i < byteCharacters.length; i++) {
+						byteNumbers[i] = byteCharacters.charCodeAt(i);
+					}
+					const byteArray = new Uint8Array(byteNumbers);
+					const blob = new Blob([byteArray], { type: 'image/jpeg' });
+					formData.append('image', blob, 'image.jpg');
+				} else {
+					// It's a URL - append as-is
+					formData.append('image', inputImage);
+				}
+
+				console.log('[Nano Banana] Sending image-to-image request', {
+					model,
+					prompt: prompt.substring(0, 50) + '...',
+				});
+
+				const response = await fetch(`${baseUrl}/v1/images/edits`, {
+					method: 'POST',
+					headers: {
+						'Authorization': `Bearer ${credentials.apiKey}`,
+					},
+					body: formData,
+					signal: controller.signal,
+				});
+
+				clearTimeout(timeoutId);
+
+				if (!response.ok) {
+					const errorText = await response.text();
+					console.error('[Nano Banana] API error', {
+						status: response.status,
+						statusText: response.statusText,
+						body: errorText,
+					});
+					throw new MediaGenError(
+						`API request failed: ${response.status} ${response.statusText}`,
+						'API_ERROR'
+					);
+				}
+
+				const data = await response.json() as DalleResponse;
+
+				if (!data.data || data.data.length === 0) {
+					throw new MediaGenError('No images returned from API', 'API_ERROR');
+				}
+
+				const firstImage = data.data[0];
+				imageUrl = firstImage.url || firstImage.b64_json || '';
+
+				if (!imageUrl) {
+					throw new MediaGenError('No image URL or base64 data returned', 'API_ERROR');
+				}
+
+				console.log('[Nano Banana] Edit completed', {
+					imageUrl: imageUrl.substring(0, 50) + '...',
+				});
+			}
+
+			return {
+				json: {
+					success: true,
+					imageUrl,
+					model,
+					mode,
 					_metadata: {
 						timestamp: new Date().toISOString(),
 					},

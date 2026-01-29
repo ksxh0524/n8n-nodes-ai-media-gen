@@ -42,8 +42,7 @@
       "nodes/credentials/modelScopeApi.credentials.js"
     ],
     "nodes": [
-      "nodes/AIMediaGen.js",
-      "nodes/NanoBananaGen.js"
+      "nodes/AIMediaGen.js"
     ]
   },
   "dependencies": {
