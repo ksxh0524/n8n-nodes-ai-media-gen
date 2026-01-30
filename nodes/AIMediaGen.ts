@@ -107,7 +107,7 @@ interface SoraRequest {
 	model: 'sora-2' | 'sora-2-pro';
 	prompt: string;
 	aspect_ratio: '16:9' | '9:16';
-	duration: '10' | '15' | '25';
+	duration: '5' | '10' | '15' | '20' | '25';
 	hd?: boolean;
 	images?: string[];
 }
@@ -671,7 +671,7 @@ export class AIMediaGen implements INodeType {
 			default: '16:9',
 			description: 'Video aspect ratio',
 		},
-		// Sora - Duration
+		// Sora - Duration (Sora 2)
 		{
 			displayName: 'Duration',
 			name: 'soraDuration',
@@ -679,15 +679,38 @@ export class AIMediaGen implements INodeType {
 			displayOptions: {
 				show: {
 					operation: ['sora'],
+					soraModel: ['sora-2'],
 				},
 			},
 			options: [
+				{ name: '5 seconds', value: '5' },
 				{ name: '10 seconds', value: '10' },
 				{ name: '15 seconds', value: '15' },
+				{ name: '20 seconds', value: '20' },
+			],
+			default: '5',
+			description: 'Video duration in seconds (Sora 2 supports up to 20s)',
+		},
+		// Sora - Duration (Sora 2 Pro)
+		{
+			displayName: 'Duration',
+			name: 'soraDurationPro',
+			type: 'options',
+			displayOptions: {
+				show: {
+					operation: ['sora'],
+					soraModel: ['sora-2-pro'],
+				},
+			},
+			options: [
+				{ name: '5 seconds', value: '5' },
+				{ name: '10 seconds', value: '10' },
+				{ name: '15 seconds', value: '15' },
+				{ name: '20 seconds', value: '20' },
 				{ name: '25 seconds', value: '25' },
 			],
-			default: '10',
-			description: 'Video duration in seconds',
+			default: '5',
+			description: 'Video duration in seconds (Sora 2 Pro supports up to 25s)',
 		},
 		// Sora - HD
 		{
@@ -2748,7 +2771,14 @@ export class AIMediaGen implements INodeType {
 		const model = context.getNodeParameter('soraModel', itemIndex) as string;
 		const prompt = context.getNodeParameter('soraPrompt', itemIndex) as string;
 		const aspectRatio = context.getNodeParameter('soraAspectRatio', itemIndex) as string;
-		const duration = context.getNodeParameter('soraDuration', itemIndex) as string;
+
+		// Get duration based on model type
+		let duration: string;
+		if (model === 'sora-2-pro') {
+			duration = context.getNodeParameter('soraDurationPro', itemIndex) as string;
+		} else {
+			duration = context.getNodeParameter('soraDuration', itemIndex) as string;
+		}
 		const outputMode = context.getNodeParameter('soraOutputMode', itemIndex) as string;
 
 		let hd = false;
@@ -2822,7 +2852,7 @@ export class AIMediaGen implements INodeType {
 			model: model as 'sora-2' | 'sora-2-pro',
 			prompt: prompt.trim(),
 			aspect_ratio: aspectRatio as '16:9' | '9:16',
-			duration: duration as '10' | '15' | '25',
+			duration: duration as '5' | '10' | '15' | '20' | '25',
 			hd: hd && model === 'sora-2-pro' ? true : undefined,
 			images: images.length > 0 ? images : undefined,
 		};
@@ -2965,12 +2995,14 @@ export class AIMediaGen implements INodeType {
 	): Promise<SoraResponse> {
 		// Calculate timeout based on video duration
 		const timeouts: Record<string, number> = {
+			'5': 180000,   // 3 minutes
 			'10': 300000,  // 5 minutes
 			'15': 420000,  // 7 minutes
+			'20': 600000,  // 10 minutes
 			'25': 780000,  // 13 minutes
 		};
 
-		const timeoutMs = timeouts[duration] || 300000;
+		const timeoutMs = timeouts[duration] || 180000;
 		const startTime = Date.now();
 
 		// Dynamic polling interval
