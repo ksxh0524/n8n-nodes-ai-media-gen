@@ -2095,7 +2095,11 @@ export class AIMediaGen implements INodeType {
 						response: responseStr,
 					});
 
-					throw new MediaGenError('Task succeeded but no image URL returned. Check logs for full response.', 'API_ERROR', { taskId, response: data });
+					throw new MediaGenError(
+						`Task succeeded but no image URL returned. API Response: ${responseStr}`,
+						'API_ERROR',
+						{ taskId, response: data }
+					);
 				}
 				case 'FAILED':
 					throw new MediaGenError(data.message || 'Task failed', 'API_ERROR', { taskId, message: data.message });
