@@ -22,7 +22,7 @@
 
 ### Key Advantages
 
-- ✅ **Multi-Platform Support**: Integrates ModelScope, Nano Banana, Sora, Doubao AI platforms
+- ✅ **Multi-Platform Support**: Integrates Nano Banana, Sora, Veo, Doubao, ModelScope AI platforms
 - ✅ **Production-Ready**: Comprehensive error handling, logging, and performance monitoring
 - ✅ **Easy to Use**: Intuitive configuration interface, no programming required
 - ✅ **Highly Configurable**: Supports custom parameters, timeouts, retries, and more
