@@ -2251,7 +2251,7 @@ export class AIMediaGen implements INodeType {
 					json: true,
 					timeout: timeout,
 				}) as ModelScopeAsyncSubmitResponse;
-			} catch (error) {
+	} catch (error) {
 				// Log detailed error for debugging
 				logger?.error('[AI Media Gen] API request failed', {
 					error: error instanceof Error ? error.message : String(error),
@@ -2268,9 +2268,18 @@ export class AIMediaGen implements INodeType {
 						throw new MediaGenError('Authentication failed. Please check your API Key.', 'INVALID_API_KEY');
 					}
 					if (error.message.includes('400')) {
-						// Log the full error for debugging
+						// Try to get more error details from response
+						let detailedError = error.message;
+						try {
+							const errorObj = error as any;
+							if (errorObj.response && typeof errorObj.response === 'object') {
+								detailedError = JSON.stringify(errorObj.response, null, 2);
+							}
+						} catch (e) {
+							// Keep original error
+						}
 						throw new MediaGenError(
-							`API Error (400): ${error.message}`,
+							`API Error (400): ${detailedError}`,
 							'API_ERROR'
 						);
 					}
