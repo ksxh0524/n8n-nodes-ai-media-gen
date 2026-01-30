@@ -44,8 +44,7 @@
     "n8nNodesApiVersion": 1,
     "credentials": [
       "nodes/credentials/modelScopeApi.credentials.js",
-      "nodes/credentials/doubaoApi.credentials.js",
-      "nodes/credentials/openaiApi.credentials.js"
+      "nodes/credentials/doubaoApi.credentials.js"
     ],
     "nodes": [
       "nodes/AIMediaGen.js"

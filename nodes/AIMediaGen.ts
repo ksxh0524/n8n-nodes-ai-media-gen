@@ -53,11 +53,18 @@ interface DoubaoApiCredentials {
 
 /**
  * OpenAI API credentials for Sora
+ *
+ * Uses n8n's built-in openaiApi credential type which includes:
+ * - apiKey: API key
+ * - organizationId: Optional organization ID
+ * - baseUrl: Optional custom base URL
  */
 interface OpenAiApiCredentials {
 	/** API key for authentication */
 	apiKey: string;
-	/** Optional custom base URL */
+	/** Optional organization ID */
+	organizationId?: string;
+	/** Optional custom base URL (e.g., for proxy or compatible API) */
 	baseUrl?: string;
 }
 
