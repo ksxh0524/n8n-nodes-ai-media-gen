@@ -9,7 +9,6 @@
 export {
 	MediaGenError,
 	ERROR_CODES,
-	sleep,
 	withRetry,
 	isTimeoutError,
 	handleApiError,

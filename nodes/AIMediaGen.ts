@@ -7,7 +7,7 @@ import {
 } from 'n8n-workflow';
 import { CacheManager, CacheKeyGenerator } from './utils/cache';
 import { PerformanceMonitor } from './utils/monitoring';
-import { withRetry, MediaGenError, sleep } from './utils/errors';
+import { withRetry, MediaGenError } from './utils/errors';
 import * as CONSTANTS from './utils/constants';
 import { validateModelRequest } from './utils/validators';
 
@@ -1800,21 +1800,6 @@ export class AIMediaGen implements INodeType {
 	}
 
 	/**
-	 * Delays execution without using setTimeout
-	 *
-	 * Uses setImmediate instead of setTimeout to comply with n8n community node restrictions.
-	 *
-	 * @param ms - Milliseconds to delay
-	 * @returns Promise that resolves after the delay
-	 */
-	private static async delay(ms: number): Promise<void> {
-		const startTime = Date.now();
-		while (Date.now() - startTime < ms) {
-			await new Promise<void>(resolve => setImmediate(() => resolve()));
-		}
-	}
-
-	/**
 	 * Executes a model request for a single item
 	 *
 	 * Validates parameters, builds the request, and calls the ModelScope API.
@@ -2006,11 +1991,6 @@ export class AIMediaGen implements INodeType {
 		while (Date.now() - startTime < timeout) {
 			pollCount++;
 			const elapsed = Date.now() - startTime;
-
-			// Wait before polling (except first time)
-			if (pollCount > 1) {
-				await AIMediaGen.delay(CONSTANTS.ASYNC.POLL_INTERVAL_MS);
-			}
 
 			logger?.debug('[AI Media Gen] Polling task status', { pollCount, elapsed, taskId });
 
@@ -3273,26 +3253,12 @@ export class AIMediaGen implements INodeType {
 		const timeoutMs = timeouts[duration] || 180000;
 		const startTime = Date.now();
 
-		// Dynamic polling interval
-		let pollInterval = 5000;  // Start with 5 seconds
 		let pollCount = 0;
 		const maxPolls = 120;
 
 		while (Date.now() - startTime < timeoutMs && pollCount < maxPolls) {
 			pollCount++;
 			const elapsed = Date.now() - startTime;
-
-			// Adjust polling interval over time
-			if (elapsed > 120000) {
-				pollInterval = 15000;  // 15 seconds after 2 minutes
-			} else if (elapsed > 30000) {
-				pollInterval = 10000;  // 10 seconds after 30 seconds
-			}
-
-			// Wait before polling (except first time)
-			if (pollCount > 1) {
-				await sleep(pollInterval);
-			}
 
 			// Query status
 			const baseUrl = credentials.baseUrl || 'https://api.openai.com';
@@ -3576,24 +3542,12 @@ export class AIMediaGen implements INodeType {
 		const timeoutMs = 600000; // 10 minutes max
 		const startTime = Date.now();
 
-		let pollInterval = 5000;
 		let pollCount = 0;
 		const maxPolls = 120;
 
 		while (Date.now() - startTime < timeoutMs && pollCount < maxPolls) {
 			pollCount++;
 			const elapsed = Date.now() - startTime;
-
-			// Adaptive polling
-			if (elapsed > 120000) {
-				pollInterval = 15000;
-			} else if (elapsed > 30000) {
-				pollInterval = 10000;
-			}
-
-			if (pollCount > 1) {
-				await sleep(pollInterval);
-			}
 
 			const status = await context.helpers.httpRequest({
 				method: 'GET',

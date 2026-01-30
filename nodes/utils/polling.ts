@@ -1,5 +1,5 @@
 import type { IExecuteFunctions } from 'n8n-workflow';
-import { MediaGenError, sleep } from './errors';
+import { MediaGenError } from './errors';
 import { makeHttpRequest } from './httpRequest';
 
 /**
@@ -88,25 +88,12 @@ export async function pollTask(options: PollingOptions): Promise<TaskStatusRespo
 	} = options;
 
 	const startTime = Date.now();
-	let pollInterval = 5000; // Start with 5 seconds
 	let pollCount = 0;
 	const maxPolls = 120;
 
 	while (Date.now() - startTime < timeoutMs && pollCount < maxPolls) {
 		pollCount++;
 		const elapsed = Date.now() - startTime;
-
-		// Adaptive polling intervals
-		if (elapsed > 120000) {
-			pollInterval = 15000; // 15 seconds after 2 minutes
-		} else if (elapsed > 30000) {
-			pollInterval = 10000; // 10 seconds after 30 seconds
-		}
-
-		// Wait before polling (skip first poll)
-		if (pollCount > 1) {
-			await sleep(pollInterval);
-		}
 
 		// Build status URL
 		const baseUrl = credentials.baseUrl || '';

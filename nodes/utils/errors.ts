@@ -80,31 +80,9 @@ export const ERROR_CODES = {
 } as const;
 
 /**
- * Sleeps for a specified duration
- *
- * Uses setImmediate instead of setTimeout to comply with n8n community node restrictions.
- *
- * @param ms - Milliseconds to sleep
- * @returns Promise that resolves after the specified duration
- */
-export function sleep(ms: number): Promise<void> {
-	return new Promise<void>((resolve) => {
-		const startTime = Date.now();
-		const checkCondition = () => {
-			if (Date.now() - startTime >= ms) {
-				resolve();
-			} else {
-				setImmediate(checkCondition);
-			}
-		};
-		setImmediate(checkCondition);
-	});
-}
-
-/**
  * Executes a function with retry logic
  *
- * Retries the function on retryable errors with exponential backoff.
+ * Retries the function on retryable errors immediately.
  * Non-retryable errors are thrown immediately.
  *
  * @param fn - Async function to execute
@@ -118,9 +96,6 @@ export async function withRetry<T>(
 ): Promise<T> {
 	const {
 		maxRetries = 3,
-		initialDelay = 1000,
-		maxDelay = 30000,
-		backoffMultiplier = 2,
 	} = options;
 
 	let lastError: Error = new Error('Unknown error');
@@ -133,14 +108,6 @@ export async function withRetry<T>(
 
 			if (error instanceof MediaGenError && !error.isRetryable()) {
 				throw error;
-			}
-
-			if (attempt < maxRetries - 1) {
-				const delay = Math.min(
-					initialDelay * Math.pow(backoffMultiplier, attempt),
-					maxDelay
-				);
-				await sleep(delay);
 			}
 		}
 	}
