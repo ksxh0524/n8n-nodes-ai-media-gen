@@ -1076,16 +1076,15 @@ export class AIMediaGen implements INodeType {
 			displayName: 'Size',
 			name: 'sizeZImage',
 			type: 'options',
-			default: '2048x2048',
+			default: '1440x1440',
 			options: [
-				{ name: '1:1 (2048x2048)', value: '2048x2048' },
-				{ name: '16:9 (2048x1152)', value: '2048x1152' },
-				{ name: '9:16 (1152x2048)', value: '1152x2048' },
-				{ name: '4:3 (2048x1536)', value: '2048x1536' },
-				{ name: '3:4 (1536x2048)', value: '1536x2048' },
-				{ name: '1:2 (1024x2048)', value: '1024x2048' },
+				{ name: '16:9 (1920x1080)', value: '1920x1080' },
+				{ name: '4:3 (1440x1080)', value: '1440x1080' },
+				{ name: '1:1 (1440x1440)', value: '1440x1440' },
+				{ name: '3:4 (1080x1440)', value: '1080x1440' },
+				{ name: '9:16 (1080x1920)', value: '1080x1920' },
 			],
-			description: 'Image size (max 2K, various aspect ratios: 1:1, 16:9, 9:16, 4:3, 3:4, 1:2)',
+			description: 'Image size (various aspect ratios: 16:9, 4:3, 1:1, 3:4, 9:16)',
 			displayOptions: {
 				show: {
 					operation: ['modelscope'],
@@ -1617,7 +1616,7 @@ export class AIMediaGen implements INodeType {
 								size = this.getNodeParameter('size', i) as string;
 							}
 						} catch (error) {
-							size = isZImage ? '2048x2048' : '1328x1328';
+							size = isZImage ? '1440x1440' : '1328x1328';
 							this.logger?.debug('[AI Media Gen] Using default size', { index: i, size });
 						}
 					}
@@ -1864,7 +1863,7 @@ export class AIMediaGen implements INodeType {
 				context.logger?.info('[AI Media Gen] Size retrieved', { size, itemIndex });
 			} catch (error) {
 				// Use default size if parameter not set
-				size = isZImage ? '2048x2048' : '1328x1328';
+				size = isZImage ? '1440x1440' : '1328x1328';
 				context.logger?.warn('[AI Media Gen] Could not get size, using default', { size, itemIndex });
 			}
 		}
