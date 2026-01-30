@@ -1647,9 +1647,30 @@ export class AIMediaGen implements INodeType {
 					// Get inputImage only for Edit model
 					if (isEditModel) {
 						try {
-							inputImage = this.getNodeParameter('inputImage', i) as string || '';
+							const inputImageType = this.getNodeParameter('inputImageType', i) as string;
+							if (inputImageType === 'binary') {
+								// Get from binary data
+								const binaryPropertyName = this.getNodeParameter('inputImageBinary', i) as string;
+								const items = this.getInputData();
+								const item = items[i];
+								const binaryData = item.binary;
+
+								if (binaryData && binaryData[binaryPropertyName]) {
+									const binary = binaryData[binaryPropertyName] as { data: string; mimeType: string };
+									inputImage = `data:${binary.mimeType || 'image/jpeg'};base64,${binary.data}`;
+								} else {
+									this.logger?.warn('[AI Media Gen] Binary data not found', { binaryPropertyName, availableKeys: Object.keys(binaryData || {}) });
+								}
+							} else {
+								// Get from URL/Base64
+								inputImage = this.getNodeParameter('inputImage', i) as string || '';
+							}
+
+							if (!inputImage) {
+								this.logger?.warn('[AI Media Gen] Input image not found for Edit model', { inputImageType });
+							}
 						} catch (error) {
-							this.logger?.warn('[AI Media Gen] Could not get inputImage for Edit model', { index: i, error });
+							this.logger?.warn('[AI Media Gen] Failed to get inputImage for Edit model', { index: i, error });
 						}
 					}
 
