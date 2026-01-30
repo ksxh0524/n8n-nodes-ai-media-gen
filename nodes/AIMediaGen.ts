@@ -80,7 +80,7 @@ interface ModelScopeAsyncSubmitResponse {
  */
 interface ModelScopeAsyncTaskResponse {
 	task_status: 'PENDING' | 'RUNNING' | 'PROCESSING' | 'SUCCEED' | 'FAILED';
-	output_images?: Array<{ url: string }>;
+	output_images?: Array<string | { url: string }>;
 	output_url?: string;
 	message?: string;
 }
@@ -2048,14 +2048,24 @@ export class AIMediaGen implements INodeType {
 					});
 
 					// Try multiple response formats
-					// Format 1: output_images array
-					if (data.output_images && data.output_images.length > 0) {
+					// Format 1: output_images array (direct string array)
+					if (data.output_images && Array.isArray(data.output_images) && data.output_images.length > 0) {
+						const firstItem = data.output_images[0];
 						logger?.info('[AI Media Gen] Found output_images array', {
 							count: data.output_images.length,
-							firstItem: data.output_images[0],
+							firstItem,
 						});
-						if (data.output_images[0].url) {
-							return data.output_images[0].url;
+						// Check if first element is a direct URL string
+						if (typeof firstItem === 'string' && firstItem.startsWith('http')) {
+							logger?.info('[AI Media Gen] Returning direct URL from output_images[0]', { url: firstItem });
+							return firstItem;
+						}
+						// Check if first element is an object with url property
+						if (firstItem && typeof firstItem === 'object' && 'url' in firstItem) {
+							const url = (firstItem as { url: string }).url;
+							if (typeof url === 'string') {
+								return url;
+							}
 						}
 					}
 
