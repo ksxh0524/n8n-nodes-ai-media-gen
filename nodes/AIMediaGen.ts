@@ -1946,7 +1946,7 @@ export class AIMediaGen implements INodeType {
 				model,
 				{ prompt: prompt.trim() },
 				{
-					size: size || '1024x1024',
+					size: isEditModel ? undefined : (size || '1024x1024'),
 					seed: seed || 0,
 					steps: steps || 30,
 					num_images: numImages || 1,
@@ -2185,6 +2185,7 @@ export class AIMediaGen implements INodeType {
 				model,
 				promptLength: input.prompt?.length,
 				hasAsyncHeader: true,
+				requestBody: JSON.stringify(requestBody, null, 2),
 			});
 
 			if (!context) {
@@ -2223,8 +2224,9 @@ export class AIMediaGen implements INodeType {
 					}
 					if (error.message.includes('400')) {
 						// Try to extract more detailed error from response
+						const sizeInfo = parameters.size ? `size (${parameters.size})` : 'no size (edit model)';
 						throw new MediaGenError(
-							`Bad Request (400). Please check: model name (${model}), size (${parameters.size}), and API Key. Details: ${error.message}`,
+							`Bad Request (400). Please check: model name (${model}), ${sizeInfo}, and API Key. Details: ${error.message}`,
 							'API_ERROR'
 						);
 					}
