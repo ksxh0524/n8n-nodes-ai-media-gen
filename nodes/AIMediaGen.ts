@@ -139,6 +139,44 @@ interface SoraTaskResponse {
 }
 
 /**
+ * Veo submit response
+ */
+interface VeoSubmitResponse {
+	task_id: string;
+}
+
+/**
+ * Veo task status response
+ */
+interface VeoTaskResponse {
+	task_id: string;
+	platform: string;
+	action: string;
+	status: 'NOT_START' | 'IN_PROGRESS' | 'SUCCESS' | 'FAILURE';
+	fail_reason: string;
+	submit_time: number;
+	start_time: number;
+	finish_time: number;
+	progress: string;
+	data: {
+		output?: string;
+	} | null;
+	search_item: string;
+}
+
+/**
+ * Veo API request body
+ */
+interface VeoRequest {
+	prompt: string;
+	model: 'veo3.1-fast' | 'veo3.1-pro' | 'veo3.1' | 'veo3.1-components';
+	enhance_prompt?: boolean;
+	enable_upsample?: boolean;
+	aspect_ratio?: '16:9' | '9:16';
+	images?: string[];
+}
+
+/**
  * Parse image dimensions from buffer
  */
 function getImageDimensions(buffer: Buffer): { width: number; height: number } | null {
@@ -229,6 +267,15 @@ export class AIMediaGen implements INodeType {
 					},
 				},
 			},
+			{
+				name: 'googlePalmApi',
+				required: true,
+				displayOptions: {
+					show: {
+						operation: ['veo'],
+					},
+				},
+			},
 		],
 		properties: [
 		{
@@ -256,6 +303,11 @@ export class AIMediaGen implements INodeType {
 					name: 'Sora',
 					value: 'sora',
 					description: 'OpenAI Sora - Text/Image to Video Generation',
+				},
+				{
+					name: 'Veo',
+					value: 'veo',
+					description: 'Google Veo - Text/Image to Video Generation',
 				},
 			],
 			default: 'modelscope',
@@ -771,6 +823,176 @@ export class AIMediaGen implements INodeType {
 					name: 'URL Only',
 					value: 'url',
 					description: 'Return download URL only (link expires in 1 hour, recommended for large videos)',
+				},
+				{
+					name: 'Binary Data',
+					value: 'binary',
+					description: 'Download and include video file (may cause memory issues for large videos)',
+				},
+			],
+			default: 'url',
+			required: true,
+			description: 'Choose how to receive the generated video',
+		},
+		// Veo - Mode
+		{
+			displayName: 'Mode',
+			name: 'veoMode',
+			type: 'options',
+			options: [
+				{ name: 'Text to Video', value: 'text-to-video' },
+				{ name: 'Image to Video', value: 'image-to-video' },
+			],
+			default: 'text-to-video',
+			displayOptions: {
+				show: {
+					operation: ['veo'],
+				},
+			},
+			description: 'Select generation mode',
+		},
+		// Veo - Model
+		{
+			displayName: 'Model',
+			name: 'veoModel',
+			type: 'options',
+			options: [
+				{
+					name: 'Veo 3.1 Fast',
+					value: 'veo3.1-fast',
+					description: 'Fast mode, cost-effective',
+				},
+				{
+					name: 'Veo 3.1 Pro',
+					value: 'veo3.1-pro',
+					description: 'High quality mode',
+				},
+				{
+					name: 'Veo 3.1',
+					value: 'veo3.1',
+					description: 'Standard mode',
+				},
+				{
+					name: 'Veo 3.1 Components',
+					value: 'veo3.1-components',
+					description: 'Multi-image reference (1-3 images)',
+				},
+			],
+			default: 'veo3.1-fast',
+			displayOptions: {
+				show: {
+					operation: ['veo'],
+				},
+			},
+			description: 'Select Veo model',
+		},
+		// Veo - Prompt
+		{
+			displayName: 'Prompt',
+			name: 'veoPrompt',
+			type: 'string',
+			typeOptions: {
+				rows: 5,
+			},
+			displayOptions: {
+				show: {
+					operation: ['veo'],
+				},
+			},
+			default: '',
+			required: true,
+			description: 'Describe the video you want to generate (e.g., "A cinematic drone shot of a mountain range at sunset")',
+		},
+		// Veo - Input Images
+		{
+			displayName: 'Input Images',
+			name: 'veoInputImages',
+			type: 'fixedCollection',
+			typeOptions: {
+				multipleValues: true,
+			},
+			displayOptions: {
+				show: {
+					operation: ['veo'],
+					veoMode: ['image-to-video'],
+				},
+			},
+			default: {},
+			description: 'Reference images for image-to-video (1-3 images)',
+			options: [
+				{
+					displayName: 'Image',
+					name: 'image',
+					values: [
+						{
+							displayName: 'Image',
+							name: 'url',
+							type: 'string',
+							default: '',
+						},
+					],
+				},
+			],
+		},
+		// Veo - Aspect Ratio
+		{
+			displayName: 'Aspect Ratio',
+			name: 'veoAspectRatio',
+			type: 'options',
+			displayOptions: {
+				show: {
+					operation: ['veo'],
+				},
+			},
+			options: [
+				{ name: '16:9', value: '16:9' },
+				{ name: '9:16', value: '9:16' },
+			],
+			default: '16:9',
+			description: 'Video aspect ratio (auto-detected from image if not specified)',
+		},
+		// Veo - Enhance Prompt
+		{
+			displayName: 'Enhance Prompt',
+			name: 'veoEnhancePrompt',
+			type: 'boolean',
+			default: false,
+			displayOptions: {
+				show: {
+					operation: ['veo'],
+				},
+			},
+			description: 'Let AI enhance your prompt for better results',
+		},
+		// Veo - Enable Upsample (4K)
+		{
+			displayName: 'Enable 4K (Upsample)',
+			name: 'veoEnableUpsample',
+			type: 'boolean',
+			default: false,
+			displayOptions: {
+				show: {
+					operation: ['veo'],
+					veoModel: ['veo3.1-pro', 'veo3.1-components', 'veo3.1'],
+				},
+			},
+			description: 'Enable 4K resolution upscaling (not available for veo3.1-fast)',
+		},
+		// Veo - Output Mode
+		{
+			displayName: 'Output Mode',
+			name: 'veoOutputMode',
+			type: 'options',
+			displayOptions: {
+				show: {
+					operation: ['veo'],
+				},
+			},
+			options: [
+				{
+					name: 'URL Only',
+					value: 'url',
+					description: 'Return download URL only (recommended for large videos)',
 				},
 				{
 					name: 'Binary Data',
@@ -1321,6 +1543,39 @@ export class AIMediaGen implements INodeType {
 					});
 
 					results.push(result);
+				} else if (operation === 'veo') {
+					// Handle Veo operation
+					const credentials = await this.getCredentials<GooglePalmApiCredentials>('googlePalmApi');
+					if (!credentials || !credentials.apiKey) {
+						throw new NodeOperationError(
+							this.getNode(),
+							'API Key is required. Please configure your Google Gemini (PaLM) API credentials.',
+							{ itemIndex: i }
+						);
+					}
+
+					const timerId = performanceMonitor.startTimer('veo');
+					result = await AIMediaGen.executeVeoRequest(this, i, credentials);
+
+					const elapsed = performanceMonitor.endTimer(timerId);
+
+					performanceMonitor.recordMetric({
+						timestamp: Date.now().toString(),
+						provider: 'veo',
+						model: result.json.model as string,
+						mediaType: 'video',
+						duration: elapsed,
+						success: result.json.success as boolean,
+						fromCache: false,
+					});
+
+					this.logger?.info('Execution completed', {
+						model: result.json.model,
+						duration: elapsed,
+						success: result.json.success,
+					});
+
+					results.push(result);
 				} else {
 					// Handle ModelScope operation
 					const credentials = await this.getCredentials<ModelScopeApiCredentials>('modelScopeApi');
@@ -1509,6 +1764,8 @@ export class AIMediaGen implements INodeType {
 					model = this.getNodeParameter('doubaoModel', i) as string;
 				} else if (operation === 'sora') {
 					model = this.getNodeParameter('soraModel', i) as string;
+				} else if (operation === 'veo') {
+					model = this.getNodeParameter('veoModel', i) as string;
 				} else {
 					model = this.getNodeParameter('model', i) as string;
 				}
@@ -3071,6 +3328,292 @@ export class AIMediaGen implements INodeType {
 				case 'NOT_START':
 					continue;
 
+				default:
+					throw new MediaGenError(`Unknown status: ${status.status}`, 'API_ERROR');
+			}
+		}
+
+		throw new MediaGenError(
+			`Video generation timeout after ${Math.floor((Date.now() - startTime) / 1000)}s`,
+			'TIMEOUT',
+			{ taskId, pollCount }
+		);
+	}
+
+	/**
+	 * Executes Veo video generation request
+	 *
+	 * @param context - n8n execution context
+	 * @param itemIndex - Index of the current item
+	 * @param credentials - Google PaLM API credentials
+	 * @returns Promise resolving to execution result
+	 */
+	private static async executeVeoRequest(
+		context: IExecuteFunctions,
+		itemIndex: number,
+		credentials: GooglePalmApiCredentials
+	): Promise<INodeExecutionData> {
+		// Get parameters
+		const mode = context.getNodeParameter('veoMode', itemIndex) as string;
+		const model = context.getNodeParameter('veoModel', itemIndex) as string;
+		const prompt = context.getNodeParameter('veoPrompt', itemIndex) as string;
+		const enhancePrompt = context.getNodeParameter('veoEnhancePrompt', itemIndex) as boolean ?? false;
+		const outputMode = context.getNodeParameter('veoOutputMode', itemIndex) as string;
+
+		// Get optional parameters
+		let aspectRatio: string | undefined;
+		let enableUpsample = false;
+
+		try {
+			aspectRatio = context.getNodeParameter('veoAspectRatio', itemIndex) as string;
+		} catch {}
+
+		try {
+			enableUpsample = context.getNodeParameter('veoEnableUpsample', itemIndex) as boolean;
+		} catch {}
+
+		// Handle input images for image-to-video mode
+		let images: string[] | undefined;
+		if (mode === 'image-to-video') {
+			try {
+				const imagesData = context.getNodeParameter('veoInputImages', itemIndex) as {
+					image?: Array<{ url: string }>;
+				};
+
+				if (imagesData.image && imagesData.image.length > 0) {
+					const items = context.getInputData();
+					const binaryData = items[itemIndex].binary;
+
+					images = [];
+					for (const img of imagesData.image) {
+						if (!img.url || !img.url.trim()) continue;
+
+						let imageData = img.url.trim();
+
+						// Handle binary property references
+						if (!imageData.startsWith('http') && !imageData.startsWith('data:')) {
+							if (binaryData && binaryData[imageData]) {
+								const binary = binaryData[imageData] as { data: string; mimeType: string };
+								if (binary && binary.data) {
+									imageData = `data:${binary.mimeType || 'image/jpeg'};base64,${binary.data}`;
+								}
+							}
+						}
+
+						images.push(imageData);
+					}
+				}
+			} catch (error) {
+				throw new NodeOperationError(
+					context.getNode(),
+					'Input images are required for image-to-video mode',
+					{ itemIndex }
+				);
+			}
+		}
+
+		// Validate prompt
+		if (!prompt || prompt.trim() === '') {
+			throw new NodeOperationError(
+				context.getNode(),
+				'Prompt is required',
+				{ itemIndex }
+			);
+		}
+
+		// Get timeout settings
+		let timeout = 300000; // 5 minutes default
+		try {
+			timeout = context.getNodeParameter('options.timeout', itemIndex) as number;
+		} catch {}
+
+		let maxRetries = 3;
+		try {
+			maxRetries = context.getNodeParameter('options.maxRetries', itemIndex) as number;
+		} catch {}
+
+		// Build request
+		const requestBody: VeoRequest = {
+			prompt: prompt.trim(),
+			model: model as 'veo3.1-fast' | 'veo3.1-pro' | 'veo3.1' | 'veo3.1-components',
+			enhance_prompt: enhancePrompt || undefined,
+			enable_upsample: enableUpsample || undefined,
+			aspect_ratio: aspectRatio as '16:9' | '9:16' | undefined,
+			images: images && images.length > 0 ? images : undefined,
+		};
+
+		// Remove undefined values
+		Object.keys(requestBody).forEach(key => {
+			if (requestBody[key as keyof VeoRequest] === undefined) {
+				delete requestBody[key as keyof VeoRequest];
+			}
+		});
+
+		const baseUrl = credentials.host
+			? (credentials.host.startsWith('http') ? credentials.host : `https://${credentials.host}`)
+			: 'https://api.openai.com';
+
+		// Submit request
+		const taskId = await withRetry(
+			async () => {
+				const response = await context.helpers.httpRequest({
+					method: 'POST',
+					url: `${baseUrl}/v2/videos/generations`,
+					headers: {
+						'Authorization': `Bearer ${credentials.apiKey}`,
+						'Content-Type': 'application/json',
+					},
+					body: JSON.stringify(requestBody),
+					json: true,
+					timeout: timeout,
+				}) as VeoSubmitResponse;
+
+				if (!response.task_id) {
+					throw new MediaGenError('No task_id returned from API', 'API_ERROR');
+				}
+
+				return response.task_id;
+			},
+			{ maxRetries }
+		);
+
+		context.logger?.info('[Veo] Generation submitted', { taskId, model, mode });
+
+		// Poll for completion
+		const status = await AIMediaGen.pollVeoStatus(
+			context,
+			credentials,
+			taskId,
+			context.logger
+		);
+
+		context.logger?.info('[Veo] Generation completed', { taskId, progress: status.progress });
+
+		// Get video URL
+		const videoUrl = status.data?.output;
+		if (!videoUrl) {
+			throw new MediaGenError('No video URL returned from API', 'API_ERROR');
+		}
+
+		// Return based on output mode
+		if (outputMode === 'binary') {
+			// Download and return binary
+			const videoBuffer = await context.helpers.httpRequest({
+				method: 'GET',
+				url: videoUrl,
+				encoding: 'arraybuffer',
+				timeout: 60000,
+			}) as Buffer;
+
+			// Detect MIME type from URL or default to mp4
+			let mimeType = 'video/mp4';
+			if (videoUrl.includes('.mov')) {
+				mimeType = 'video/quicktime';
+			}
+
+			return {
+				json: {
+					success: true,
+					videoUrl,
+					taskId,
+					model,
+					_metadata: {
+						timestamp: new Date().toISOString(),
+					},
+				},
+				binary: {
+					data: {
+						data: videoBuffer.toString('base64'),
+						mimeType,
+						fileName: `veo_${taskId}.${mimeType === 'video/quicktime' ? 'mov' : 'mp4'}`,
+					},
+				},
+			};
+		} else {
+			// Return URL only
+			return {
+				json: {
+					success: true,
+					videoUrl,
+					taskId,
+					model,
+					_metadata: {
+						timestamp: new Date().toISOString(),
+					},
+				},
+			};
+		}
+	}
+
+	/**
+	 * Polls Veo video generation status
+	 *
+	 * @param context - n8n execution context
+	 * @param credentials - Google PaLM API credentials
+	 * @param taskId - Task ID to poll
+	 * @param logger - Optional logger
+	 * @returns Promise resolving to final status
+	 */
+	private static async pollVeoStatus(
+		context: IExecuteFunctions,
+		credentials: GooglePalmApiCredentials,
+		taskId: string,
+		logger?: IExecuteFunctions['logger']
+	): Promise<VeoTaskResponse> {
+		const baseUrl = credentials.host
+			? (credentials.host.startsWith('http') ? credentials.host : `https://${credentials.host}`)
+			: 'https://api.openai.com';
+
+		const timeoutMs = 600000; // 10 minutes max
+		const startTime = Date.now();
+
+		let pollInterval = 5000;
+		let pollCount = 0;
+		const maxPolls = 120;
+
+		while (Date.now() - startTime < timeoutMs && pollCount < maxPolls) {
+			pollCount++;
+			const elapsed = Date.now() - startTime;
+
+			// Adaptive polling
+			if (elapsed > 120000) {
+				pollInterval = 15000;
+			} else if (elapsed > 30000) {
+				pollInterval = 10000;
+			}
+
+			if (pollCount > 1) {
+				await sleep(pollInterval);
+			}
+
+			const status = await context.helpers.httpRequest({
+				method: 'GET',
+				url: `${baseUrl}/v2/videos/generations/${taskId}`,
+				headers: {
+					'Authorization': `Bearer ${credentials.apiKey}`,
+				},
+				json: true,
+				timeout: 10000,
+			}) as VeoTaskResponse;
+
+			logger?.info(`[Veo] Progress: ${status.progress} (${status.status})`, {
+				taskId,
+				elapsed: `${Math.floor(elapsed / 1000)}s`,
+				pollCount,
+			});
+
+			switch (status.status) {
+				case 'SUCCESS':
+					return status;
+				case 'FAILURE':
+					throw new MediaGenError(
+						status.fail_reason || 'Video generation failed',
+						'VIDEO_GENERATION_FAILED',
+						{ taskId, progress: status.progress }
+					);
+				case 'IN_PROGRESS':
+				case 'NOT_START':
+					continue;
 				default:
 					throw new MediaGenError(`Unknown status: ${status.status}`, 'API_ERROR');
 			}
