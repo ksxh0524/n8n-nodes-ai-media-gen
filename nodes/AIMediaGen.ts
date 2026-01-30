@@ -1899,18 +1899,30 @@ export class AIMediaGen implements INodeType {
 
 		// Get input image based on type
 		if (isEditModel) {
+			context.logger?.info('[AI Media Gen] Getting input image for edit model', { itemIndex });
+
 			const inputImageType = context.getNodeParameter('inputImageType', itemIndex) as string;
+			context.logger?.info('[AI Media Gen] Input image type', { inputImageType, itemIndex });
+
 			if (inputImageType === 'binary') {
 				// Get binary file from input
 				const binaryPropertyName = context.getNodeParameter('inputImageBinary', itemIndex) as string;
+				context.logger?.info('[AI Media Gen] Binary property name', { binaryPropertyName, itemIndex });
+
 				const items = context.getInputData();
 				const item = items[itemIndex];
 				const binaryData = item.binary;
 
+				context.logger?.info('[AI Media Gen] Binary data available', {
+					hasBinary: !!binaryData,
+					binaryKeys: binaryData ? Object.keys(binaryData) : [],
+					itemIndex
+				});
+
 				if (!binaryData || !binaryData[binaryPropertyName]) {
 					throw new NodeOperationError(
 						context.getNode(),
-						`Binary property '${binaryPropertyName}' not found. Make sure to include a binary file in your input.`,
+						`Binary property '${binaryPropertyName}' not found. Make sure to include a binary file in your input. Available properties: ${binaryData ? Object.keys(binaryData).join(', ') : 'none'}`,
 						{ itemIndex }
 					);
 				}
@@ -1919,11 +1931,23 @@ export class AIMediaGen implements INodeType {
 				// Convert buffer to base64 if needed
 				if (binary.data) {
 					inputImage = `data:${binary.mimeType || 'image/jpeg'};base64,${binary.data}`;
+					context.logger?.info('[AI Media Gen] Input image loaded from binary', { mimeType: binary.mimeType, itemIndex });
 				}
 			} else {
 				// Get URL or base64 string
 				inputImage = context.getNodeParameter('inputImage', itemIndex) as string || '';
+				context.logger?.info('[AI Media Gen] Input image from URL/Base64', {
+					hasInputImage: !!inputImage,
+					length: inputImage?.length,
+					itemIndex
+				});
 			}
+
+			context.logger?.info('[AI Media Gen] Final input image', {
+				hasInputImage: !!inputImage,
+				length: inputImage?.length,
+				itemIndex
+			});
 		}
 
 		if (!prompt || prompt.trim() === '') {
