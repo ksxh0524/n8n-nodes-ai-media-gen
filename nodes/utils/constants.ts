@@ -104,7 +104,13 @@ export const MODEL_CONSTRAINTS = {
 		supportsSeed: true,
 	},
 	'Qwen/Qwen-Image-2512': {
-		supportedSizes: ['1328x1328', '1664x928', '928x1664', '1472x1104', '1104x1472', '1584x1056', '1056x1584'],
+		supportedSizes: [
+			'1024x1024', // 1:1
+			'1024x768',  // 4:3
+			'768x1024',  // 3:4
+			'1280x720',  // 16:9
+			'720x1280',  // 9:16
+		],
 		supportsNumImages: true,
 		supportsSeed: true,
 	},

@@ -1097,15 +1097,13 @@ export class AIMediaGen implements INodeType {
 			displayName: 'Size',
 			name: 'sizeQwen',
 			type: 'options',
-			default: '1328x1328',
+			default: '1024x1024',
 			options: [
-				{ name: '1:1 (1328x1328)', value: '1328x1328' },
-				{ name: '16:9 (1664x928)', value: '1664x928' },
-				{ name: '9:16 (928x1664)', value: '928x1664' },
-				{ name: '4:3 (1472x1104)', value: '1472x1104' },
-				{ name: '3:4 (1104x1472)', value: '1104x1472' },
-				{ name: '3:2 (1584x1056)', value: '1584x1056' },
-				{ name: '2:3 (1056x1584)', value: '1056x1584' },
+				{ name: '1:1 (1024x1024)', value: '1024x1024' },
+				{ name: '4:3 (1024x768)', value: '1024x768' },
+				{ name: '3:4 (768x1024)', value: '768x1024' },
+				{ name: '16:9 (1280x720)', value: '1280x720' },
+				{ name: '9:16 (720x1280)', value: '720x1280' },
 			],
 			description: 'Image size with various aspect ratios',
 			displayOptions: {
@@ -2223,10 +2221,9 @@ export class AIMediaGen implements INodeType {
 						throw new MediaGenError('Authentication failed. Please check your API Key.', 'INVALID_API_KEY');
 					}
 					if (error.message.includes('400')) {
-						// Try to extract more detailed error from response
-						const sizeInfo = parameters.size ? `size (${parameters.size})` : 'no size (edit model)';
+						// Log the full error for debugging
 						throw new MediaGenError(
-							`Bad Request (400). Please check: model name (${model}), ${sizeInfo}, and API Key. Details: ${error.message}`,
+							`API Error (400): ${error.message}`,
 							'API_ERROR'
 						);
 					}
