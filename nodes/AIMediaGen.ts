@@ -1078,21 +1078,13 @@ export class AIMediaGen implements INodeType {
 			type: 'options',
 			default: '1440x1440',
 			options: [
-				// 1080p resolutions
 				{ name: '16:9 (1920x1080)', value: '1920x1080' },
 				{ name: '4:3 (1440x1080)', value: '1440x1080' },
 				{ name: '1:1 (1440x1440)', value: '1440x1440' },
 				{ name: '3:4 (1080x1440)', value: '1080x1440' },
 				{ name: '9:16 (1080x1920)', value: '1080x1920' },
-				// 2K resolutions
-				{ name: '1:1 (2048x2048)', value: '2048x2048' },
-				{ name: '16:9 (2048x1152)', value: '2048x1152' },
-				{ name: '9:16 (1152x2048)', value: '1152x2048' },
-				{ name: '4:3 (2048x1536)', value: '2048x1536' },
-				{ name: '3:4 (1536x2048)', value: '1536x2048' },
-				{ name: '1:2 (1024x2048)', value: '1024x2048' },
 			],
-			description: 'Image size (1080p and 2K resolutions, various aspect ratios)',
+			description: 'Image size (1080p, various aspect ratios: 16:9, 4:3, 1:1, 3:4, 9:16)',
 			displayOptions: {
 				show: {
 					operation: ['modelscope'],

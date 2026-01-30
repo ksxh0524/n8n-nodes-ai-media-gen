@@ -99,12 +99,6 @@ export const MODEL_CONSTRAINTS = {
 			'1440x1440', // 1:1 - square
 			'1080x1440', // 3:4 - portrait
 			'1080x1920', // 9:16 - Full HD portrait
-			'2048x2048', // 1:1 - 2K square
-			'2048x1152', // 16:9 - 2K landscape
-			'1152x2048', // 9:16 - 2K portrait
-			'2048x1536', // 4:3 - 2K landscape
-			'1536x2048', // 3:4 - 2K portrait
-			'1024x2048', // 1:2 - 2K ultra portrait
 		],
 		supportsNumImages: true,
 		supportsSeed: true,
