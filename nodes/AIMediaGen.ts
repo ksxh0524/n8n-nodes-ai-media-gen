@@ -7,7 +7,7 @@ import {
 } from 'n8n-workflow';
 import { CacheManager, CacheKeyGenerator } from './utils/cache';
 import { PerformanceMonitor } from './utils/monitoring';
-import { withRetry, MediaGenError } from './utils/errors';
+import { withRetry, MediaGenError, sleep } from './utils/errors';
 import * as CONSTANTS from './utils/constants';
 import { validateModelRequest } from './utils/validators';
 
@@ -52,6 +52,16 @@ interface DoubaoApiCredentials {
 }
 
 /**
+ * OpenAI API credentials for Sora
+ */
+interface OpenAiApiCredentials {
+	/** API key for authentication */
+	apiKey: string;
+	/** Optional custom base URL */
+	baseUrl?: string;
+}
+
+/**
  * ModelScope async task submission response
  */
 interface ModelScopeAsyncSubmitResponse {
@@ -62,8 +72,9 @@ interface ModelScopeAsyncSubmitResponse {
  * ModelScope async task status response
  */
 interface ModelScopeAsyncTaskResponse {
-	task_status: 'PENDING' | 'RUNNING' | 'SUCCEED' | 'FAILED';
+	task_status: 'PENDING' | 'RUNNING' | 'PROCESSING' | 'SUCCEED' | 'FAILED';
 	output_images?: Array<{ url: string }>;
+	output_url?: string;
 	message?: string;
 }
 
@@ -80,6 +91,30 @@ interface SeedreamResponse {
 	output_url?: string;
 	b64_json?: string;
 	status?: string;
+}
+
+/**
+ * Sora API request body
+ */
+interface SoraRequest {
+	model: 'sora-2' | 'sora-2-pro';
+	prompt: string;
+	aspect_ratio: '16:9' | '9:16';
+	duration: '5' | '10' | '15' | '20';
+	hd?: boolean;
+	images?: string[];
+}
+
+/**
+ * Sora API response
+ */
+interface SoraResponse {
+	id: string;
+	status: 'queued' | 'in_progress' | 'completed' | 'failed';
+	progress: number;
+	model: string;
+	error_message?: string;
+	error_details?: unknown;
 }
 
 /**
@@ -164,6 +199,15 @@ export class AIMediaGen implements INodeType {
 					},
 				},
 			},
+			{
+				name: 'openaiApi',
+				required: true,
+				displayOptions: {
+					show: {
+						operation: ['sora'],
+					},
+				},
+			},
 		],
 		properties: [
 		{
@@ -186,6 +230,11 @@ export class AIMediaGen implements INodeType {
 					name: 'Doubao',
 					value: 'doubao',
 					description: 'Generate and edit images using Doubao Seedream AI model',
+				},
+				{
+					name: 'Sora',
+					value: 'sora',
+					description: 'OpenAI Sora - Text/Image to Video Generation',
 				},
 			],
 			default: 'modelscope',
@@ -557,6 +606,153 @@ export class AIMediaGen implements INodeType {
 				},
 			},
 		},
+		// Sora - Model
+		{
+			displayName: 'Sora Model',
+			name: 'soraModel',
+			type: 'options',
+			displayOptions: {
+				show: {
+					operation: ['sora'],
+				},
+			},
+			options: [
+				{
+					name: 'Sora 2',
+					value: 'sora-2',
+					description: 'Standard quality (faster, 1-3 min for 10s video)',
+				},
+				{
+					name: 'Sora 2 Pro',
+					value: 'sora-2-pro',
+					description: 'High quality (slower, better details)',
+				},
+			],
+			default: 'sora-2',
+		},
+		// Sora - Prompt
+		{
+			displayName: 'Prompt',
+			name: 'soraPrompt',
+			type: 'string',
+			typeOptions: {
+				rows: 5,
+			},
+			displayOptions: {
+				show: {
+					operation: ['sora'],
+				},
+			},
+			default: '',
+			required: true,
+			description: 'Describe the video you want to generate (e.g., "A drone shot of a coastal cliff at sunrise, camera slowly ascending")',
+		},
+		// Sora - Aspect Ratio
+		{
+			displayName: 'Aspect Ratio',
+			name: 'soraAspectRatio',
+			type: 'options',
+			displayOptions: {
+				show: {
+					operation: ['sora'],
+				},
+			},
+			options: [
+				{ name: '16:9 (Landscape)', value: '16:9' },
+				{ name: '9:16 (Portrait)', value: '9:16' },
+			],
+			default: '16:9',
+			description: 'Video aspect ratio',
+		},
+		// Sora - Duration
+		{
+			displayName: 'Duration',
+			name: 'soraDuration',
+			type: 'options',
+			displayOptions: {
+				show: {
+					operation: ['sora'],
+				},
+			},
+			options: [
+				{ name: '5 seconds', value: '5' },
+				{ name: '10 seconds', value: '10' },
+				{ name: '15 seconds', value: '15' },
+				{ name: '20 seconds', value: '20' },
+			],
+			default: '5',
+			description: 'Video duration in seconds',
+		},
+		// Sora - HD
+		{
+			displayName: 'High Definition (HD)',
+			name: 'soraHd',
+			type: 'boolean',
+			default: false,
+			displayOptions: {
+				show: {
+					operation: ['sora'],
+					soraModel: ['sora-2-pro'],
+				},
+			},
+			description: 'Generate in HD quality (Sora 2 Pro only)',
+		},
+		// Sora - Input Images
+		{
+			displayName: 'Input Images (Optional)',
+			name: 'soraInputImages',
+			type: 'fixedCollection',
+			typeOptions: {
+				multipleValues: true,
+			},
+			displayOptions: {
+				show: {
+					operation: ['sora'],
+				},
+			},
+			default: {},
+			description: 'Optional: Reference images for image-to-video (max 4). Supports: URL, base64, or binary property name',
+			options: [
+				{
+					displayName: 'Image',
+					name: 'image',
+					values: [
+						{
+							displayName: 'Image',
+							name: 'url',
+							type: 'string',
+							default: '',
+						},
+					],
+				},
+			],
+		},
+		// Sora - Output Mode
+		{
+			displayName: 'Output Mode',
+			name: 'soraOutputMode',
+			type: 'options',
+			displayOptions: {
+				show: {
+					operation: ['sora'],
+				},
+			},
+			options: [
+				{
+					name: 'URL Only',
+					value: 'url',
+					description: 'Return download URL only (link expires in 1 hour, recommended for large videos)',
+				},
+				{
+					name: 'Binary Data',
+					value: 'binary',
+					description: 'Download and include video file (may cause memory issues for large videos)',
+				},
+			],
+			default: 'url',
+			required: true,
+			description: 'Choose how to receive the generated video',
+		},
 		// Prompt - shown for all models
 		{
 			displayName: 'Prompt',
@@ -627,7 +823,7 @@ export class AIMediaGen implements INodeType {
 		// Size for Z-Image (max 2k, various aspect ratios - high resolution only)
 		{
 			displayName: 'Size',
-			name: 'size',
+			name: 'sizeZImage',
 			type: 'options',
 			default: '2048x2048',
 			options: [
@@ -649,7 +845,7 @@ export class AIMediaGen implements INodeType {
 		// Size for Qwen-Image-2512 (aspect ratio based sizes)
 		{
 			displayName: 'Size',
-			name: 'size',
+			name: 'sizeQwen',
 			type: 'options',
 			default: '1328x1328',
 			options: [
@@ -1061,6 +1257,41 @@ export class AIMediaGen implements INodeType {
 					});
 
 					results.push(result);
+				} else if (operation === 'sora') {
+					// Handle Sora operation
+					const credentials = await this.getCredentials<OpenAiApiCredentials>('openaiApi');
+					if (!credentials || !credentials.apiKey) {
+						throw new NodeOperationError(
+							this.getNode(),
+							'API Key is required. Please configure your OpenAI API credentials.',
+							{ itemIndex: i }
+						);
+					}
+
+					const timerId = performanceMonitor.startTimer('sora');
+
+					// Sora doesn't support caching due to async generation
+					result = await AIMediaGen.executeSoraRequest(this, i, credentials);
+
+					const elapsed = performanceMonitor.endTimer(timerId);
+
+					performanceMonitor.recordMetric({
+						timestamp: Date.now().toString(),
+						provider: 'sora',
+						model: result.json.model as string,
+						mediaType: 'video',
+						duration: elapsed,
+						success: result.json.success as boolean,
+						fromCache: false,
+					});
+
+					this.logger?.info('Execution completed', {
+						model: result.json.model,
+						duration: elapsed,
+						success: result.json.success,
+					});
+
+					results.push(result);
 				} else {
 					// Handle ModelScope operation
 					const credentials = await this.getCredentials<ModelScopeApiCredentials>('modelScopeApi');
@@ -1093,7 +1324,14 @@ export class AIMediaGen implements INodeType {
 					// Get size for generation models only (Edit model doesn't use size)
 					if (!isEditModel) {
 						try {
-							size = this.getNodeParameter('size', i) as string;
+							// Use different parameter names for different models to avoid conflicts
+							if (isZImage) {
+								size = this.getNodeParameter('sizeZImage', i) as string;
+							} else if (isQwenImage) {
+								size = this.getNodeParameter('sizeQwen', i) as string;
+							} else {
+								size = this.getNodeParameter('size', i) as string;
+							}
 						} catch (error) {
 							size = isZImage ? '2048x2048' : '1328x1328';
 							this.logger?.debug('[AI Media Gen] Using default size', { index: i, size });
@@ -1240,6 +1478,8 @@ export class AIMediaGen implements INodeType {
 					model = this.getNodeParameter('nbModel', i) as string;
 				} else if (operation === 'doubao') {
 					model = this.getNodeParameter('doubaoModel', i) as string;
+				} else if (operation === 'sora') {
+					model = this.getNodeParameter('soraModel', i) as string;
 				} else {
 					model = this.getNodeParameter('model', i) as string;
 				}
@@ -1342,7 +1582,14 @@ export class AIMediaGen implements INodeType {
 		// Get size for generation models only (Edit model doesn't use size)
 		if (!isEditModel) {
 			try {
-				size = context.getNodeParameter('size', itemIndex) as string;
+				// Use different parameter names for different models to avoid conflicts
+				if (isZImage) {
+					size = context.getNodeParameter('sizeZImage', itemIndex) as string;
+				} else if (isQwenImage) {
+					size = context.getNodeParameter('sizeQwen', itemIndex) as string;
+				} else {
+					size = context.getNodeParameter('size', itemIndex) as string;
+				}
 				context.logger?.info('[AI Media Gen] Size retrieved', { size, itemIndex });
 			} catch (error) {
 				// Use default size if parameter not set
@@ -1515,6 +1762,8 @@ export class AIMediaGen implements INodeType {
 			logger?.debug('[AI Media Gen] Task status response', {
 				taskStatus: data?.task_status,
 				hasOutputImages: !!data?.output_images?.length,
+				outputImagesCount: data?.output_images?.length,
+				responseData: JSON.stringify(data),
 			});
 
 			if (!data || !data.task_status) {
@@ -1524,14 +1773,68 @@ export class AIMediaGen implements INodeType {
 			switch (data.task_status) {
 				case 'SUCCEED':
 					logger?.info('[AI Media Gen] Task succeeded', { taskId, pollCount, elapsed });
+
+					// Log full response for debugging
+					const responseStr = JSON.stringify(data, null, 2);
+					logger?.info('[AI Media Gen] Full API response', {
+						taskId,
+						response: responseStr,
+					});
+
+					// Try multiple response formats
+					// Format 1: output_images array
 					if (data.output_images && data.output_images.length > 0) {
-						return data.output_images[0].url;
+						logger?.info('[AI Media Gen] Found output_images array', {
+							count: data.output_images.length,
+							firstItem: data.output_images[0],
+						});
+						if (data.output_images[0].url) {
+							return data.output_images[0].url;
+						}
 					}
-					throw new MediaGenError('Task succeeded but no image URL returned', 'API_ERROR');
+
+					// Format 2: output_url directly in response
+					if (data.output_url) {
+						logger?.info('[AI Media Gen] Found output_url field', { url: data.output_url });
+						return data.output_url;
+					}
+
+					// Format 3: Try to find any field with 'url' in the name
+					const dataRecord = data as unknown as Record<string, unknown>;
+					for (const key in dataRecord) {
+						if (key.includes('url') || key.includes('Url') || key.includes('URL')) {
+							const value = dataRecord[key];
+							if (typeof value === 'string' && value.startsWith('http')) {
+								logger?.info('[AI Media Gen] Found URL in field', { key, value });
+								return value;
+							}
+						}
+					}
+
+					// Format 4: Check nested result object
+					if (dataRecord.result) {
+						const result = dataRecord.result as Record<string, unknown>;
+						logger?.info('[AI Media Gen] Found result object', { result });
+						if (typeof result.url === 'string') {
+							return result.url;
+						}
+						if (typeof result.image_url === 'string') {
+							return result.image_url;
+						}
+					}
+
+					// If we get here, no URL was found
+					logger?.error('[AI Media Gen] No image URL found in any expected format', {
+						taskId,
+						response: responseStr,
+					});
+
+					throw new MediaGenError('Task succeeded but no image URL returned. Check logs for full response.', 'API_ERROR', { taskId, response: data });
 				case 'FAILED':
 					throw new MediaGenError(data.message || 'Task failed', 'API_ERROR', { taskId, message: data.message });
 				case 'PENDING':
 				case 'RUNNING':
+				case 'PROCESSING':
 					logger?.debug('[AI Media Gen] Task still processing', { taskStatus: data.task_status, pollCount, elapsed });
 					// Continue polling
 					continue;
@@ -2421,5 +2724,315 @@ export class AIMediaGen implements INodeType {
 				'NETWORK_ERROR'
 			);
 		}
+	}
+
+	/**
+	 * Executes Sora video generation
+	 *
+	 * @param context - n8n execution context
+	 * @param itemIndex - Index of the item being processed
+	 * @param credentials - OpenAI API credentials
+	 * @returns Promise resolving to execution data
+	 */
+	private static async executeSoraRequest(
+		context: IExecuteFunctions,
+		itemIndex: number,
+		credentials: OpenAiApiCredentials
+	): Promise<INodeExecutionData> {
+		const model = context.getNodeParameter('soraModel', itemIndex) as string;
+		const prompt = context.getNodeParameter('soraPrompt', itemIndex) as string;
+		const aspectRatio = context.getNodeParameter('soraAspectRatio', itemIndex) as string;
+		const duration = context.getNodeParameter('soraDuration', itemIndex) as string;
+		const outputMode = context.getNodeParameter('soraOutputMode', itemIndex) as string;
+
+		let hd = false;
+		try {
+			hd = context.getNodeParameter('soraHd', itemIndex) as boolean;
+		} catch {
+			// HD only for sora-2-pro
+		}
+
+		// Get input images (image-to-video)
+		const images: string[] = [];
+		try {
+			const imagesData = context.getNodeParameter('soraInputImages', itemIndex) as {
+				image?: Array<{ url: string }>;
+			};
+
+			if (imagesData.image && imagesData.image.length > 0) {
+				const items = context.getInputData();
+				const binaryData = items[itemIndex].binary;
+
+				for (const img of imagesData.image) {
+					if (!img.url || !img.url.trim()) {
+						continue;
+					}
+
+					let imageData = img.url.trim();
+
+					// Check if it's a binary property name (not a URL or base64)
+					if (!imageData.startsWith('http') && !imageData.startsWith('data:')) {
+						if (binaryData && binaryData[imageData]) {
+							const binary = binaryData[imageData] as { data: string; mimeType: string };
+							if (binary && binary.data) {
+								imageData = `data:${binary.mimeType || 'image/jpeg'};base64,${binary.data}`;
+							}
+						}
+					}
+
+					images.push(imageData);
+				}
+			}
+		} catch (error) {
+			// No input images (text-to-video)
+		}
+
+		// Validate prompt
+		if (!prompt || prompt.trim() === '') {
+			throw new NodeOperationError(
+				context.getNode(),
+				'Prompt is required',
+				{ itemIndex }
+			);
+		}
+
+		// Get timeout and retry options
+		let timeout = 30000;
+		try {
+			timeout = context.getNodeParameter('options.timeout', itemIndex) as number;
+		} catch {
+			// Use default
+		}
+
+		let maxRetries = 3;
+		try {
+			maxRetries = context.getNodeParameter('options.maxRetries', itemIndex) as number;
+		} catch {
+			// Use default
+		}
+
+		// Submit generation request
+		const requestBody: SoraRequest = {
+			model: model as 'sora-2' | 'sora-2-pro',
+			prompt: prompt.trim(),
+			aspect_ratio: aspectRatio as '16:9' | '9:16',
+			duration: duration as '5' | '10' | '15' | '20',
+			hd: hd && model === 'sora-2-pro' ? true : undefined,
+			images: images.length > 0 ? images : undefined,
+		};
+
+		const baseUrl = credentials.baseUrl || 'https://api.openai.com';
+
+		// Submit request
+		const videoId = await withRetry(
+			async () => {
+				const response = await context.helpers.httpRequest({
+					method: 'POST',
+					url: `${baseUrl}/v1/videos`,
+					headers: {
+						'Authorization': `Bearer ${credentials.apiKey}`,
+						'Content-Type': 'application/json',
+					},
+					body: JSON.stringify(requestBody),
+					json: true,
+					timeout: timeout,
+				}) as SoraResponse;
+
+				if (!response.id) {
+					throw new MediaGenError('No video ID returned from API', 'API_ERROR');
+				}
+
+				return response.id;
+			},
+			{ maxRetries }
+		);
+
+		context.logger?.info('[Sora] Generation submitted', { videoId, model, duration });
+
+		// Poll for completion
+		const status = await AIMediaGen.pollSoraStatus(
+			context,
+			credentials,
+			videoId,
+			duration,
+			context.logger
+		);
+
+		context.logger?.info('[Sora] Generation completed', { videoId, progress: status.progress });
+
+		// Get download URL
+		const videoUrl = `${baseUrl}/v1/videos/${videoId}/content`;
+
+		// Return based on output mode
+		if (outputMode === 'binary') {
+			// Download video
+			try {
+				const videoBuffer = await context.helpers.httpRequest({
+					method: 'GET',
+					url: videoUrl,
+					encoding: 'arraybuffer',
+					timeout: 120000,
+				}) as Buffer;
+
+				const fileSizeMB = videoBuffer.byteLength / (1024 * 1024);
+				const base64 = videoBuffer.toString('base64');
+
+				context.logger?.info('[Sora] Video downloaded', {
+					fileSize: `${fileSizeMB.toFixed(2)}MB`,
+					bytes: videoBuffer.byteLength,
+				});
+
+				return {
+					json: {
+						success: true,
+						videoUrl,
+						videoId,
+						model,
+						_metadata: {
+							timestamp: new Date().toISOString(),
+							fileSize: `${fileSizeMB.toFixed(2)}MB`,
+							expiryWarning: 'Original download URL expires in 1 hour',
+						},
+					},
+					binary: {
+						data: {
+							data: base64,
+							mimeType: 'video/mp4',
+							fileName: `sora-${videoId}-${Date.now()}.mp4`,
+						},
+					},
+				};
+			} catch (error) {
+				context.logger?.warn('[Sora] Download failed, returning URL only', {
+					error: error instanceof Error ? error.message : String(error),
+				});
+
+				// Fall back to URL mode
+				return {
+					json: {
+						success: true,
+						videoUrl,
+						videoId,
+						model,
+						_metadata: {
+							timestamp: new Date().toISOString(),
+							downloadFailed: true,
+							expiryWarning: 'Download URL expires in 1 hour',
+						},
+					},
+				};
+			}
+		} else {
+			// URL mode
+			return {
+				json: {
+					success: true,
+					videoUrl,
+					videoId,
+					model,
+					_metadata: {
+						timestamp: new Date().toISOString(),
+						expiryTime: new Date(Date.now() + 3600000).toISOString(),
+						expiryWarning: 'Download URL expires in 1 hour. Please download promptly.',
+					},
+				},
+			};
+		}
+	}
+
+	/**
+	 * Polls Sora video generation status
+	 *
+	 * @param context - n8n execution context
+	 * @param credentials - OpenAI API credentials
+	 * @param videoId - Video ID to poll
+	 * @param duration - Video duration (for timeout calculation)
+	 * @param logger - Optional logger
+	 * @returns Promise resolving to final status
+	 */
+	private static async pollSoraStatus(
+		context: IExecuteFunctions,
+		credentials: OpenAiApiCredentials,
+		videoId: string,
+		duration: string,
+		logger?: IExecuteFunctions['logger']
+	): Promise<SoraResponse> {
+		// Calculate timeout based on video duration
+		const timeouts: Record<string, number> = {
+			'5': 180000,   // 3 minutes
+			'10': 300000,  // 5 minutes
+			'15': 420000,  // 7 minutes
+			'20': 600000,  // 10 minutes
+		};
+
+		const timeoutMs = timeouts[duration] || 180000;
+		const startTime = Date.now();
+
+		// Dynamic polling interval
+		let pollInterval = 5000;  // Start with 5 seconds
+		let pollCount = 0;
+		const maxPolls = 120;
+
+		while (Date.now() - startTime < timeoutMs && pollCount < maxPolls) {
+			pollCount++;
+			const elapsed = Date.now() - startTime;
+
+			// Adjust polling interval over time
+			if (elapsed > 120000) {
+				pollInterval = 15000;  // 15 seconds after 2 minutes
+			} else if (elapsed > 30000) {
+				pollInterval = 10000;  // 10 seconds after 30 seconds
+			}
+
+			// Wait before polling (except first time)
+			if (pollCount > 1) {
+				await sleep(pollInterval);
+			}
+
+			// Query status
+			const baseUrl = credentials.baseUrl || 'https://api.openai.com';
+			const status = await context.helpers.httpRequest({
+				method: 'GET',
+				url: `${baseUrl}/v1/videos/${videoId}`,
+				headers: {
+					'Authorization': `Bearer ${credentials.apiKey}`,
+				},
+				json: true,
+				timeout: 10000,
+			}) as SoraResponse;
+
+			// Log progress
+			logger?.info(`[Sora] Progress: ${status.progress}% (${status.status})`, {
+				videoId,
+				elapsed: `${Math.floor(elapsed / 1000)}s`,
+				pollCount,
+			});
+
+			// Handle status
+			switch (status.status) {
+				case 'completed':
+					return status;
+
+				case 'failed':
+					throw new MediaGenError(
+						status.error_message || 'Video generation failed',
+						'VIDEO_GENERATION_FAILED',
+						{ videoId, progress: status.progress }
+					);
+
+				case 'in_progress':
+				case 'queued':
+					continue;
+
+				default:
+					throw new MediaGenError(`Unknown status: ${status.status}`, 'API_ERROR');
+			}
+		}
+
+		throw new MediaGenError(
+			`Video generation timeout after ${Math.floor((Date.now() - startTime) / 1000)}s`,
+			'TIMEOUT',
+			{ videoId, pollCount }
+		);
 	}
 }

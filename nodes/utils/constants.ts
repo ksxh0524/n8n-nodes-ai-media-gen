@@ -127,3 +127,22 @@ export const VALIDATION = {
 	URL_PATTERN: /^https?:\/\/.+/i,
 	BASE64_PATTERN: /^data:image\/[a-z]+;base64,/i,
 } as const;
+
+/**
+ * Sora video generation constants
+ */
+export const SORA = {
+	// Async polling configuration (in milliseconds)
+	POLL_INTERVAL_SHORT_MS: 5000,
+	POLL_INTERVAL_NORMAL_MS: 10000,
+	POLL_INTERVAL_LONG_MS: 15000,
+	TIMEOUT_5S_MS: 180000,
+	TIMEOUT_10S_MS: 300000,
+	TIMEOUT_15S_MS: 420000,
+	TIMEOUT_20S_MS: 600000,
+	MAX_POLL_ATTEMPTS: 120,
+
+	// Video size limits (in MB)
+	MAX_SIZE_BINARY_MB: 200,
+	MAX_SIZE_DOWNLOAD_MB: 500,
+} as const;
