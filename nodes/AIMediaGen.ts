@@ -745,7 +745,7 @@ export class AIMediaGen implements INodeType {
 		},
 		// Sora - Input Image
 		{
-			displayName: 'Input Image (Optional)',
+			displayName: 'Input Image',
 			name: 'soraInputImage',
 			type: 'string',
 			displayOptions: {
@@ -754,7 +754,7 @@ export class AIMediaGen implements INodeType {
 				},
 			},
 			default: '',
-			description: 'Optional: Reference image for image-to-video. Supports: URL, base64, or binary property name',
+			description: 'Reference image for image-to-video. Supports: URL, base64, or binary property name',
 		},
 		// Sora - Output Mode
 		{
@@ -2790,11 +2790,15 @@ export class AIMediaGen implements INodeType {
 
 		// Get input image (image-to-video)
 		let inputImage: string | undefined;
+		let originalInputImageUrl: string | undefined;
+		let inputImageBinary: { data: string; mimeType: string } | undefined;
+
 		try {
 			let imageData = context.getNodeParameter('soraInputImage', itemIndex) as string;
 
 			if (imageData && imageData.trim()) {
 				imageData = imageData.trim();
+				originalInputImageUrl = imageData;
 
 				// Check if it's a binary property name (not a URL or base64)
 				if (!imageData.startsWith('http') && !imageData.startsWith('data:')) {
@@ -2804,7 +2808,11 @@ export class AIMediaGen implements INodeType {
 					if (binaryData && binaryData[imageData]) {
 						const binary = binaryData[imageData] as { data: string; mimeType: string };
 						if (binary && binary.data) {
-							imageData = `data:${binary.mimeType || 'image/jpeg'};base64,${binary.data}`;
+							inputImageBinary = {
+								data: binary.data,
+								mimeType: binary.mimeType || 'image/jpeg',
+							};
+							imageData = `data:${inputImageBinary.mimeType};base64,${binary.data}`;
 						}
 					}
 				}
@@ -2894,6 +2902,29 @@ export class AIMediaGen implements INodeType {
 			throw new MediaGenError('No video URL returned from API', 'API_ERROR');
 		}
 
+		// Prepare response data with input image
+		const responseData: {
+			success: boolean;
+			videoUrl: string;
+			taskId: string;
+			model: string;
+			inputImageUrl?: string;
+			_metadata: Record<string, unknown>;
+		} = {
+			success: true,
+			videoUrl,
+			taskId,
+			model,
+			_metadata: {
+				timestamp: new Date().toISOString(),
+			},
+		};
+
+		// Add input image data if present
+		if (originalInputImageUrl) {
+			responseData.inputImageUrl = originalInputImageUrl;
+		}
+
 		// Return based on output mode
 		if (outputMode === 'binary') {
 			// Download video
@@ -2913,24 +2944,28 @@ export class AIMediaGen implements INodeType {
 					bytes: videoBuffer.byteLength,
 				});
 
+				responseData._metadata.fileSize = `${fileSizeMB.toFixed(2)}MB`;
+
+				const binaryData: Record<string, { data: string; mimeType: string; fileName: string }> = {
+					data: {
+						data: base64,
+						mimeType: 'video/mp4',
+						fileName: `sora-${taskId}-${Date.now()}.mp4`,
+					},
+				};
+
+				// Add input image binary if present
+				if (inputImageBinary) {
+					binaryData.inputImage = {
+						data: inputImageBinary.data,
+						mimeType: inputImageBinary.mimeType,
+						fileName: `input-image-${Date.now()}.${inputImageBinary.mimeType.split('/')[1] || 'jpg'}`,
+					};
+				}
+
 				return {
-					json: {
-						success: true,
-						videoUrl,
-						taskId,
-						model,
-						_metadata: {
-							timestamp: new Date().toISOString(),
-							fileSize: `${fileSizeMB.toFixed(2)}MB`,
-						},
-					},
-					binary: {
-						data: {
-							data: base64,
-							mimeType: 'video/mp4',
-							fileName: `sora-${taskId}-${Date.now()}.mp4`,
-						},
-					},
+					json: responseData,
+					binary: binaryData,
 				};
 			} catch (error) {
 				context.logger?.warn('[Sora] Download failed, returning URL only', {
@@ -2938,31 +2973,15 @@ export class AIMediaGen implements INodeType {
 				});
 
 				// Fall back to URL mode
+				responseData._metadata.downloadFailed = true;
 				return {
-					json: {
-						success: true,
-						videoUrl,
-						taskId,
-						model,
-						_metadata: {
-							timestamp: new Date().toISOString(),
-							downloadFailed: true,
-						},
-					},
+					json: responseData,
 				};
 			}
 		} else {
 			// URL mode
 			return {
-				json: {
-					success: true,
-					videoUrl,
-					taskId,
-					model,
-					_metadata: {
-						timestamp: new Date().toISOString(),
-					},
-				},
+				json: responseData,
 			};
 		}
 	}
