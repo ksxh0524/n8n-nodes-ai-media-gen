@@ -113,15 +113,29 @@ interface SoraRequest {
 }
 
 /**
- * Sora API response
+ * Sora submit response
  */
-interface SoraResponse {
-	id: string;
-	status: 'queued' | 'in_progress' | 'completed' | 'failed';
-	progress: number;
-	model: string;
-	error_message?: string;
-	error_details?: unknown;
+interface SoraSubmitResponse {
+	task_id: string;
+}
+
+/**
+ * Sora task status response
+ */
+interface SoraTaskResponse {
+	task_id: string;
+	platform: string;
+	action: string;
+	status: 'NOT_START' | 'IN_PROGRESS' | 'SUCCESS' | 'FAILURE';
+	fail_reason: string;
+	submit_time: number;
+	start_time: number;
+	finish_time: number;
+	progress: string;
+	data: {
+		output?: string;
+	} | null;
+	search_item: string;
 }
 
 /**
@@ -665,11 +679,11 @@ export class AIMediaGen implements INodeType {
 				},
 			},
 			options: [
-				{ name: '16:9 (Landscape)', value: '16:9' },
-				{ name: '3:2 (Landscape)', value: '3:2' },
-				{ name: '1:1 (Square)', value: '1:1' },
-				{ name: '9:16 (Portrait)', value: '9:16' },
-				{ name: '2:3 (Portrait)', value: '2:3' },
+				{ name: '16:9', value: '16:9' },
+				{ name: '3:2', value: '3:2' },
+				{ name: '1:1', value: '1:1' },
+				{ name: '9:16', value: '9:16' },
+				{ name: '2:3', value: '2:3' },
 			],
 			default: '16:9',
 			description: 'Video aspect ratio',
@@ -2838,7 +2852,7 @@ export class AIMediaGen implements INodeType {
 		const baseUrl = credentials.baseUrl || 'https://api.openai.com';
 
 		// Submit request
-		const videoId = await withRetry(
+		const taskId = await withRetry(
 			async () => {
 				const response = await context.helpers.httpRequest({
 					method: 'POST',
@@ -2850,32 +2864,35 @@ export class AIMediaGen implements INodeType {
 					body: JSON.stringify(requestBody),
 					json: true,
 					timeout: timeout,
-				}) as SoraResponse;
+				}) as SoraSubmitResponse;
 
-				if (!response.id) {
-					throw new MediaGenError('No video ID returned from API', 'API_ERROR');
+				if (!response.task_id) {
+					throw new MediaGenError('No task_id returned from API', 'API_ERROR');
 				}
 
-				return response.id;
+				return response.task_id;
 			},
 			{ maxRetries }
 		);
 
-		context.logger?.info('[Sora] Generation submitted', { videoId, model, duration });
+		context.logger?.info('[Sora] Generation submitted', { taskId, model, duration });
 
 		// Poll for completion
 		const status = await AIMediaGen.pollSoraStatus(
 			context,
 			credentials,
-			videoId,
+			taskId,
 			duration,
 			context.logger
 		);
 
-		context.logger?.info('[Sora] Generation completed', { videoId, progress: status.progress });
+		context.logger?.info('[Sora] Generation completed', { taskId, progress: status.progress });
 
-		// Get download URL
-		const videoUrl = `${baseUrl}/v1/videos/${videoId}/content`;
+		// Get video URL from response
+		const videoUrl = status.data?.output;
+		if (!videoUrl) {
+			throw new MediaGenError('No video URL returned from API', 'API_ERROR');
+		}
 
 		// Return based on output mode
 		if (outputMode === 'binary') {
@@ -2900,19 +2917,18 @@ export class AIMediaGen implements INodeType {
 					json: {
 						success: true,
 						videoUrl,
-						videoId,
+						taskId,
 						model,
 						_metadata: {
 							timestamp: new Date().toISOString(),
 							fileSize: `${fileSizeMB.toFixed(2)}MB`,
-							expiryWarning: 'Original download URL expires in 1 hour',
 						},
 					},
 					binary: {
 						data: {
 							data: base64,
 							mimeType: 'video/mp4',
-							fileName: `sora-${videoId}-${Date.now()}.mp4`,
+							fileName: `sora-${taskId}-${Date.now()}.mp4`,
 						},
 					},
 				};
@@ -2926,12 +2942,11 @@ export class AIMediaGen implements INodeType {
 					json: {
 						success: true,
 						videoUrl,
-						videoId,
+						taskId,
 						model,
 						_metadata: {
 							timestamp: new Date().toISOString(),
 							downloadFailed: true,
-							expiryWarning: 'Download URL expires in 1 hour',
 						},
 					},
 				};
@@ -2942,12 +2957,10 @@ export class AIMediaGen implements INodeType {
 				json: {
 					success: true,
 					videoUrl,
-					videoId,
+					taskId,
 					model,
 					_metadata: {
 						timestamp: new Date().toISOString(),
-						expiryTime: new Date(Date.now() + 3600000).toISOString(),
-						expiryWarning: 'Download URL expires in 1 hour. Please download promptly.',
 					},
 				},
 			};
@@ -2959,7 +2972,7 @@ export class AIMediaGen implements INodeType {
 	 *
 	 * @param context - n8n execution context
 	 * @param credentials - OpenAI API credentials
-	 * @param videoId - Video ID to poll
+	 * @param taskId - Task ID to poll
 	 * @param duration - Video duration (for timeout calculation)
 	 * @param logger - Optional logger
 	 * @returns Promise resolving to final status
@@ -2967,10 +2980,10 @@ export class AIMediaGen implements INodeType {
 	private static async pollSoraStatus(
 		context: IExecuteFunctions,
 		credentials: OpenAiApiCredentials,
-		videoId: string,
+		taskId: string,
 		duration: string,
 		logger?: IExecuteFunctions['logger']
-	): Promise<SoraResponse> {
+	): Promise<SoraTaskResponse> {
 		// Calculate timeout based on video duration
 		const timeouts: Record<string, number> = {
 			'5': 180000,   // 3 minutes
@@ -3008,35 +3021,35 @@ export class AIMediaGen implements INodeType {
 			const baseUrl = credentials.baseUrl || 'https://api.openai.com';
 			const status = await context.helpers.httpRequest({
 				method: 'GET',
-				url: `${baseUrl}/v1/videos/${videoId}`,
+				url: `${baseUrl}/v2/videos/generations/${taskId}`,
 				headers: {
 					'Authorization': `Bearer ${credentials.apiKey}`,
 				},
 				json: true,
 				timeout: 10000,
-			}) as SoraResponse;
+			}) as SoraTaskResponse;
 
 			// Log progress
-			logger?.info(`[Sora] Progress: ${status.progress}% (${status.status})`, {
-				videoId,
+			logger?.info(`[Sora] Progress: ${status.progress} (${status.status})`, {
+				taskId,
 				elapsed: `${Math.floor(elapsed / 1000)}s`,
 				pollCount,
 			});
 
 			// Handle status
 			switch (status.status) {
-				case 'completed':
+				case 'SUCCESS':
 					return status;
 
-				case 'failed':
+				case 'FAILURE':
 					throw new MediaGenError(
-						status.error_message || 'Video generation failed',
+						status.fail_reason || 'Video generation failed',
 						'VIDEO_GENERATION_FAILED',
-						{ videoId, progress: status.progress }
+						{ taskId, progress: status.progress }
 					);
 
-				case 'in_progress':
-				case 'queued':
+				case 'IN_PROGRESS':
+				case 'NOT_START':
 					continue;
 
 				default:
@@ -3047,7 +3060,7 @@ export class AIMediaGen implements INodeType {
 		throw new MediaGenError(
 			`Video generation timeout after ${Math.floor((Date.now() - startTime) / 1000)}s`,
 			'TIMEOUT',
-			{ videoId, pollCount }
+			{ taskId, pollCount }
 		);
 	}
 }
