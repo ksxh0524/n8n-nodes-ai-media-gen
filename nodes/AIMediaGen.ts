@@ -2057,7 +2057,7 @@ export class AIMediaGen implements INodeType {
 			}
 
 			switch (data.task_status) {
-				case 'SUCCEED':
+				case 'SUCCEED': {
 					logger?.info('[AI Media Gen] Task succeeded', { taskId, pollCount, elapsed });
 
 					// Log full response for debugging
@@ -2116,6 +2116,7 @@ export class AIMediaGen implements INodeType {
 					});
 
 					throw new MediaGenError('Task succeeded but no image URL returned. Check logs for full response.', 'API_ERROR', { taskId, response: data });
+				}
 				case 'FAILED':
 					throw new MediaGenError(data.message || 'Task failed', 'API_ERROR', { taskId, message: data.message });
 				case 'PENDING':
@@ -3366,11 +3367,15 @@ export class AIMediaGen implements INodeType {
 
 		try {
 			aspectRatio = context.getNodeParameter('veoAspectRatio', itemIndex) as string;
-		} catch {}
+		} catch {
+			// Parameter not available, use default
+		}
 
 		try {
 			enableUpsample = context.getNodeParameter('veoEnableUpsample', itemIndex) as boolean;
-		} catch {}
+		} catch {
+			// Parameter not available, use default
+		}
 
 		// Handle input images for image-to-video mode
 		let images: string[] | undefined;
@@ -3425,12 +3430,16 @@ export class AIMediaGen implements INodeType {
 		let timeout = 300000; // 5 minutes default
 		try {
 			timeout = context.getNodeParameter('options.timeout', itemIndex) as number;
-		} catch {}
+		} catch {
+			// Use default timeout
+		}
 
 		let maxRetries = 3;
 		try {
 			maxRetries = context.getNodeParameter('options.maxRetries', itemIndex) as number;
-		} catch {}
+		} catch {
+			// Use default max retries
+		}
 
 		// Build request
 		const requestBody: VeoRequest = {
