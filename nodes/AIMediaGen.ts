@@ -729,35 +729,18 @@ export class AIMediaGen implements INodeType {
 			},
 			description: 'Generate in HD quality (Sora 2 Pro only)',
 		},
-		// Sora - Input Images
+		// Sora - Input Image
 		{
-			displayName: 'Input Images (Optional)',
-			name: 'soraInputImages',
-			type: 'fixedCollection',
-			typeOptions: {
-				multipleValues: true,
-			},
+			displayName: 'Input Image (Optional)',
+			name: 'soraInputImage',
+			type: 'string',
 			displayOptions: {
 				show: {
 					operation: ['sora'],
 				},
 			},
-			default: {},
-			description: 'Optional: Reference images for image-to-video (max 4). Supports: URL, base64, or binary property name',
-			options: [
-				{
-					displayName: 'Image',
-					name: 'image',
-					values: [
-						{
-							displayName: 'Image',
-							name: 'url',
-							type: 'string',
-							default: '',
-						},
-					],
-				},
-			],
+			default: '',
+			description: 'Optional: Reference image for image-to-video. Supports: URL, base64, or binary property name',
 		},
 		// Sora - Output Mode
 		{
@@ -2791,39 +2774,31 @@ export class AIMediaGen implements INodeType {
 			// HD only for sora-2-pro
 		}
 
-		// Get input images (image-to-video)
-		const images: string[] = [];
+		// Get input image (image-to-video)
+		let inputImage: string | undefined;
 		try {
-			const imagesData = context.getNodeParameter('soraInputImages', itemIndex) as {
-				image?: Array<{ url: string }>;
-			};
+			let imageData = context.getNodeParameter('soraInputImage', itemIndex) as string;
 
-			if (imagesData.image && imagesData.image.length > 0) {
-				const items = context.getInputData();
-				const binaryData = items[itemIndex].binary;
+			if (imageData && imageData.trim()) {
+				imageData = imageData.trim();
 
-				for (const img of imagesData.image) {
-					if (!img.url || !img.url.trim()) {
-						continue;
-					}
+				// Check if it's a binary property name (not a URL or base64)
+				if (!imageData.startsWith('http') && !imageData.startsWith('data:')) {
+					const items = context.getInputData();
+					const binaryData = items[itemIndex].binary;
 
-					let imageData = img.url.trim();
-
-					// Check if it's a binary property name (not a URL or base64)
-					if (!imageData.startsWith('http') && !imageData.startsWith('data:')) {
-						if (binaryData && binaryData[imageData]) {
-							const binary = binaryData[imageData] as { data: string; mimeType: string };
-							if (binary && binary.data) {
-								imageData = `data:${binary.mimeType || 'image/jpeg'};base64,${binary.data}`;
-							}
+					if (binaryData && binaryData[imageData]) {
+						const binary = binaryData[imageData] as { data: string; mimeType: string };
+						if (binary && binary.data) {
+							imageData = `data:${binary.mimeType || 'image/jpeg'};base64,${binary.data}`;
 						}
 					}
-
-					images.push(imageData);
 				}
+
+				inputImage = imageData;
 			}
 		} catch (error) {
-			// No input images (text-to-video)
+			// No input image (text-to-video)
 		}
 
 		// Validate prompt
@@ -2857,7 +2832,7 @@ export class AIMediaGen implements INodeType {
 			aspect_ratio: aspectRatio as '16:9' | '3:2' | '1:1' | '9:16' | '2:3',
 			duration: duration as '5' | '10' | '15' | '20' | '25',
 			hd: hd && model === 'sora-2-pro' ? true : undefined,
-			images: images.length > 0 ? images : undefined,
+			images: inputImage ? [inputImage] : undefined,
 		};
 
 		const baseUrl = credentials.baseUrl || 'https://api.openai.com';
