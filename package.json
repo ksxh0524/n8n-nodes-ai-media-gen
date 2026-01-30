@@ -47,8 +47,7 @@
       "nodes/credentials/doubaoApi.credentials.js"
     ],
     "nodes": [
-      "nodes/AIMediaGen.js",
-      "nodes/DoubaoGen.js"
+      "nodes/AIMediaGen.js"
     ]
   },
   "dependencies": {

@@ -4,9 +4,7 @@
  */
 
 import { AIMediaGen } from './AIMediaGen';
-import { DoubaoGen } from './DoubaoGen';
 
 export const nodeClasses = [
 	AIMediaGen,
-	DoubaoGen,
 ];
