@@ -2193,12 +2193,27 @@ export class AIMediaGen implements INodeType {
 					timeout: timeout,
 				}) as ModelScopeAsyncSubmitResponse;
 			} catch (error) {
+				// Log detailed error for debugging
+				logger?.error('[AI Media Gen] API request failed', {
+					error: error instanceof Error ? error.message : String(error),
+					errorString: String(error),
+					requestBody: JSON.stringify(requestBody),
+					url: url,
+				});
+
 				if (error instanceof Error) {
 					if (error.message.includes('timeout') || error.message.includes('ETIMEDOUT')) {
 						throw new MediaGenError('Request timeout', 'TIMEOUT');
 					}
 					if (error.message.includes('401')) {
 						throw new MediaGenError('Authentication failed. Please check your API Key.', 'INVALID_API_KEY');
+					}
+					if (error.message.includes('400')) {
+						// Try to extract more detailed error from response
+						throw new MediaGenError(
+							`Bad Request (400). Please check: model name (${model}), size (${parameters.size}), and API Key. Details: ${error.message}`,
+							'API_ERROR'
+						);
 					}
 					if (error.message.includes('429')) {
 						throw new MediaGenError('Rate limit exceeded. Please try again later.', 'RATE_LIMIT');
