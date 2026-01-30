@@ -147,3 +147,79 @@ export const SORA = {
 	MAX_SIZE_BINARY_MB: 200,
 	MAX_SIZE_DOWNLOAD_MB: 500,
 } as const;
+
+/**
+ * Image size options for 2K resolution
+ * Used by Doubao and other high-resolution image generation nodes
+ */
+export const SIZE_OPTIONS_2K = [
+	{ name: '1:1 (2048x2048)', value: '2048x2048' },
+	{ name: '4:3 (2304x1728)', value: '2304x1728' },
+	{ name: '3:4 (1728x2304)', value: '1728x2304' },
+	{ name: '16:9 (2560x1440)', value: '2560x1440' },
+	{ name: '9:16 (1440x2560)', value: '1440x2560' },
+	{ name: '3:2 (2496x1664)', value: '2496x1664' },
+	{ name: '2:3 (1664x2496)', value: '1664x2496' },
+	{ name: '21:9 (3024x1296)', value: '3024x1296' },
+];
+
+/**
+ * Image size options for 4K resolution
+ * Used by Doubao and other ultra-high-resolution image generation nodes
+ */
+export const SIZE_OPTIONS_4K = [
+	{ name: '1:1 (4096x4096)', value: '4096x4096' },
+	{ name: '4:3 (4608x3456)', value: '4608x3456' },
+	{ name: '3:4 (3456x4608)', value: '3456x4608' },
+	{ name: '16:9 (5120x2880)', value: '5120x2880' },
+	{ name: '9:16 (2880x5120)', value: '2880x5120' },
+	{ name: '3:2 (4992x3328)', value: '4992x3328' },
+	{ name: '2:3 (3328x4992)', value: '3328x4992' },
+	{ name: '21:9 (6048x2592)', value: '6048x2592' },
+];
+
+/**
+ * Video aspect ratios
+ * Common aspect ratios for video generation
+ */
+export const VIDEO_ASPECT_RATIOS = [
+	{ name: '16:9 (Landscape)', value: '16:9' },
+	{ name: '9:16 (Portrait)', value: '9:16' },
+	{ name: '1:1 (Square)', value: '1:1' },
+	{ name: '4:3', value: '4:3' },
+	{ name: '3:4', value: '3:4' },
+	{ name: '21:9 (Ultrawide)', value: '21:9' },
+	{ name: 'Adaptive (Auto)', value: 'adaptive' },
+];
+
+/**
+ * Video resolutions
+ * Standard video resolutions for video generation
+ */
+export const VIDEO_RESOLUTIONS = [
+	{ name: '480p', value: '480p' },
+	{ name: '720p', value: '720p' },
+	{ name: '1080p', value: '1080p' },
+];
+
+/**
+ * Seed range constants
+ */
+export const SEED = {
+	MIN: -1,          // Minimum seed (random)
+	MAX: 4294967295, // Maximum seed (2^32 - 1)
+	DEFAULT: -1,    // Default seed (random)
+};
+
+/**
+ * Default timeouts (in milliseconds)
+ * Standard timeout values for different operations
+ */
+export const DEFAULT_TIMEOUTS = {
+	IMAGE_GENERATION: 60000,      // 1 minute
+	VIDEO_GENERATION: 600000,     // 10 minutes
+	POLL_REQUEST: 10000,          // 10 seconds
+	IMAGE_DOWNLOAD: 30000,        // 30 seconds
+	VIDEO_DOWNLOAD: 120000,       // 2 minutes
+	AUDIO_DOWNLOAD: 60000,        // 1 minute
+} as const;

@@ -147,3 +147,30 @@ export async function withRetry<T>(
 
 	throw lastError;
 }
+
+/**
+ * Checks if an error is a timeout error
+ *
+ * @param error - Error to check
+ * @returns true if the error is a timeout error
+ */
+export function isTimeoutError(error: Error): boolean {
+	return error.message.includes('timeout') || error.message.includes('ETIMEDOUT');
+}
+
+/**
+ * Handles API errors and converts them to MediaGenError
+ *
+ * @param error - Unknown error from API call
+ * @param context - Description of where the error occurred
+ * @throws MediaGenError with appropriate code
+ */
+export function handleApiError(error: unknown, context: string): never {
+	if (error instanceof Error) {
+		if (isTimeoutError(error)) {
+			throw new MediaGenError(`${context} timeout`, 'TIMEOUT');
+		}
+		throw new MediaGenError(error.message, 'API_ERROR');
+	}
+	throw new MediaGenError(`${context} failed: ${String(error)}`, 'API_ERROR');
+}

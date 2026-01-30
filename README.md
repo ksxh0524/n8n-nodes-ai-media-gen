@@ -22,7 +22,7 @@
 
 ### Key Advantages
 
-- ✅ **Multi-Platform Support**: Integrates ModelScope, Nano Banana, and Doubao AI platforms
+- ✅ **Multi-Platform Support**: Integrates ModelScope, Nano Banana, Sora, Doubao AI platforms
 - ✅ **Production-Ready**: Comprehensive error handling, logging, and performance monitoring
 - ✅ **Easy to Use**: Intuitive configuration interface, no programming required
 - ✅ **Highly Configurable**: Supports custom parameters, timeouts, retries, and more
@@ -86,7 +86,43 @@
 
 ---
 
-### 3. Doubao
+### 3. Sora (OpenAI Video Generation)
+
+[Sora](https://openai.com/sora) is OpenAI's advanced text-to-video generation model, capable of creating high-quality videos from text descriptions.
+
+> ⚠️ **Important Note**: Sora API access requires registration through a third-party API service provider.
+
+#### Why Choose Sora?
+
+- 🎬 **Professional Video Quality**: Generate high-resolution videos up to 1080p
+- ⏱️ **Flexible Duration**: Support for 5s, 10s, 15s, 20s, and 25s videos
+- 🎨 **Advanced AI**: Based on OpenAI's cutting-edge video generation technology
+- 🖼️ **Image-to-Video**: Generate videos from reference images
+- 🎵 **Audio Generation**: Optional synchronized audio generation
+
+#### Register Account
+
+👉 **Sign Up**: [https://ai.comfly.chat/register?aff=296d6933380](https://ai.comfly.chat/register?aff=296d6933380)
+
+#### Supported Features
+
+| Feature | Options | Description |
+|---------|---------|-------------|
+| **Duration** | 5s, 10s, 15s, 20s, 25s | Video length in seconds |
+| **Resolution** | 480p, 720p, 1080p | Output video resolution |
+| **Aspect Ratio** | 16:9, 9:16, 1:1, etc. | Multiple aspect ratios supported |
+| **Mode** | Text-to-Video, Image-to-Video | Generation mode |
+
+#### Get API Key
+
+1. Visit [Registration Page](https://ai.comfly.chat/register?aff=296d6933380)
+2. Complete registration and top up
+3. Get API Key from console
+4. Configure OpenAI API credentials in n8n
+
+---
+
+### 4. Doubao
 
 [Doubao](https://www.volcengine.com/product/238) is an AI image generation model by ByteDance, providing high-quality image generation and editing capabilities.
 
@@ -346,6 +382,78 @@ Size: 16:9 (5120x2880)
 Prompt: A majestic mountain landscape at golden hour
 Seed: -1
 ```
+
+---
+
+### 🎬 Sora Usage Guide
+
+#### Step 1: Register and Get API Key
+
+1. Visit registration page: https://ai.comfly.chat/register?aff=296d6933380
+2. Complete registration and top up
+3. Get API Key from console
+
+#### Step 2: Configure Credentials
+
+1. Select **Sora** operation in node
+2. Click **Credentials** → **Create New Credential**
+3. Select **OpenAI API**
+4. Fill credential info:
+   - **Name**: Credential name (e.g., "Sora API")
+   - **API Key**: API Key from ai.comfly.chat
+   - **Base URL**: Leave empty or fill `https://api.openai.com/v1`
+
+#### Step 3: Select Mode
+
+- **Text to Video**: Generate videos from text description
+- **Image to Video**: Generate videos based on reference images
+
+#### Step 4: Configure Parameters
+
+##### Text-to-Video Mode
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| **Prompt** | Text | ✅ | Video description |
+| **Duration** | Options | ✅ | 5s, 10s, 15s, 20s, or 25s |
+| **Resolution** | Options | ✅ | 480p, 720p, or 1080p |
+| **Aspect Ratio** | Options | ✅ | 16:9, 9:16, 1:1, etc. |
+| **Seed** | Number | ❎ | Random seed (-1=random) |
+
+##### Image-to-Video Mode
+
+Additional parameters:
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| **First Frame Image** | String | ✅ | First frame URL or Base64 |
+| **Last Frame Image** | String | ❎ | Optional last frame |
+
+#### Example 1: Generate 10s Video
+
+```
+Mode: Text to Video
+Prompt: A serene beach at sunset with gentle waves
+Duration: 10s
+Resolution: 1080p
+Aspect Ratio: 16:9
+Seed: -1
+```
+
+#### Example 2: Image-to-Video
+
+```
+Mode: Image to Video
+Prompt: Animate this scene with gentle camera movement
+Duration: 5s
+Resolution: 720p
+Aspect Ratio: 9:16
+First Frame Image: https://example.com/image.jpg
+```
+
+#### Output Mode Options
+
+- **URL Only**: Return video URL only (recommended)
+- **Binary Data**: Download and include video file in output
 
 ---
 
@@ -665,6 +773,7 @@ This project is licensed under the MIT License - see [LICENSE](LICENSE) file for
 
 - **ModelScope**: [https://modelscope.cn/docs](https://modelscope.cn/docs)
 - **Nano Banana**: [https://ai.comfly.chat](https://ai.comfly.chat/register?aff=296d6933380)
+- **Sora**: [https://ai.comfly.chat/register?aff=296d6933380](https://ai.comfly.chat/register?aff=296d6933380)
 - **Doubao**: [https://www.volcengine.com/docs/82379](https://www.volcengine.com/docs/82379)
 
 ---

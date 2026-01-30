@@ -5,7 +5,21 @@ import {
 	IExecuteFunctions,
 	NodeOperationError,
 } from 'n8n-workflow';
-import { MediaGenError } from './utils/errors';
+import {
+	MediaGenError,
+	makeHttpRequest,
+	pollTask,
+	validatePrompt,
+	getTimeoutOrDefault,
+	createBinaryDataFromUrl,
+	generateFileName,
+	SIZE_OPTIONS_2K,
+	SIZE_OPTIONS_4K,
+	VIDEO_RESOLUTIONS,
+	VIDEO_ASPECT_RATIOS,
+	DEFAULT_TIMEOUTS,
+	SEED,
+} from './utils';
 
 /**
  * Doubao API credentials
@@ -33,28 +47,77 @@ interface SeedreamResponse {
 }
 
 /**
- * Doubao Image Generation Node
+ * Seedance video task submission response
+ */
+interface SeedanceSubmitResponse {
+	id: string;
+}
+
+/**
+ * Seedance video task status response
+ */
+interface SeedanceTaskResponse {
+	id: string;
+	model: string;
+	status: 'queued' | 'running' | 'cancelled' | 'succeeded' | 'failed' | 'expired';
+	content?: {
+		video_url?: string;
+		last_frame_url?: string;
+	};
+	error?: {
+		code: string;
+		message: string;
+	};
+	usage?: {
+		completion_tokens: number;
+		total_tokens: number;
+	};
+	created_at: number;
+	updated_at: number;
+}
+
+/**
+ * Content item for video generation
+ */
+interface SeedanceContentItem {
+	type: 'text' | 'image_url' | 'draft_task';
+	text?: string;
+	image_url?: {
+		url: string;
+	};
+	role?: 'first_frame' | 'last_frame' | 'reference_image';
+	draft_task?: {
+		id: string;
+	};
+}
+
+/**
+ * Doubao Media Generation Node
  *
- * Generates and edits images using Doubao Seedream AI model
+ * Generates images and videos using Doubao Seedream/Seedance AI models
  * through Volcengine API.
  *
  * Features:
  * - Text-to-image generation
  * - Image-to-image editing
+ * - Text-to-video generation
+ * - Image-to-video with first/last frames
+ * - Image-to-video with reference images
  * - Multiple aspect ratios
  * - High resolution support
+ * - Audio generation for videos (Seedance 1.5 Pro)
  */
 export class DoubaoGen implements INodeType {
 	description: INodeTypeDescription = {
-		displayName: 'Doubao Image Generation',
+		displayName: 'Doubao Media Generation',
 		name: 'doubaoGen',
 		icon: 'file:ai-media-gen.svg',
-		description: 'Generate and edit images using Doubao Seedream AI model',
+		description: 'Generate images and videos using Doubao AI models',
 		version: 1.0,
 		group: ['transform'],
 		subtitle: '={{$parameter.mode}}',
 		defaults: {
-			name: 'Doubao Image Generation',
+			name: 'Doubao Media Generation',
 		},
 		inputs: ['main'],
 		outputs: ['main'],
@@ -81,6 +144,11 @@ export class DoubaoGen implements INodeType {
 						name: 'Image to Image',
 						value: 'image-to-image',
 						description: 'Edit images with text instructions',
+					},
+					{
+						name: 'Video Generation',
+						value: 'video-generation',
+						description: 'Generate videos using Seedance models',
 					},
 				],
 				default: 'text-to-image',
@@ -177,16 +245,7 @@ export class DoubaoGen implements INodeType {
 			name: 'size2K',
 			type: 'options',
 			default: '2048x2048',
-			options: [
-				{ name: '1:1 (2048x2048)', value: '2048x2048' },
-				{ name: '4:3 (2304x1728)', value: '2304x1728' },
-				{ name: '3:4 (1728x2304)', value: '1728x2304' },
-				{ name: '16:9 (2560x1440)', value: '2560x1440' },
-				{ name: '9:16 (1440x2560)', value: '1440x2560' },
-				{ name: '3:2 (2496x1664)', value: '2496x1664' },
-				{ name: '2:3 (1664x2496)', value: '1664x2496' },
-				{ name: '21:9 (3024x1296)', value: '3024x1296' },
-			],
+			options: SIZE_OPTIONS_2K,
 			description: 'Image size and aspect ratio (2K)',
 			displayOptions: {
 				show: {
@@ -199,16 +258,7 @@ export class DoubaoGen implements INodeType {
 			name: 'size4K',
 			type: 'options',
 			default: '4096x4096',
-			options: [
-				{ name: '1:1 (4096x4096)', value: '4096x4096' },
-				{ name: '4:3 (4608x3456)', value: '4608x3456' },
-				{ name: '3:4 (3456x4608)', value: '3456x4608' },
-				{ name: '16:9 (5120x2880)', value: '5120x2880' },
-				{ name: '9:16 (2880x5120)', value: '2880x5120' },
-				{ name: '3:2 (4992x3328)', value: '4992x3328' },
-				{ name: '2:3 (3328x4992)', value: '3328x4992' },
-				{ name: '21:9 (6048x2592)', value: '6048x2592' },
-			],
+			options: SIZE_OPTIONS_4K,
 			description: 'Image size and aspect ratio (4K)',
 			displayOptions: {
 				show: {
@@ -220,10 +270,10 @@ export class DoubaoGen implements INodeType {
 				displayName: 'Seed',
 				name: 'seed',
 				type: 'number',
-				default: -1,
+				default: SEED.DEFAULT,
 				typeOptions: {
-					minValue: -1,
-					maxValue: 4294967295,
+					minValue: SEED.MIN,
+					maxValue: SEED.MAX,
 				},
 				description: 'Random seed for generation (-1 for random)',
 			},
@@ -246,6 +296,260 @@ export class DoubaoGen implements INodeType {
 						description: 'Request timeout in milliseconds (default: 60 seconds)',
 					},
 				],
+			},
+			// ========== Video Generation Parameters ==========
+			{
+				displayName: 'Video Model',
+				name: 'videoModel',
+				type: 'options',
+				displayOptions: {
+					show: {
+						mode: ['video-generation'],
+					},
+				},
+				options: [
+					{
+						name: 'Seedance 1.5 Pro (Latest)',
+						value: 'doubao-seedance-1-5-pro-251215',
+						description: 'Best quality, supports audio generation',
+					},
+					{
+						name: 'Seedance 1.0 Pro',
+						value: 'doubao-seedance-1-0-pro-250528',
+						description: 'High quality video generation',
+					},
+					{
+						name: 'Seedance 1.0 Pro Fast',
+						value: 'doubao-seedance-1-0-pro-fast-251015',
+						description: 'Faster generation, lower cost',
+					},
+					{
+						name: 'Seedance 1.0 Lite T2V',
+						value: 'doubao-seedance-1-0-lite-t2v-250428',
+						description: 'Text-to-video only, cost-effective',
+					},
+					{
+						name: 'Seedance 1.0 Lite I2V',
+						value: 'doubao-seedance-1-0-lite-i2v-250428',
+						description: 'Image-to-video with reference support',
+					},
+				],
+				default: 'doubao-seedance-1-5-pro-251215',
+				description: 'Select video generation model',
+				required: true,
+			},
+			{
+				displayName: 'Video Mode',
+				name: 'videoMode',
+				type: 'options',
+				displayOptions: {
+					show: {
+						mode: ['video-generation'],
+					},
+				},
+				options: [
+					{
+						name: 'Text to Video',
+						value: 'text-to-video',
+						description: 'Generate video from text description',
+					},
+					{
+						name: 'Image to Video - First Frame',
+						value: 'i2v-first-frame',
+						description: 'Generate video from first frame image',
+					},
+					{
+						name: 'Image to Video - First & Last Frames',
+						value: 'i2v-first-last',
+						description: 'Generate video from first and last frames',
+					},
+					{
+						name: 'Image to Video - Reference Images',
+						value: 'i2v-reference',
+						description: 'Generate video from 1-4 reference images',
+					},
+				],
+				default: 'text-to-video',
+				description: 'Select video generation mode',
+			},
+			{
+				displayName: 'Video Prompt',
+				name: 'videoPrompt',
+				type: 'string',
+				typeOptions: {
+					rows: 5,
+				},
+				displayOptions: {
+					show: {
+						mode: ['video-generation'],
+					},
+				},
+				default: '',
+				required: true,
+				description: 'Describe the video you want to generate',
+			},
+			{
+				displayName: 'Resolution',
+				name: 'videoResolution',
+				type: 'options',
+				displayOptions: {
+					show: {
+						mode: ['video-generation'],
+					},
+				},
+				options: VIDEO_RESOLUTIONS,
+				default: '720p',
+				description: 'Video resolution',
+			},
+			{
+				displayName: 'Aspect Ratio',
+				name: 'videoRatio',
+				type: 'options',
+				displayOptions: {
+					show: {
+						mode: ['video-generation'],
+					},
+				},
+				options: VIDEO_ASPECT_RATIOS,
+				default: '16:9',
+				description: 'Video aspect ratio',
+			},
+			{
+				displayName: 'Duration (seconds)',
+				name: 'videoDuration',
+				type: 'number',
+				displayOptions: {
+					show: {
+						mode: ['video-generation'],
+					},
+				},
+				default: 5,
+				typeOptions: {
+					minValue: 2,
+					maxValue: 12,
+				},
+				description: 'Video duration in seconds (2-12s for most models, 4-12s for 1.5 pro)',
+			},
+			{
+				displayName: 'Generate Audio',
+				name: 'videoGenerateAudio',
+				type: 'boolean',
+				default: false,
+				displayOptions: {
+					show: {
+						mode: ['video-generation'],
+						videoModel: ['doubao-seedance-1-5-pro-251215'],
+					},
+				},
+				description: 'Generate synchronized audio (speech, sound effects, music) for the video',
+			},
+			{
+				displayName: 'First Frame Image',
+				name: 'videoFirstFrame',
+				type: 'string',
+				displayOptions: {
+					show: {
+						mode: ['video-generation'],
+						videoMode: ['i2v-first-frame', 'i2v-first-last'],
+					},
+				},
+				default: '',
+				description: 'URL or base64 of the first frame',
+			},
+			{
+				displayName: 'Last Frame Image',
+				name: 'videoLastFrame',
+				type: 'string',
+				displayOptions: {
+					show: {
+						mode: ['video-generation'],
+						videoMode: ['i2v-first-last'],
+					},
+				},
+				default: '',
+				description: 'URL or base64 of the last frame',
+			},
+			{
+				displayName: 'Reference Images',
+				name: 'videoReferenceImages',
+				type: 'fixedCollection',
+				typeOptions: {
+					multipleValues: true,
+				},
+				displayOptions: {
+					show: {
+						mode: ['video-generation'],
+						videoMode: ['i2v-reference'],
+					},
+				},
+				default: {},
+				description: '1-4 reference images for video generation',
+				options: [
+					{
+						displayName: 'Image',
+						name: 'image',
+						values: [
+							{
+								displayName: 'Image URL',
+								name: 'url',
+								type: 'string',
+								default: '',
+							},
+						],
+					},
+				],
+			},
+			{
+				displayName: 'Seed',
+				name: 'videoSeed',
+				type: 'number',
+				displayOptions: {
+					show: {
+						mode: ['video-generation'],
+					},
+				},
+				default: SEED.DEFAULT,
+				typeOptions: {
+					minValue: SEED.MIN,
+					maxValue: SEED.MAX,
+				},
+				description: 'Random seed for generation (-1 for random)',
+			},
+			{
+				displayName: 'Add Watermark',
+				name: 'videoWatermark',
+				type: 'boolean',
+				default: false,
+				displayOptions: {
+					show: {
+						mode: ['video-generation'],
+					},
+				},
+				description: 'Add watermark to generated video',
+			},
+			{
+				displayName: 'Output Mode',
+				name: 'videoOutputMode',
+				type: 'options',
+				displayOptions: {
+					show: {
+						mode: ['video-generation'],
+					},
+				},
+				options: [
+					{
+						name: 'URL Only',
+						value: 'url',
+						description: 'Return video URL only (recommended)',
+					},
+					{
+						name: 'Binary Data',
+						value: 'binary',
+						description: 'Download and include video file',
+					},
+				],
+				default: 'url',
+				required: true,
 			},
 		],
 	};
@@ -274,7 +578,14 @@ export class DoubaoGen implements INodeType {
 
 				this.logger?.info('[Doubao] Processing item', { index: i });
 
-				const result = await DoubaoGen.executeGeneration(this, i, credentials);
+				const mode = this.getNodeParameter('mode', i) as string;
+
+				let result: INodeExecutionData;
+				if (mode === 'video-generation') {
+					result = await DoubaoGen.executeVideoGeneration(this, i, credentials);
+				} else {
+					result = await DoubaoGen.executeGeneration(this, i, credentials);
+				}
 
 				results.push(result);
 			} catch (error) {
@@ -336,21 +647,10 @@ export class DoubaoGen implements INodeType {
 
 		const seed = context.getNodeParameter('seed', itemIndex) as number || -1;
 
-		let timeout = 60000;
-		try {
-			timeout = context.getNodeParameter('options.timeout', itemIndex) as number;
-		} catch (error) {
-			// Use default
-		}
+		const timeout = getTimeoutOrDefault(context, 'options.timeout', itemIndex, DEFAULT_TIMEOUTS.IMAGE_GENERATION);
 
 		// Validate prompt
-		if (!prompt || prompt.trim() === '') {
-			throw new NodeOperationError(
-				context.getNode(),
-				'Prompt is required',
-				{ itemIndex }
-			);
-		}
+		validatePrompt(prompt, context, itemIndex);
 
 		// Get input image for image-to-image mode
 		let inputImage = '';
@@ -407,28 +707,13 @@ export class DoubaoGen implements INodeType {
 					size,
 				});
 
-				let data: SeedreamResponse;
-				try {
-					data = await context.helpers.httpRequest({
-						method: 'POST',
-						url: `${baseUrl}/images/generations`,
-						headers: {
-							'Authorization': `Bearer ${credentials.apiKey}`,
-							'Content-Type': 'application/json',
-						},
-						body: JSON.stringify(requestBody),
-						json: true,
-						timeout: timeout,
-					}) as SeedreamResponse;
-				} catch (error) {
-					if (error instanceof Error) {
-						if (error.message.includes('timeout') || error.message.includes('ETIMEDOUT')) {
-							throw new MediaGenError('Request timeout', 'TIMEOUT');
-						}
-						throw new MediaGenError(error.message, 'API_ERROR');
-					}
-					throw new MediaGenError(`API request failed: ${String(error)}`, 'API_ERROR');
-				}
+				const data = await makeHttpRequest(context, {
+					method: 'POST',
+					url: `${baseUrl}/images/generations`,
+					credentials,
+					body: requestBody,
+					timeout,
+				}) as SeedreamResponse;
 
 				// Parse response - support both OpenAI format and legacy format
 				if (data.data && data.data.length > 0 && data.data[0].url) {
@@ -482,30 +767,16 @@ export class DoubaoGen implements INodeType {
 					model,
 					prompt: prompt.substring(0, 50) + '...',
 					size,
-					
+
 				});
 
-				let data: SeedreamResponse;
-				try {
-					data = await context.helpers.httpRequest({
-						method: 'POST',
-						url: `${baseUrl}/images/edits`,
-						headers: {
-							'Authorization': `Bearer ${credentials.apiKey}`,
-						},
-						body: formData,
-						json: true,
-						timeout: timeout,
-					}) as SeedreamResponse;
-				} catch (error) {
-					if (error instanceof Error) {
-						if (error.message.includes('timeout') || error.message.includes('ETIMEDOUT')) {
-							throw new MediaGenError('Request timeout', 'TIMEOUT');
-						}
-						throw new MediaGenError(error.message, 'API_ERROR');
-					}
-					throw new MediaGenError(`API request failed: ${String(error)}`, 'API_ERROR');
-				}
+				const data = await makeHttpRequest(context, {
+					method: 'POST',
+					url: `${baseUrl}/images/edits`,
+					credentials,
+					body: formData,
+					timeout,
+				}) as SeedreamResponse;
 
 				// Parse response - support both OpenAI format and legacy format
 				if (data.data && data.data.length > 0 && data.data[0].url) {
@@ -547,27 +818,14 @@ export class DoubaoGen implements INodeType {
 			if (imageUrl && !imageUrl.startsWith('data:')) {
 				try {
 					context.logger?.info('[Doubao] Downloading image from URL');
-					const imageBuffer = await context.helpers.httpRequest({
+					const imageBuffer = await makeHttpRequest(context, {
 						method: 'GET',
 						url: imageUrl,
+						timeout: DEFAULT_TIMEOUTS.IMAGE_DOWNLOAD,
 						encoding: 'arraybuffer',
-						timeout: 30000, // 30 second timeout for downloads
 					}) as Buffer;
-					const base64 = imageBuffer.toString('base64');
-					let mimeType = 'image/png';
-					if (imageUrl.endsWith('.jpg') || imageUrl.endsWith('.jpeg')) {
-						mimeType = 'image/jpeg';
-					} else if (imageUrl.endsWith('.webp')) {
-						mimeType = 'image/webp';
-					} else if (imageUrl.endsWith('.gif')) {
-						mimeType = 'image/gif';
-					}
 
-					binaryData.data = {
-						data: base64,
-						mimeType,
-						fileName: `doubao-${Date.now()}.png`,
-					};
+					binaryData.data = createBinaryDataFromUrl(imageBuffer, imageUrl, 'doubao');
 
 					context.logger?.info('[Doubao] Image downloaded successfully');
 				} catch (error) {
@@ -591,5 +849,238 @@ export class DoubaoGen implements INodeType {
 				'NETWORK_ERROR'
 			);
 		}
+	}
+
+	/**
+	 * Executes Seedance video generation
+	 */
+	private static async executeVideoGeneration(
+		context: IExecuteFunctions,
+		itemIndex: number,
+		credentials: DoubaoApiCredentials
+	): Promise<INodeExecutionData> {
+		// Get parameters
+		const model = context.getNodeParameter('videoModel', itemIndex) as string;
+		const videoMode = context.getNodeParameter('videoMode', itemIndex) as string;
+		const prompt = context.getNodeParameter('videoPrompt', itemIndex) as string;
+		const resolution = context.getNodeParameter('videoResolution', itemIndex) as string || '720p';
+		const ratio = context.getNodeParameter('videoRatio', itemIndex) as string || '16:9';
+		const duration = context.getNodeParameter('videoDuration', itemIndex) as number || 5;
+		const seed = context.getNodeParameter('videoSeed', itemIndex) as number ?? -1;
+		const watermark = context.getNodeParameter('videoWatermark', itemIndex) as boolean || false;
+		const outputMode = context.getNodeParameter('videoOutputMode', itemIndex) as string;
+
+		context.logger?.info('[Doubao Video] Starting video generation', {
+			model,
+			videoMode,
+			resolution,
+			ratio,
+			duration,
+		});
+
+		// Build content array
+		const content: SeedanceContentItem[] = [];
+
+		// Add text prompt
+		if (prompt && prompt.trim()) {
+			content.push({
+				type: 'text',
+				text: prompt.trim(),
+			});
+		}
+
+		// Add images based on mode
+		if (videoMode === 'i2v-first-frame' || videoMode === 'i2v-first-last') {
+			const firstFrame = context.getNodeParameter('videoFirstFrame', itemIndex) as string;
+			if (!firstFrame || !firstFrame.trim()) {
+				throw new NodeOperationError(
+					context.getNode(),
+					'First frame image is required for this mode',
+					{ itemIndex }
+				);
+			}
+			content.push({
+				type: 'image_url',
+				image_url: { url: firstFrame.trim() },
+				role: 'first_frame',
+			});
+
+			if (videoMode === 'i2v-first-last') {
+				const lastFrame = context.getNodeParameter('videoLastFrame', itemIndex) as string;
+				if (!lastFrame || !lastFrame.trim()) {
+					throw new NodeOperationError(
+						context.getNode(),
+						'Last frame image is required for this mode',
+						{ itemIndex }
+					);
+				}
+				content.push({
+					type: 'image_url',
+					image_url: { url: lastFrame.trim() },
+					role: 'last_frame',
+				});
+			}
+		}
+
+		if (videoMode === 'i2v-reference') {
+			const refImagesData = context.getNodeParameter('videoReferenceImages', itemIndex) as {
+				image?: Array<{ url: string }>;
+			};
+
+			if (!refImagesData.image || refImagesData.image.length === 0) {
+				throw new NodeOperationError(
+					context.getNode(),
+					'At least 1 reference image is required',
+					{ itemIndex }
+				);
+			}
+
+			if (refImagesData.image.length > 4) {
+				throw new NodeOperationError(
+					context.getNode(),
+					'Maximum 4 reference images allowed',
+					{ itemIndex }
+				);
+			}
+
+			for (const img of refImagesData.image) {
+				if (img.url && img.url.trim()) {
+					content.push({
+						type: 'image_url',
+						image_url: { url: img.url.trim() },
+						role: 'reference_image',
+					});
+				}
+			}
+		}
+
+		// Build request body
+		const requestBody: Record<string, any> = {
+			model,
+			content,
+			resolution,
+			ratio,
+			duration,
+			seed,
+			watermark,
+		};
+
+		// Add generate_audio for Seedance 1.5 pro
+		if (model === 'doubao-seedance-1-5-pro-251215') {
+			try {
+				const generateAudio = context.getNodeParameter('videoGenerateAudio', itemIndex) as boolean;
+				requestBody.generate_audio = generateAudio;
+			} catch (error) {
+				// Parameter not available, skip
+			}
+		}
+
+		const baseUrl = credentials.baseUrl || 'https://ark.cn-beijing.volces.com/api/v3';
+
+		// Submit task
+		const submitResponse = await makeHttpRequest(context, {
+			method: 'POST',
+			url: `${baseUrl}/contents/generations/tasks`,
+			credentials,
+			body: requestBody,
+			timeout: 30000,
+		}) as SeedanceSubmitResponse;
+
+		if (!submitResponse.id) {
+			throw new MediaGenError('No task ID returned from API', 'API_ERROR');
+		}
+
+		context.logger?.info('[Doubao Video] Task submitted', { taskId: submitResponse.id, model });
+
+		// Poll for completion
+		const status = await DoubaoGen.pollVideoTask(
+			context,
+			credentials,
+			submitResponse.id
+		);
+
+		if (status.status === 'failed') {
+			throw new MediaGenError(
+				status.error?.message || 'Video generation failed',
+				'VIDEO_GENERATION_FAILED'
+			);
+		}
+
+		if (!status.content?.video_url) {
+			throw new MediaGenError('No video URL in response', 'API_ERROR');
+		}
+
+		context.logger?.info('[Doubao Video] Generation completed', {
+			taskId: submitResponse.id,
+			videoUrl: status.content.video_url.substring(0, 50) + '...',
+		});
+
+		// Return based on output mode
+		if (outputMode === 'binary') {
+			// Download video
+			const videoBuffer = await makeHttpRequest(context, {
+				method: 'GET',
+				url: status.content.video_url,
+				timeout: DEFAULT_TIMEOUTS.VIDEO_DOWNLOAD,
+				encoding: 'arraybuffer',
+			}) as Buffer;
+
+			return {
+				json: {
+					success: true,
+					videoUrl: status.content.video_url,
+					lastFrameUrl: status.content.last_frame_url,
+					taskId: submitResponse.id,
+					model,
+					videoMode,
+					_metadata: {
+						timestamp: new Date().toISOString(),
+						tokens: status.usage?.total_tokens,
+					},
+				},
+				binary: {
+					data: {
+						data: videoBuffer.toString('base64'),
+						mimeType: 'video/mp4',
+						fileName: generateFileName(`doubao_video_${submitResponse.id}`, 'mp4'),
+					},
+				},
+			};
+		} else {
+			return {
+				json: {
+					success: true,
+					videoUrl: status.content.video_url,
+					lastFrameUrl: status.content.last_frame_url,
+					taskId: submitResponse.id,
+					model,
+					videoMode,
+					_metadata: {
+						timestamp: new Date().toISOString(),
+						tokens: status.usage?.total_tokens,
+					},
+				},
+			};
+		}
+	}
+
+	/**
+	 * Polls Seedance video generation task status
+	 */
+	private static async pollVideoTask(
+		context: IExecuteFunctions,
+		credentials: DoubaoApiCredentials,
+		taskId: string
+	): Promise<SeedanceTaskResponse> {
+		return await pollTask({
+			context,
+			credentials,
+			taskId,
+			statusEndpoint: '/contents/generations/tasks',
+			timeoutMs: DEFAULT_TIMEOUTS.VIDEO_GENERATION,
+			onSuccessStatus: ['succeeded'],
+			failureStatuses: ['failed', 'cancelled', 'expired'],
+			logPrefix: 'Doubao Video',
+		}) as SeedanceTaskResponse;
 	}
 }
