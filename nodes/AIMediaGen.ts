@@ -207,7 +207,7 @@ export class AIMediaGen implements INodeType {
 				},
 			},
 			{
-				name: 'openaiApi',
+				name: 'openAiApi',
 				required: true,
 				displayOptions: {
 					show: {
@@ -1266,7 +1266,7 @@ export class AIMediaGen implements INodeType {
 					results.push(result);
 				} else if (operation === 'sora') {
 					// Handle Sora operation
-					const credentials = await this.getCredentials<OpenAiApiCredentials>('openaiApi');
+					const credentials = await this.getCredentials<OpenAiApiCredentials>('openAiApi');
 					if (!credentials || !credentials.apiKey) {
 						throw new NodeOperationError(
 							this.getNode(),
