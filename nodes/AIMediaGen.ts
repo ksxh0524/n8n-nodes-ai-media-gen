@@ -2275,7 +2275,39 @@ export class AIMediaGen implements INodeType {
 				throw new MediaGenError(`Invalid image URL format: ${imageUrl}`, 'API_ERROR');
 			}
 
-			return {
+			// Download image binary data
+			let binaryData: { data: string; mimeType: string } | undefined;
+			try {
+				const imageBuffer = await context.helpers.httpRequest({
+					method: 'GET',
+					url: imageUrl,
+					encoding: 'arraybuffer',
+					timeout: 30000, // 30 second timeout for downloads
+				}) as Buffer;
+				const base64 = imageBuffer.toString('base64');
+
+				// Determine mime type from URL
+				let mimeType = 'image/png';
+				if (imageUrl.endsWith('.jpg') || imageUrl.endsWith('.jpeg')) {
+					mimeType = 'image/jpeg';
+				} else if (imageUrl.endsWith('.webp')) {
+					mimeType = 'image/webp';
+				} else if (imageUrl.endsWith('.gif')) {
+					mimeType = 'image/gif';
+				}
+
+				binaryData = { data: base64, mimeType };
+
+				logger?.info('[AI Media Gen] Image downloaded', {
+					mimeType,
+					fileSize: imageBuffer.byteLength,
+					fileName: imageUrl.split('/').pop()?.split('?')[0],
+				});
+			} catch (error) {
+				logger?.warn('[AI Media Gen] Failed to download image', { error: error instanceof Error ? error.message : String(error) });
+			}
+
+			const result: INodeExecutionData = {
 				json: {
 					success: true,
 					imageUrl,
@@ -2285,6 +2317,19 @@ export class AIMediaGen implements INodeType {
 					},
 				},
 			};
+
+			// Add binary data if successfully downloaded
+			if (binaryData) {
+				result.binary = {
+					data: {
+						data: binaryData.data,
+						mimeType: binaryData.mimeType,
+						fileName: `generated-${model.replace(/\//g, '-')}-${Date.now()}.${binaryData.mimeType.split('/')[1] || 'png'}`,
+					},
+				};
+			}
+
+			return result;
 		} catch (error) {
 			if (error instanceof MediaGenError) {
 				throw error;
