@@ -212,7 +212,7 @@ function getImageDimensions(buffer: Buffer): { width: number; height: number } |
  * AI Media Generation Node
  *
  * Generates and edits images using multiple AI platforms:
- * - ModelScope: Z-Image, Qwen-Image-2512, Qwen-Image-Edit-2511
+ * - ModelScope: Z-Image, Qwen-Image-2512
  * - Nano Banana: Google's Gemini 2.5 Flash Image model
  */
 export class AIMediaGen implements INodeType {
@@ -328,11 +328,6 @@ export class AIMediaGen implements INodeType {
 					name: 'Qwen-Image-2512',
 					value: 'Qwen/Qwen-Image-2512',
 					description: 'Advanced text-to-image generation model',
-				},
-				{
-					name: 'Qwen-Image-Edit-2511',
-					value: 'Qwen/Qwen-Image-Edit-2511',
-					description: 'Image editing model',
 				},
 			],
 			default: 'Tongyi-MAI/Z-Image',
@@ -1021,56 +1016,6 @@ export class AIMediaGen implements INodeType {
 				},
 			},
 		},
-		// Input Image Type - only for Edit model
-		{
-			displayName: 'Input Image Type',
-			name: 'inputImageType',
-			type: 'options',
-			default: 'url',
-			options: [
-				{ name: 'URL / Base64', value: 'url' },
-				{ name: 'Binary File', value: 'binary' },
-			],
-			description: 'Choose how to provide the input image',
-			displayOptions: {
-				show: {
-					operation: ['modelscope'],
-					model: ['Qwen/Qwen-Image-Edit-2511'],
-				},
-			},
-		},
-		// Input Image URL/Base64 - only for Edit model
-		{
-			displayName: 'Input Image',
-			name: 'inputImage',
-			type: 'string',
-			default: '',
-			displayOptions: {
-				show: {
-					operation: ['modelscope'],
-					model: ['Qwen/Qwen-Image-Edit-2511'],
-					inputImageType: ['url'],
-				},
-			},
-			description: 'URL or base64 of the image to edit',
-			placeholder: 'https://example.com/image.jpg or data:image/jpeg;base64,...',
-		},
-		// Input Image Binary File - only for Edit model
-		{
-			displayName: 'Input Image File',
-			name: 'inputImageBinary',
-			type: 'string',
-			default: '',
-			displayOptions: {
-				show: {
-					operation: ['modelscope'],
-					model: ['Qwen/Qwen-Image-Edit-2511'],
-					inputImageType: ['binary'],
-				},
-			},
-			description: 'Binary property containing the image file to edit',
-			placeholder: 'Enter a property name containing the binary data, e.g., data',
-		},
 		// Size for Z-Image (max 2k, various aspect ratios - high resolution only)
 		{
 			displayName: 'Size',
@@ -1124,7 +1069,7 @@ export class AIMediaGen implements INodeType {
 			displayOptions: {
 				show: {
 					operation: ['modelscope'],
-					model: ['Tongyi-MAI/Z-Image', 'Qwen/Qwen-Image-2512', 'Qwen/Qwen-Image-Edit-2511'],
+					model: ['Tongyi-MAI/Z-Image', 'Qwen/Qwen-Image-2512'],
 				},
 			},
 		},
@@ -1141,7 +1086,7 @@ export class AIMediaGen implements INodeType {
 			displayOptions: {
 				show: {
 					operation: ['modelscope'],
-					model: ['Tongyi-MAI/Z-Image', 'Qwen/Qwen-Image-2512', 'Qwen/Qwen-Image-Edit-2511'],
+					model: ['Tongyi-MAI/Z-Image', 'Qwen/Qwen-Image-2512'],
 				},
 			},
 		},
@@ -1593,7 +1538,6 @@ export class AIMediaGen implements INodeType {
 					this.logger?.info('[AI Media Gen] Processing item', { index: i, model });
 
 					// Determine model type
-					const isEditModel = model === 'Qwen/Qwen-Image-Edit-2511';
 					const isZImage = model === 'Tongyi-MAI/Z-Image';
 					const isQwenImage = model === 'Qwen/Qwen-Image-2512';
 
@@ -1602,33 +1546,30 @@ export class AIMediaGen implements INodeType {
 					let seed = 0;
 					let steps = 30;
 					let numImages = 1;
-					let inputImage = '';
 
-					// Get size for generation models only (Edit model doesn't use size)
-					if (!isEditModel) {
-						try {
-							// Use different parameter names for different models to avoid conflicts
-							if (isZImage) {
-								size = this.getNodeParameter('sizeZImage', i) as string;
-							} else if (isQwenImage) {
-								size = this.getNodeParameter('sizeQwen', i) as string;
-							} else {
-								size = this.getNodeParameter('size', i) as string;
-							}
-						} catch (error) {
-							size = isZImage ? '1440x1440' : '1328x1328';
-							this.logger?.debug('[AI Media Gen] Using default size', { index: i, size });
+					// Get size for all models
+					try {
+						// Use different parameter names for different models to avoid conflicts
+						if (isZImage) {
+							size = this.getNodeParameter('sizeZImage', i) as string;
+						} else if (isQwenImage) {
+							size = this.getNodeParameter('sizeQwen', i) as string;
+						} else {
+							size = this.getNodeParameter('size', i) as string;
 						}
+					} catch (error) {
+						size = isZImage ? '1440x1440' : '1328x1328';
+						this.logger?.debug('[AI Media Gen] Using default size', { index: i, size });
 					}
 
-					// Get seed for all models (Z-Image, Qwen-2512, Edit-2511)
+					// Get seed for all models
 					try {
 						seed = this.getNodeParameter('seed', i) as number;
 					} catch (error) {
 						this.logger?.debug('[AI Media Gen] Using default seed', { index: i, seed });
 					}
 
-					// Get steps for all models (Z-Image, Qwen-2512, Edit-2511)
+					// Get steps for all models
 					try {
 						steps = this.getNodeParameter('steps', i) as number;
 					} catch (error) {
@@ -1641,36 +1582,6 @@ export class AIMediaGen implements INodeType {
 							numImages = this.getNodeParameter('numImages', i) as number;
 						} catch (error) {
 							this.logger?.debug('[AI Media Gen] Using default numImages', { index: i, numImages });
-						}
-					}
-
-					// Get inputImage only for Edit model
-					if (isEditModel) {
-						try {
-							const inputImageType = this.getNodeParameter('inputImageType', i) as string;
-							if (inputImageType === 'binary') {
-								// Get from binary data
-								const binaryPropertyName = this.getNodeParameter('inputImageBinary', i) as string;
-								const items = this.getInputData();
-								const item = items[i];
-								const binaryData = item.binary;
-
-								if (binaryData && binaryData[binaryPropertyName]) {
-									const binary = binaryData[binaryPropertyName] as { data: string; mimeType: string };
-									inputImage = `data:${binary.mimeType || 'image/jpeg'};base64,${binary.data}`;
-								} else {
-									this.logger?.warn('[AI Media Gen] Binary data not found', { binaryPropertyName, availableKeys: Object.keys(binaryData || {}) });
-								}
-							} else {
-								// Get from URL/Base64
-								inputImage = this.getNodeParameter('inputImage', i) as string || '';
-							}
-
-							if (!inputImage) {
-								this.logger?.warn('[AI Media Gen] Input image not found for Edit model', { inputImageType });
-							}
-						} catch (error) {
-							this.logger?.warn('[AI Media Gen] Failed to get inputImage for Edit model', { index: i, error });
 						}
 					}
 
@@ -1698,11 +1609,6 @@ export class AIMediaGen implements INodeType {
 						// Only include num_images for models that support it
 						if (isZImage || isQwenImage) {
 							cacheParams.num_images = numImages || 1;
-						}
-
-						// Only include input_image for Edit model
-						if (isEditModel) {
-							cacheParams.input_image = inputImage;
 						}
 
 						const cacheKey = CacheKeyGenerator.forGeneration(
@@ -1859,7 +1765,6 @@ export class AIMediaGen implements INodeType {
 		}
 
 		// Get steps for all models that support it
-		const isEditModel = model === 'Qwen/Qwen-Image-Edit-2511';
 		const isZImage = model === 'Tongyi-MAI/Z-Image';
 		const isQwenImage = model === 'Qwen/Qwen-Image-2512';
 
@@ -1868,28 +1773,25 @@ export class AIMediaGen implements INodeType {
 		let seed = 0;
 		let steps = 30;
 		let numImages = 1;
-		let inputImage = '';
 
-		// Get size for generation models only (Edit model doesn't use size)
-		if (!isEditModel) {
-			try {
-				// Use different parameter names for different models to avoid conflicts
-				if (isZImage) {
-					size = context.getNodeParameter('sizeZImage', itemIndex) as string;
-				} else if (isQwenImage) {
-					size = context.getNodeParameter('sizeQwen', itemIndex) as string;
-				} else {
-					size = context.getNodeParameter('size', itemIndex) as string;
-				}
-				context.logger?.info('[AI Media Gen] Size retrieved', { size, itemIndex });
-			} catch (error) {
-				// Use default size if parameter not set
-				size = isZImage ? '1440x1440' : '1328x1328';
-				context.logger?.warn('[AI Media Gen] Could not get size, using default', { size, itemIndex });
+		// Get size for all models
+		try {
+			// Use different parameter names for different models to avoid conflicts
+			if (isZImage) {
+				size = context.getNodeParameter('sizeZImage', itemIndex) as string;
+			} else if (isQwenImage) {
+				size = context.getNodeParameter('sizeQwen', itemIndex) as string;
+			} else {
+				size = context.getNodeParameter('size', itemIndex) as string;
 			}
+			context.logger?.info('[AI Media Gen] Size retrieved', { size, itemIndex });
+		} catch (error) {
+			// Use default size if parameter not set
+			size = isZImage ? '1440x1440' : '1328x1328';
+			context.logger?.warn('[AI Media Gen] Could not get size, using default', { size, itemIndex });
 		}
 
-		// Get seed for all models (Z-Image, Qwen-2512, Edit-2511)
+		// Get seed for all models
 		try {
 			seed = context.getNodeParameter('seed', itemIndex) as number;
 			context.logger?.info('[AI Media Gen] Seed retrieved', { seed, itemIndex });
@@ -1898,7 +1800,7 @@ export class AIMediaGen implements INodeType {
 			context.logger?.warn('[AI Media Gen] Could not get seed, using default', { seed, itemIndex });
 		}
 
-		// Get steps for all models (Z-Image, Qwen-2512, Edit-2511)
+		// Get steps for all models
 		try {
 			steps = context.getNodeParameter('steps', itemIndex) as number;
 			context.logger?.info('[AI Media Gen] Steps retrieved', { steps, itemIndex });
@@ -1918,59 +1820,6 @@ export class AIMediaGen implements INodeType {
 			}
 		}
 
-		// Get input image based on type
-		if (isEditModel) {
-			context.logger?.info('[AI Media Gen] Getting input image for edit model', { itemIndex });
-
-			const inputImageType = context.getNodeParameter('inputImageType', itemIndex) as string;
-			context.logger?.info('[AI Media Gen] Input image type', { inputImageType, itemIndex });
-
-			if (inputImageType === 'binary') {
-				// Get binary file from input
-				const binaryPropertyName = context.getNodeParameter('inputImageBinary', itemIndex) as string;
-				context.logger?.info('[AI Media Gen] Binary property name', { binaryPropertyName, itemIndex });
-
-				const items = context.getInputData();
-				const item = items[itemIndex];
-				const binaryData = item.binary;
-
-				context.logger?.info('[AI Media Gen] Binary data available', {
-					hasBinary: !!binaryData,
-					binaryKeys: binaryData ? Object.keys(binaryData) : [],
-					itemIndex
-				});
-
-				if (!binaryData || !binaryData[binaryPropertyName]) {
-					throw new NodeOperationError(
-						context.getNode(),
-						`Binary property '${binaryPropertyName}' not found. Make sure to include a binary file in your input. Available properties: ${binaryData ? Object.keys(binaryData).join(', ') : 'none'}`,
-						{ itemIndex }
-					);
-				}
-
-				const binary = binaryData[binaryPropertyName] as { data: string; mimeType: string };
-				// Convert buffer to base64 if needed
-				if (binary.data) {
-					inputImage = `data:${binary.mimeType || 'image/jpeg'};base64,${binary.data}`;
-					context.logger?.info('[AI Media Gen] Input image loaded from binary', { mimeType: binary.mimeType, itemIndex });
-				}
-			} else {
-				// Get URL or base64 string
-				inputImage = context.getNodeParameter('inputImage', itemIndex) as string || '';
-				context.logger?.info('[AI Media Gen] Input image from URL/Base64', {
-					hasInputImage: !!inputImage,
-					length: inputImage?.length,
-					itemIndex
-				});
-			}
-
-			context.logger?.info('[AI Media Gen] Final input image', {
-				hasInputImage: !!inputImage,
-				length: inputImage?.length,
-				itemIndex
-			});
-		}
-
 		if (!prompt || prompt.trim() === '') {
 			throw new NodeOperationError(
 				context.getNode(),
@@ -1980,7 +1829,7 @@ export class AIMediaGen implements INodeType {
 		}
 
 		// Use centralized validation
-		validateModelRequest(model, size, numImages, inputImage);
+		validateModelRequest(model, size, numImages);
 
 		const baseUrl = credentials.baseUrl || CONSTANTS.API_ENDPOINTS.MODELSCOPE.BASE_URL;
 
@@ -1991,11 +1840,10 @@ export class AIMediaGen implements INodeType {
 				model,
 				{ prompt: prompt.trim() },
 				{
-					size: isEditModel ? undefined : (size || '1024x1024'),
+					size: size || '1024x1024',
 					seed: seed || 0,
 					steps: steps || 30,
 					num_images: numImages || 1,
-					input_image: inputImage,
 				},
 				timeout,
 				context,
@@ -2191,7 +2039,7 @@ export class AIMediaGen implements INodeType {
 		apiKey: string,
 		model: string,
 		input: { prompt: string },
-		parameters: { size?: string; seed: number; steps: number; num_images?: number; input_image?: string },
+		parameters: { size?: string; seed: number; steps: number; num_images?: number },
 		timeout: number,
 		context?: IExecuteFunctions,
 		logger?: IExecuteFunctions['logger']
@@ -2203,11 +2051,8 @@ export class AIMediaGen implements INodeType {
 				prompt: input.prompt,
 			};
 
-			// Edit model (Qwen-Image-Edit-2511) doesn't use size parameter
-			const isEditModel = model === 'Qwen/Qwen-Image-Edit-2511';
-
-			// Add size for generation models
-			if (parameters.size && !isEditModel) {
+			// Add size for all models
+			if (parameters.size) {
 				requestBody.size = parameters.size;
 			}
 
@@ -2216,22 +2061,14 @@ export class AIMediaGen implements INodeType {
 				requestBody.n = parameters.num_images;
 			}
 
-			// Add image for edit models
-			if (parameters.input_image) {
-				requestBody.image = parameters.input_image;
-			}
-
 			// Build URL, avoiding double slashes
 			const baseUrlWithoutTrailingSlash = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
 			const url = `${baseUrlWithoutTrailingSlash}/${CONSTANTS.API_ENDPOINTS.MODELSCOPE.IMAGES_GENERATIONS}`;
 
-			logger?.info('[AI Media Gen] Submitting async task', {
-				url,
-				model,
-				promptLength: input.prompt?.length,
-				hasAsyncHeader: true,
-				requestBody: JSON.stringify(requestBody, null, 2),
-			});
+			console.log('[DEBUG] === Submitting async task ===');
+			console.log('[DEBUG] URL:', url);
+			console.log('[DEBUG] Model:', model);
+			console.log('[DEBUG] RequestBody:', JSON.stringify(requestBody, null, 2));
 
 			if (!context) {
 				throw new MediaGenError('Execution context is required', 'API_ERROR');
@@ -2252,13 +2089,17 @@ export class AIMediaGen implements INodeType {
 					timeout: timeout,
 				}) as ModelScopeAsyncSubmitResponse;
 	} catch (error) {
-				// Log detailed error for debugging
-				logger?.error('[AI Media Gen] API request failed', {
-					error: error instanceof Error ? error.message : String(error),
-					errorString: String(error),
-					requestBody: JSON.stringify(requestBody),
-					url: url,
-				});
+				console.log('[DEBUG] === API request failed ===');
+				console.log('[DEBUG] Error:', error);
+				console.log('[DEBUG] Error message:', error instanceof Error ? error.message : String(error));
+				console.log('[DEBUG] Error string:', String(error));
+
+				// Try to extract response body
+				const errorAny = error as any;
+				if (errorAny.response) {
+					console.log('[DEBUG] Response:', errorAny.response);
+					console.log('[DEBUG] Response body:', typeof errorAny.response === 'string' ? errorAny.response : JSON.stringify(errorAny.response, null, 2));
+				}
 
 				if (error instanceof Error) {
 					if (error.message.includes('timeout') || error.message.includes('ETIMEDOUT')) {
@@ -2274,10 +2115,13 @@ export class AIMediaGen implements INodeType {
 							const errorObj = error as any;
 							if (errorObj.response && typeof errorObj.response === 'object') {
 								detailedError = JSON.stringify(errorObj.response, null, 2);
+							} else if (errorObj.response && typeof errorObj.response === 'string') {
+								detailedError = errorObj.response;
 							}
 						} catch (e) {
 							// Keep original error
 						}
+						console.log('[DEBUG] Detailed 400 error:', detailedError);
 						throw new MediaGenError(
 							`API Error (400): ${detailedError}`,
 							'API_ERROR'

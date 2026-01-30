@@ -80,7 +80,6 @@ export {
 export {
 	validateNumImages,
 	validateSizeForModel,
-	validateInputImage,
 	validateModelRequest,
 } from './validators';
 

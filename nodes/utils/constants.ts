@@ -116,11 +116,6 @@ export const MODEL_CONSTRAINTS = {
 		supportsNumImages: true,
 		supportsSeed: true,
 	},
-	'Qwen/Qwen-Image-Edit-2511': {
-		supportedSizes: [], // Edit model doesn't use size parameter
-		supportsNumImages: false,
-		supportsSeed: true,
-	},
 } as const;
 
 /**
@@ -211,6 +206,7 @@ export const VIDEO_RESOLUTIONS = [
 
 /**
  * Seed range constants
+ * Range: -1 (random) to 2^32 - 1
  */
 export const SEED = {
 	MIN: -1,          // Minimum seed (random)

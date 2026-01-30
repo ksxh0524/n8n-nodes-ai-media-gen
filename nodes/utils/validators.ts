@@ -28,11 +28,6 @@ export function validateSizeForModel(model: string, size: string): void {
 		throw new MediaGenError(`Unknown model: ${model}`, 'INVALID_MODEL');
 	}
 
-	// Skip size validation for Edit model (doesn't use size parameter)
-	if (model === 'Qwen/Qwen-Image-Edit-2511') {
-		return;
-	}
-
 	const supportedSizes = constraints.supportedSizes as readonly string[];
 	if (!supportedSizes.includes(size)) {
 		throw new MediaGenError(
@@ -43,46 +38,16 @@ export function validateSizeForModel(model: string, size: string): void {
 }
 
 /**
- * Validates the input image format (URL or base64)
- * @param inputImage - The input image string to validate
- * @throws MediaGenError if format is invalid
- */
-export function validateInputImage(inputImage: string): void {
-	if (!inputImage || inputImage.trim() === '') {
-		throw new MediaGenError('Input image is required for Edit model', 'INVALID_IMAGE_INPUT');
-	}
-
-	const trimmed = inputImage.trim();
-
-	// Check if it's a valid URL
-	if (VALIDATION.URL_PATTERN.test(trimmed)) {
-		return;
-	}
-
-	// Check if it's valid base64
-	if (VALIDATION.BASE64_PATTERN.test(trimmed)) {
-		return;
-	}
-
-	throw new MediaGenError(
-		'Input image must be a valid URL or base64 encoded data (data:image/...;base64,...)',
-		'INVALID_IMAGE_INPUT'
-	);
-}
-
-/**
  * Validates all parameters for a model request
  * @param model - The model name
  * @param size - The image size
  * @param numImages - Number of images to generate
- * @param inputImage - Input image for edit models
  * @throws NodeOperationError or MediaGenError if validation fails
  */
 export function validateModelRequest(
 	model: string,
 	size: string,
-	numImages: number,
-	inputImage?: string
+	numImages: number
 ): void {
 	// Validate size
 	validateSizeForModel(model, size);
@@ -91,16 +56,5 @@ export function validateModelRequest(
 	const constraints = MODEL_CONSTRAINTS[model as keyof typeof MODEL_CONSTRAINTS];
 	if (constraints?.supportsNumImages) {
 		validateNumImages(numImages);
-	}
-
-	// Validate input image for edit models - REQUIRED field
-	if (model === 'Qwen/Qwen-Image-Edit-2511') {
-		if (!inputImage || inputImage.trim() === '') {
-			throw new MediaGenError(
-				'Input image is required for Qwen/Qwen-Image-Edit-2511 model',
-				'INVALID_IMAGE_INPUT'
-			);
-		}
-		validateInputImage(inputImage);
 	}
 }

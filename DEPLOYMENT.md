@@ -184,7 +184,7 @@ curl -X GET http://localhost:5678/rest/nodes \
 **Size**: ~139KB compiled
 
 **Supported Operations**:
-- **ModelScope** - Image generation (Tongyi-MAI/Z-Image, Qwen-Image-2512, Qwen-Image-Edit-2511)
+- **ModelScope** - Image generation (Tongyi-MAI/Z-Image, Qwen-Image-2512)
 - **Nano Banana** - Image generation (nano-banana, nano-banana-2)
 - **Sora** - Video generation (OpenAI Sora)
 - **Veo** - Video generation (Google Veo)

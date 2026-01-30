@@ -12,10 +12,9 @@
 
 ## 📋 Project Overview
 
-**n8n-nodes-ai-media-gen** is an advanced AI media generation node designed for the n8n workflow automation platform. This node integrates image generation and editing capabilities from multiple leading AI platforms, providing a unified and simple interface that allows you to easily achieve in n8n workflows:
+**n8n-nodes-ai-media-gen** is an advanced AI media generation node designed for the n8n workflow automation platform. This node integrates image generation capabilities from multiple leading AI platforms, providing a unified and simple interface that allows you to easily achieve in n8n workflows:
 
 - 🎨 **Text-to-Image Generation**: Create high-quality images from simple text descriptions
-- 🖼️ **Image Editing**: Intelligently edit and modify existing images with AI
 - 🚀 **Batch Processing**: Automate image generation tasks in workflows
 - 💾 **Smart Caching**: Reduce duplicate API calls and save costs
 - 🔄 **Auto Retry**: Automatically retry on network failures for improved reliability
@@ -189,7 +188,6 @@
 |------------|------|----------------|----------|
 | **Tongyi-MAI/Z-Image** | Text-to-Image | 2048x2048, 2048x1152, 1152x2048, 2048x1536, 1536x2048, 1024x2048 | High-quality generation with multiple aspect ratios |
 | **Qwen/Qwen-Image-2512** | Text-to-Image | 1328x1328, 1664x928, 928x1664, 1472x1104, 1104x1472, 1584x1056, 1056x1584 | Advanced generation with richer details |
-| **Qwen/Qwen-Image-Edit-2511** | Image Editing | Auto maintain original size | Intelligent image editing and modification |
 
 #### Get API Key
 
@@ -269,7 +267,6 @@ In **Model** dropdown select:
 
 - **Tongyi-MAI/Z-Image**: General image generation
 - **Qwen/Qwen-Image-2512**: High-quality image generation
-- **Qwen/Qwen-Image-Edit-2511**: Image editing (requires input image)
 
 #### Step 3: Configure Parameters
 
@@ -301,15 +298,6 @@ Number of Images: 1
     "cached": false
   }
 }
-```
-
-#### Example 2: Edit Image (Qwen-Image-Edit)
-
-```
-Model: Qwen/Qwen-Image-Edit-2511
-Prompt: Add a beautiful rainbow in the sky
-Input Image: https://example.com/original-image.jpg
-Seed: 0
 ```
 
 ---

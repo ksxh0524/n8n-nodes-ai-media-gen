@@ -5,6 +5,21 @@ All notable changes to the n8n-nodes-ai-media-gen project will be documented in 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.3] - 2025-01-31
+
+### Removed
+- **Qwen-Image-Edit-2511 model**: Completely removed image editing model and all related functionality
+  - Removed model option from node interface
+  - Removed input image fields (inputImageType, inputImage, inputImageBinary)
+  - Removed Edit model processing logic from all functions
+  - Removed Edit model validation logic
+  - Removed Edit model test data and API responses
+  - Updated documentation to reflect removal
+
+### Breaking Changes
+- Workflows using `Qwen/Qwen-Image-Edit-2511` model will no longer function
+- Input image fields have been removed from the node interface
+
 ## [0.0.2] - 2025-01-29
 
 ### Fixed
@@ -56,7 +71,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support for ModelScope API integration
 - Image generation with Tongyi-MAI/Z-Image model
 - Image generation with Qwen-Image-2512 model
-- Image editing with Qwen-Image-Edit-2511 model
 - Built-in caching mechanism with LRU eviction
 - Automatic retry logic with exponential backoff
 - Comprehensive error handling with error codes

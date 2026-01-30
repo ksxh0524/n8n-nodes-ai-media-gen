@@ -21,12 +21,6 @@ export const TEST_DATA = {
 			seed: 123,
 			numImages: 2,
 		},
-		QWEN_EDIT: {
-			model: 'Qwen-Image-Edit-2511',
-			prompt: 'Add a rainbow to the sky',
-			inputImage: 'https://example.com/input.jpg',
-			size: '1024x1024',
-		},
 	},
 
 	/**
@@ -53,18 +47,6 @@ export const TEST_DATA = {
 			prompt: 'A beautiful landscape',
 			numImages: 10,
 		},
-		INVALID_IMAGE_URL: {
-			model: 'Qwen-Image-Edit-2511',
-			prompt: 'Edit the image',
-			inputImage: 'not-a-url-or-base64',
-			size: '1024x1024',
-		},
-		EMPTY_INPUT_IMAGE: {
-			model: 'Qwen-Image-Edit-2511',
-			prompt: 'Edit the image',
-			inputImage: '',
-			size: '1024x1024',
-		},
 	},
 
 	/**
@@ -89,11 +71,6 @@ export const TEST_DATA = {
 			supportedSizes: ['1024x1024', '1152x896', '896x1152', '1216x832', '832x1216', '1344x768', '768x1344', '1536x640', '640x1536'],
 			supportsNumImages: true,
 			supportsSeed: true,
-		},
-		'Qwen-Image-Edit-2511': {
-			supportedSizes: ['1024x1024', '1152x896', '896x1152', '1216x832', '832x1216', '1344x768', '768x1344'],
-			supportsNumImages: false,
-			supportsSeed: false,
 		},
 	},
 } as const;

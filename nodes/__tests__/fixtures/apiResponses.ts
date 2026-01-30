@@ -22,15 +22,6 @@ export const API_RESPONSES = {
 	},
 
 	/**
-	 * Successful Qwen-Image-Edit response
-	 */
-	QWEN_EDIT_SUCCESS: {
-		output: {
-			url: 'https://modelscope.cn/api/v1/studio/temp/edited_image_abcde.jpg',
-		},
-	},
-
-	/**
 	 * Error response for invalid API key
 	 */
 	INVALID_API_KEY: {
