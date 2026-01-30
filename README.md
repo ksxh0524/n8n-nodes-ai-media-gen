@@ -32,28 +32,7 @@
 
 ## 🎯 Supported AI Platforms and Models
 
-### 1. ModelScope
-
-[ModelScope](https://modelscope.cn) is an open-source model community by Alibaba Cloud, providing powerful AI image generation capabilities.
-
-#### Supported Models
-
-| Model Name | Type | Supported Sizes | Features |
-|------------|------|----------------|----------|
-| **Tongyi-MAI/Z-Image** | Text-to-Image | 2048x2048, 2048x1152, 1152x2048, 2048x1536, 1536x2048, 1024x2048 | High-quality generation with multiple aspect ratios |
-| **Qwen/Qwen-Image-2512** | Text-to-Image | 1328x1328, 1664x928, 928x1664, 1472x1104, 1104x1472, 1584x1056, 1056x1584 | Advanced generation with richer details |
-| **Qwen/Qwen-Image-Edit-2511** | Image Editing | Auto maintain original size | Intelligent image editing and modification |
-
-#### Get API Key
-
-1. Visit [ModelScope Website](https://modelscope.cn)
-2. Register and login to your account
-3. Go to console and create API Key
-4. Configure credentials in n8n
-
----
-
-### 2. Nano Banana (Third-Party API) ⭐
+### 1. Nano Banana (Third-Party API) ⭐
 
 **Nano Banana** is a third-party API service based on Google Gemini 2.5 Flash image generation model, providing fast and high-quality image generation capabilities.
 
@@ -86,7 +65,7 @@
 
 ---
 
-### 3. Sora (OpenAI Video Generation)
+### 2. Sora (OpenAI Video Generation)
 
 [Sora](https://openai.com/sora) is OpenAI's advanced text-to-video generation model, capable of creating high-quality videos from text descriptions.
 
@@ -119,6 +98,42 @@
 2. Complete registration and top up
 3. Get API Key from console
 4. Configure OpenAI API credentials in n8n
+
+---
+
+### 3. Veo (Google Video Generation)
+
+[Veo](https://deepmind.google/technologies/veo/) is Google's advanced video generation model, capable of creating high-quality videos from text or image inputs.
+
+> ⚠️ **Important Note**: Veo API access requires registration through a third-party API service provider.
+
+#### Why Choose Veo?
+
+- 🎬 **Google AI Technology**: Powered by Google DeepMind's advanced video generation
+- ⏱️ **Multiple Durations**: Support for various video lengths
+- 🎨 **High Resolution**: Generate videos up to 1080p and higher
+- 🖼️ **Image-to-Video**: Transform images into dynamic videos
+- 🌟 **State-of-the-Art**: Latest Google video generation technology
+
+#### Register Account
+
+👉 **Sign Up**: [https://ai.comfly.chat/register?aff=296d6933380](https://ai.comfly.chat/register?aff=296d6933380)
+
+#### Supported Features
+
+| Feature | Options | Description |
+|---------|---------|-------------|
+| **Duration** | Multiple options | Various video lengths available |
+| **Resolution** | Up to 1080p+ | High-resolution output |
+| **Aspect Ratio** | Multiple ratios | Flexible aspect ratios |
+| **Mode** | Text-to-Video, Image-to-Video | Generation mode |
+
+#### Get API Key
+
+1. Visit [Registration Page](https://ai.comfly.chat/register?aff=296d6933380)
+2. Complete registration and top up
+3. Get API Key from console
+4. Configure Google PaLM API credentials in n8n
 
 ---
 
@@ -161,6 +176,27 @@
 2. Enable Doubao Image Generation service
 3. Create API Key
 4. Configure Doubao API credentials in n8n
+
+---
+
+### 5. ModelScope
+
+[ModelScope](https://modelscope.cn) is an open-source model community by Alibaba Cloud, providing powerful AI image generation capabilities.
+
+#### Supported Models
+
+| Model Name | Type | Supported Sizes | Features |
+|------------|------|----------------|----------|
+| **Tongyi-MAI/Z-Image** | Text-to-Image | 2048x2048, 2048x1152, 1152x2048, 2048x1536, 1536x2048, 1024x2048 | High-quality generation with multiple aspect ratios |
+| **Qwen/Qwen-Image-2512** | Text-to-Image | 1328x1328, 1664x928, 928x1664, 1472x1104, 1104x1472, 1584x1056, 1056x1584 | Advanced generation with richer details |
+| **Qwen/Qwen-Image-Edit-2511** | Image Editing | Auto maintain original size | Intelligent image editing and modification |
+
+#### Get API Key
+
+1. Visit [ModelScope Website](https://modelscope.cn)
+2. Register and login to your account
+3. Go to console and create API Key
+4. Configure credentials in n8n
 
 ---
 
@@ -208,7 +244,7 @@ npm run build
 The usage flow is similar for all platforms:
 
 1. **Add Node**: Add "AI Media Generation" node to workflow
-2. **Select Operation**: Choose platform (ModelScope / Nano Banana / Doubao)
+2. **Select Operation**: Choose platform (Nano Banana / Sora / Veo / Doubao / ModelScope)
 3. **Configure Credentials**: Create and select corresponding API credentials
 4. **Set Parameters**: Configure generation parameters based on requirements
 5. **Execute Workflow**: Run workflow to get generated images
@@ -448,6 +484,77 @@ Duration: 5s
 Resolution: 720p
 Aspect Ratio: 9:16
 First Frame Image: https://example.com/image.jpg
+```
+
+#### Output Mode Options
+
+- **URL Only**: Return video URL only (recommended)
+- **Binary Data**: Download and include video file in output
+
+---
+
+### 🎥 Veo Usage Guide
+
+#### Step 1: Register and Get API Key
+
+1. Visit registration page: https://ai.comfly.chat/register?aff=296d6933380
+2. Complete registration and top up
+3. Get API Key from console
+
+#### Step 2: Configure Credentials
+
+1. Select **Veo** operation in node
+2. Click **Credentials** → **Create New Credential**
+3. Select **Google PaLM API**
+4. Fill credential info:
+   - **Name**: Credential name (e.g., "Veo API")
+   - **API Key**: API Key from ai.comfly.chat
+   - **Host**: Leave empty or fill `ai.comfly.chat`
+
+#### Step 3: Select Mode
+
+- **Text to Video**: Generate videos from text description
+- **Image to Video**: Generate videos based on reference images
+
+#### Step 4: Configure Parameters
+
+##### Text-to-Video Mode
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| **Prompt** | Text | ✅ | Video description |
+| **Duration** | Options | ✅ | Video duration |
+| **Resolution** | Options | ✅ | Video resolution |
+| **Aspect Ratio** | Options | ✅ | Video aspect ratio |
+| **Seed** | Number | ❎ | Random seed (-1=random) |
+
+##### Image-to-Video Mode
+
+Additional parameters:
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| **Input Image** | String | ✅ | Input image URL or Base64 |
+
+#### Example 1: Generate Video from Text
+
+```
+Mode: Text to Video
+Prompt: A drone shot flying over a lush green forest
+Duration: 5s
+Resolution: 1080p
+Aspect Ratio: 16:9
+Seed: -1
+```
+
+#### Example 2: Generate Video from Image
+
+```
+Mode: Image to Video
+Prompt: Add smooth camera movement to this scene
+Duration: 5s
+Resolution: 720p
+Aspect Ratio: 9:16
+Input Image: https://example.com/image.jpg
 ```
 
 #### Output Mode Options
@@ -771,10 +878,11 @@ This project is licensed under the MIT License - see [LICENSE](LICENSE) file for
 
 ### Platform Documentation
 
-- **ModelScope**: [https://modelscope.cn/docs](https://modelscope.cn/docs)
 - **Nano Banana**: [https://ai.comfly.chat](https://ai.comfly.chat/register?aff=296d6933380)
 - **Sora**: [https://ai.comfly.chat/register?aff=296d6933380](https://ai.comfly.chat/register?aff=296d6933380)
+- **Veo**: [https://ai.comfly.chat/register?aff=296d6933380](https://ai.comfly.chat/register?aff=296d6933380)
 - **Doubao**: [https://www.volcengine.com/docs/82379](https://www.volcengine.com/docs/82379)
+- **ModelScope**: [https://modelscope.cn/docs](https://modelscope.cn/docs)
 
 ---
 
