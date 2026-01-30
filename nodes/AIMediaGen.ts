@@ -106,7 +106,7 @@ interface SeedreamResponse {
 interface SoraRequest {
 	model: 'sora-2' | 'sora-2-pro';
 	prompt: string;
-	aspect_ratio: '16:9' | '9:16';
+	aspect_ratio: '16:9' | '3:2' | '1:1' | '9:16' | '2:3';
 	duration: '5' | '10' | '15' | '20' | '25';
 	hd?: boolean;
 	images?: string[];
@@ -666,7 +666,10 @@ export class AIMediaGen implements INodeType {
 			},
 			options: [
 				{ name: '16:9 (Landscape)', value: '16:9' },
+				{ name: '3:2 (Landscape)', value: '3:2' },
+				{ name: '1:1 (Square)', value: '1:1' },
 				{ name: '9:16 (Portrait)', value: '9:16' },
+				{ name: '2:3 (Portrait)', value: '2:3' },
 			],
 			default: '16:9',
 			description: 'Video aspect ratio',
@@ -2851,7 +2854,7 @@ export class AIMediaGen implements INodeType {
 		const requestBody: SoraRequest = {
 			model: model as 'sora-2' | 'sora-2-pro',
 			prompt: prompt.trim(),
-			aspect_ratio: aspectRatio as '16:9' | '9:16',
+			aspect_ratio: aspectRatio as '16:9' | '3:2' | '1:1' | '9:16' | '2:3',
 			duration: duration as '5' | '10' | '15' | '20' | '25',
 			hd: hd && model === 'sora-2-pro' ? true : undefined,
 			images: images.length > 0 ? images : undefined,
