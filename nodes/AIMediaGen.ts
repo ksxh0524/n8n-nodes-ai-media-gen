@@ -107,7 +107,7 @@ interface SoraRequest {
 	model: 'sora-2' | 'sora-2-pro';
 	prompt: string;
 	aspect_ratio: '16:9' | '9:16';
-	duration: '5' | '10' | '15' | '20';
+	duration: '10' | '15' | '25';
 	hd?: boolean;
 	images?: string[];
 }
@@ -682,12 +682,11 @@ export class AIMediaGen implements INodeType {
 				},
 			},
 			options: [
-				{ name: '5 seconds', value: '5' },
 				{ name: '10 seconds', value: '10' },
 				{ name: '15 seconds', value: '15' },
-				{ name: '20 seconds', value: '20' },
+				{ name: '25 seconds', value: '25' },
 			],
-			default: '5',
+			default: '10',
 			description: 'Video duration in seconds',
 		},
 		// Sora - HD
@@ -2823,7 +2822,7 @@ export class AIMediaGen implements INodeType {
 			model: model as 'sora-2' | 'sora-2-pro',
 			prompt: prompt.trim(),
 			aspect_ratio: aspectRatio as '16:9' | '9:16',
-			duration: duration as '5' | '10' | '15' | '20',
+			duration: duration as '10' | '15' | '25',
 			hd: hd && model === 'sora-2-pro' ? true : undefined,
 			images: images.length > 0 ? images : undefined,
 		};
@@ -2966,13 +2965,12 @@ export class AIMediaGen implements INodeType {
 	): Promise<SoraResponse> {
 		// Calculate timeout based on video duration
 		const timeouts: Record<string, number> = {
-			'5': 180000,   // 3 minutes
 			'10': 300000,  // 5 minutes
 			'15': 420000,  // 7 minutes
-			'20': 600000,  // 10 minutes
+			'25': 780000,  // 13 minutes
 		};
 
-		const timeoutMs = timeouts[duration] || 180000;
+		const timeoutMs = timeouts[duration] || 300000;
 		const startTime = Date.now();
 
 		// Dynamic polling interval
