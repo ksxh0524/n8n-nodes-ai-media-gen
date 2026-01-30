@@ -2225,7 +2225,7 @@ export class AIMediaGen implements INodeType {
 			const baseUrlWithoutTrailingSlash = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
 			const url = `${baseUrlWithoutTrailingSlash}/${CONSTANTS.API_ENDPOINTS.MODELSCOPE.IMAGES_GENERATIONS}`;
 
-			logger?.debug('[AI Media Gen] Submitting async task', {
+			logger?.info('[AI Media Gen] Submitting async task', {
 				url,
 				model,
 				promptLength: input.prompt?.length,
