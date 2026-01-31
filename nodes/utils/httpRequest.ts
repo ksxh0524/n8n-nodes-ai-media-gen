@@ -1,4 +1,5 @@
 import type { IExecuteFunctions } from 'n8n-workflow';
+import type { IHttpRequestOptions } from 'n8n-workflow';
 import { MediaGenError, isTimeoutError } from './errors';
 
 /**
@@ -12,7 +13,7 @@ export interface HttpRequestOptions {
 	/** Optional credentials with API key */
 	credentials?: { apiKey: string; baseUrl?: string };
 	/** Request body (will be JSON stringified) */
-	body?: any;
+	body?: unknown;
 	/** Additional headers */
 	headers?: Record<string, string>;
 	/** Request timeout in milliseconds (default: 60000) */
@@ -21,6 +22,14 @@ export interface HttpRequestOptions {
 	json?: boolean;
 	/** Response encoding (for binary data) */
 	encoding?: 'arraybuffer' | 'json' | 'utf8';
+}
+
+/**
+ * Download binary data options
+ */
+export interface DownloadBinaryOptions {
+	/** Download timeout in milliseconds (default: 30000) */
+	timeout?: number;
 }
 
 /**
@@ -78,7 +87,7 @@ export async function makeHttpRequest(
 	}
 
 	// Prepare request options
-	const requestOptions: any = {
+	const requestOptions: IHttpRequestOptions = {
 		method,
 		url,
 		headers,
@@ -87,14 +96,14 @@ export async function makeHttpRequest(
 	};
 
 	// Add encoding if specified
-	if (encoding !== 'json') {
-		requestOptions.encoding = encoding;
+	if (encoding === 'arraybuffer') {
+		requestOptions.encoding = 'arraybuffer';
 		requestOptions.json = false;
 	}
 
 	// Add body for non-GET requests
 	if (body && method !== 'GET') {
-		requestOptions.body = JSON.stringify(body);
+		requestOptions.body = JSON.stringify(body as Record<string, unknown>);
 	}
 
 	try {
@@ -127,7 +136,7 @@ export async function makeHttpRequest(
 export async function makePollRequest(
 	context: IExecuteFunctions,
 	options: HttpRequestOptions,
-): Promise<{ data?: any; error?: string }> {
+): Promise<{ data?: unknown; error?: string }> {
 	try {
 		const data = await makeHttpRequest(context, {
 			...options,
@@ -139,4 +148,149 @@ export async function makePollRequest(
 			error: error instanceof Error ? error.message : String(error),
 		};
 	}
+}
+
+/**
+ * Downloads binary data (image, video, etc.) from URL
+ *
+ * @param context - n8n execution context
+ * @param url - URL to download from
+ * @param options - Download options
+ * @returns Buffer containing binary data
+ * @throws MediaGenError on download failures
+ */
+export async function downloadBinary(
+	context: IExecuteFunctions,
+	url: string,
+	options: DownloadBinaryOptions = {},
+): Promise<Buffer> {
+	const { timeout = 30000 } = options;
+
+	try {
+		context.logger?.debug('[HttpRequest] Downloading binary', { url: url.substring(0, 50) + '...' });
+
+		const buffer = await context.helpers.httpRequest({
+			method: 'GET',
+			url,
+			encoding: 'arraybuffer',
+			timeout,
+		});
+
+		return buffer as Buffer;
+	} catch (error) {
+		if (error instanceof Error && isTimeoutError(error)) {
+			throw new MediaGenError('Download timeout', 'TIMEOUT');
+		}
+
+		throw new MediaGenError(
+			error instanceof Error ? error.message : 'Download failed',
+			'NETWORK_ERROR'
+		);
+	}
+}
+
+/**
+ * POST JSON data to API
+ *
+ * Specialized method for POST requests with JSON body
+ *
+ * @param context - n8n execution context
+ * @param url - Request URL
+ * @param body - Request body object
+ * @param credentials - Optional credentials
+ * @param timeout - Request timeout
+ * @returns Parsed JSON response
+ * @throws MediaGenError on request failures
+ */
+export async function postJson<T = unknown>(
+	context: IExecuteFunctions,
+	url: string,
+	body: Record<string, unknown>,
+	credentials?: { apiKey: string; baseUrl?: string },
+	timeout = 60000
+): Promise<T> {
+	return await makeHttpRequest(context, {
+		method: 'POST',
+		url,
+		credentials,
+		body,
+		timeout,
+		json: true,
+	}) as Promise<T>;
+}
+
+/**
+ * POST form data (multipart) to API
+ *
+ * Specialized method for POST requests with FormData
+ *
+ * @param context - n8n execution context
+ * @param url - Request URL
+ * @param formData - Form data to send
+ * @param credentials - Optional credentials
+ * @param timeout - Request timeout
+ * @returns Parsed JSON response
+ * @throws MediaGenError on request failures
+ */
+export async function postForm<T = unknown>(
+	context: IExecuteFunctions,
+	url: string,
+	formData: FormData,
+	credentials?: { apiKey: string; baseUrl?: string },
+	timeout = 60000
+): Promise<T> {
+	const headers: Record<string, string> = {};
+
+	// Add authorization header if credentials provided
+	if (credentials?.apiKey) {
+		headers['Authorization'] = `Bearer ${credentials.apiKey}`;
+	}
+
+	const requestOptions: IHttpRequestOptions = {
+		method: 'POST',
+		url,
+		headers,
+		body: formData as unknown as Record<string, unknown>,
+		timeout,
+	};
+
+	try {
+		return await context.helpers.httpRequest(requestOptions) as Promise<T>;
+	} catch (error) {
+		if (error instanceof Error && isTimeoutError(error)) {
+			throw new MediaGenError('Request timeout', 'TIMEOUT');
+		}
+
+		throw new MediaGenError(
+			error instanceof Error ? error.message : 'Form request failed',
+			'API_ERROR'
+		);
+	}
+}
+
+/**
+ * GET request with JSON response
+ *
+ * Specialized method for GET requests
+ *
+ * @param context - n8n execution context
+ * @param url - Request URL
+ * @param credentials - Optional credentials
+ * @param timeout - Request timeout
+ * @returns Parsed JSON response
+ * @throws MediaGenError on request failures
+ */
+export async function getJson<T = unknown>(
+	context: IExecuteFunctions,
+	url: string,
+	credentials?: { apiKey: string; baseUrl?: string },
+	timeout = 60000
+): Promise<T> {
+	return await makeHttpRequest(context, {
+		method: 'GET',
+		url,
+		credentials,
+		timeout,
+		json: true,
+	}) as Promise<T>;
 }

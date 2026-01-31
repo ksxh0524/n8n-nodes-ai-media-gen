@@ -18,7 +18,12 @@ export {
 export {
 	makeHttpRequest,
 	makePollRequest,
+	downloadBinary,
+	postJson,
+	postForm,
+	getJson,
 	type HttpRequestOptions,
+	type DownloadBinaryOptions,
 } from './httpRequest';
 
 // Polling
@@ -39,6 +44,9 @@ export {
 	validateModel,
 	validateTimeout,
 	getTimeoutOrDefault,
+	validateNumImages,
+	validateSizeForModel,
+	validateModelRequest,
 } from './paramValidation';
 
 // Binary data handling
@@ -52,6 +60,14 @@ export {
 	extractBase64FromDataUrl,
 	type BinaryDataOptions,
 } from './binaryData';
+
+// Image download utilities
+export {
+	ImageDownloader,
+	type BinaryData,
+	type ImageDownloadOptions,
+	type ImageDimensions,
+} from './imageDownloader';
 
 // Constants
 export {
@@ -76,13 +92,6 @@ export {
 	DEFAULT_TIMEOUTS,
 } from './constants';
 
-// Model validators
-export {
-	validateNumImages,
-	validateSizeForModel,
-	validateModelRequest,
-} from './validators';
-
 // Cache
 export {
 	CacheManager,
@@ -106,6 +115,25 @@ export {
 	validateCredentials,
 	validateGenerationParams,
 } from './helpers';
+
+// Error Handling
+export {
+	ErrorHandler,
+} from './errorHandling';
+
+// Response Handler
+export {
+	ResponseHandler,
+} from './responseHandler';
+
+// Media Generation Executor
+export {
+	MediaGenExecutor,
+	BasePlatformStrategy,
+	type ExecutionMetadata,
+	type ExecutionContext,
+	type PlatformConfig,
+} from './mediaGenExecutor';
 
 // Types
 export type {
