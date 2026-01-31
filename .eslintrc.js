@@ -13,8 +13,8 @@ module.exports = {
 	},
 	rules: {
 		'@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
-		'@typescript-eslint/no-explicit-any': 'off',
-		'no-console': 'off',
+		'@typescript-eslint/no-explicit-any': 'warn',
+		'no-console': 'error',
 	},
 	ignorePatterns: [
 		'dist',

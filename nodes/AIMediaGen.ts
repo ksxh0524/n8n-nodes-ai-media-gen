@@ -2065,14 +2065,12 @@ export class AIMediaGen implements INodeType {
 			const baseUrlWithoutTrailingSlash = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
 			const url = `${baseUrlWithoutTrailingSlash}/${CONSTANTS.API_ENDPOINTS.MODELSCOPE.IMAGES_GENERATIONS}`;
 
-			console.log('[DEBUG] === Submitting async task ===');
-			console.log('[DEBUG] URL:', url);
-			console.log('[DEBUG] Model:', model);
-			console.log('[DEBUG] RequestBody:', JSON.stringify(requestBody, null, 2));
-
 			if (!context) {
 				throw new MediaGenError('Execution context is required', 'API_ERROR');
 			}
+
+			// Log debug information
+			context.logger?.debug('Submitting async task', { url, model, requestBody });
 
 			let submitData: ModelScopeAsyncSubmitResponse;
 			try {
@@ -2089,17 +2087,10 @@ export class AIMediaGen implements INodeType {
 					timeout: timeout,
 				}) as ModelScopeAsyncSubmitResponse;
 	} catch (error) {
-				console.log('[DEBUG] === API request failed ===');
-				console.log('[DEBUG] Error:', error);
-				console.log('[DEBUG] Error message:', error instanceof Error ? error.message : String(error));
-				console.log('[DEBUG] Error string:', String(error));
-
-				// Try to extract response body
-				const errorAny = error as any;
-				if (errorAny.response) {
-					console.log('[DEBUG] Response:', errorAny.response);
-					console.log('[DEBUG] Response body:', typeof errorAny.response === 'string' ? errorAny.response : JSON.stringify(errorAny.response, null, 2));
-				}
+				// Log error details
+				context.logger?.debug('API request failed', {
+					error: error instanceof Error ? error.message : String(error),
+				});
 
 				if (error instanceof Error) {
 					if (error.message.includes('timeout') || error.message.includes('ETIMEDOUT')) {
@@ -2112,16 +2103,16 @@ export class AIMediaGen implements INodeType {
 						// Try to get more error details from response
 						let detailedError = error.message;
 						try {
-							const errorObj = error as any;
-							if (errorObj.response && typeof errorObj.response === 'object') {
-								detailedError = JSON.stringify(errorObj.response, null, 2);
-							} else if (errorObj.response && typeof errorObj.response === 'string') {
+							const errorObj = error as { response?: { body?: unknown } | string };
+							if (errorObj.response && typeof errorObj.response === 'object' && 'body' in errorObj.response) {
+								detailedError = JSON.stringify(errorObj.response.body, null, 2);
+							} else if (typeof errorObj.response === 'string') {
 								detailedError = errorObj.response;
 							}
 						} catch (e) {
 							// Keep original error
 						}
-						console.log('[DEBUG] Detailed 400 error:', detailedError);
+						context.logger?.debug('Detailed 400 error', { detailedError });
 						throw new MediaGenError(
 							`API Error (400): ${detailedError}`,
 							'API_ERROR'
