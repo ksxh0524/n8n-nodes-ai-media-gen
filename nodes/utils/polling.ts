@@ -250,7 +250,7 @@ export async function pollSunoTask(options: Omit<PollingOptions, 'headers' | 'on
 				elapsed: `${Math.floor(elapsed / 1000)}s`,
 			});
 			// Wait 10s before retry on error
-			await new Promise(resolve => setTimeout(resolve, 10000));
+			await (context.helpers as any).wait(10000);
 			continue;
 		}
 
@@ -276,8 +276,8 @@ export async function pollSunoTask(options: Omit<PollingOptions, 'headers' | 'on
 
 		// Check if still processing
 		if (sunoStatus === 'IN_PROGRESS' || sunoStatus === 'processing' || sunoStatus === 'streaming') {
-			// Wait 10 seconds before next poll
-			await new Promise(resolve => setTimeout(resolve, 10000));
+			// Wait 10 seconds before next poll using n8n helper
+			await (context.helpers as any).wait(10000);
 			continue;
 		}
 
@@ -286,7 +286,7 @@ export async function pollSunoTask(options: Omit<PollingOptions, 'headers' | 'on
 			taskId,
 			pollCount,
 		});
-		await new Promise(resolve => setTimeout(resolve, 10000));
+		await (context.helpers as any).wait(10000);
 	}
 
 	// Timeout
