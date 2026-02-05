@@ -225,9 +225,8 @@ export async function pollSunoTask(options: Omit<PollingOptions, 'headers' | 'on
 
 	const startTime = Date.now();
 	let pollCount = 0;
-	const maxPolls = 120;
 
-	while (Date.now() - startTime < timeoutMs && pollCount < maxPolls) {
+	while (Date.now() - startTime < timeoutMs) {
 		pollCount++;
 		const elapsed = Date.now() - startTime;
 
@@ -250,7 +249,8 @@ export async function pollSunoTask(options: Omit<PollingOptions, 'headers' | 'on
 				pollCount,
 				elapsed: `${Math.floor(elapsed / 1000)}s`,
 			});
-			// Continue polling on network errors
+			// Wait 5s before retry on error
+			await new Promise(resolve => setTimeout(resolve, 5000));
 			continue;
 		}
 
@@ -276,14 +276,18 @@ export async function pollSunoTask(options: Omit<PollingOptions, 'headers' | 'on
 
 		// Check if still processing
 		if (sunoStatus === 'IN_PROGRESS' || sunoStatus === 'processing' || sunoStatus === 'streaming') {
+			// Wait before next poll - adaptive interval
+			const waitTime = elapsed < 30000 ? 5000 : (elapsed < 120000 ? 10000 : 15000);
+			await new Promise(resolve => setTimeout(resolve, waitTime));
 			continue;
 		}
 
-		// Unknown status
+		// Unknown status - wait 5s before retry
 		context.logger?.warn(`[${logPrefix}] Unknown status: ${sunoStatus}`, {
 			taskId,
 			pollCount,
 		});
+		await new Promise(resolve => setTimeout(resolve, 5000));
 	}
 
 	// Timeout
