@@ -213,6 +213,73 @@ export class ResponseParsers {
 	}
 
 	/**
+	 * Parses Suno response
+	 *
+	 * @param response - Raw API response
+	 * @returns Parsed media response
+	 */
+	static parseSunoResponse(response: unknown): ParsedMediaResponse {
+		// Log raw response
+		console.log('[Suno ResponseParser] Raw response:', JSON.stringify(response, null, 2));
+
+		if (!response || typeof response !== 'object') {
+			console.error('[Suno ResponseParser] Invalid response - not an object');
+			throw new MediaGenError('Invalid Suno response', 'API_ERROR');
+		}
+
+		const resp = response as Record<string, unknown>;
+
+		// Log response keys
+		console.log('[Suno ResponseParser] Response keys:', Object.keys(resp));
+		console.log('[Suno ResponseParser] Has task_id:', !!resp.task_id);
+		console.log('[Suno ResponseParser] Has audio_url:', !!resp.audio_url);
+		console.log('[Suno ResponseParser] Status:', resp.status);
+
+		// Polling response with task_id
+		if (resp.task_id) {
+			const status = resp.status as string;
+			console.log('[Suno ResponseParser] Task status:', status);
+
+			if (status === 'queued' || status === 'processing') {
+				console.log('[Suno ResponseParser] Task is pending, returning task metadata');
+				return {
+					metadata: {
+						taskId: resp.task_id as string,
+						status,
+					},
+				};
+			}
+
+			if (status === 'failed') {
+				console.error('[Suno ResponseParser] Task failed:', resp.error);
+				throw new MediaGenError(
+					resp.error as string || 'Suno generation failed',
+					'MUSIC_GENERATION_FAILED'
+				);
+			}
+
+			if (status === 'succeeded' && resp.audio_url) {
+				console.log('[Suno ResponseParser] Task succeeded, audio URL:', resp.audio_url);
+				return {
+					audioUrl: resp.audio_url as string,
+					metadata: {
+						taskId: resp.task_id as string,
+						status,
+					},
+				};
+			}
+		}
+
+		// Empty submission response
+		console.log('[Suno ResponseParser] Empty submission response, marking as async');
+		return {
+			metadata: {
+				async: true,
+			},
+		};
+	}
+
+	/**
 	 * Generic response parser for unknown platforms
 	 *
 	 * Tries multiple strategies to extract media data

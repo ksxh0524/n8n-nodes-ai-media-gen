@@ -17,7 +17,7 @@ export interface ExecutionMetadata {
 	cached?: boolean;
 	timestamp: string;
 	provider: string;
-	mediaType: 'image' | 'video';
+	mediaType: 'image' | 'video' | 'audio';
 	duration?: number;
 }
 
@@ -40,7 +40,7 @@ export interface PlatformConfig {
 	operation: string;
 	credentialType: string;
 	provider: string;
-	mediaType: 'image' | 'video';
+	mediaType: 'image' | 'video' | 'audio';
 }
 
 /**
@@ -300,16 +300,36 @@ export class MediaGenExecutor {
 		credentialType: string,
 		itemIndex: number
 	): Promise<T> {
+		this.context.logger?.info('[MediaGenExecutor] Getting credentials', {
+			credentialType,
+			itemIndex,
+		});
+
 		try {
 			const credentials = await this.context.getCredentials<T>(credentialType);
 
 			if (!credentials || !(credentials as { apiKey?: string }).apiKey) {
+				this.context.logger?.error('[MediaGenExecutor] Credentials validation failed', {
+					credentialType,
+					hasCredentials: !!credentials,
+					hasApiKey: !!(credentials as { apiKey?: string })?.apiKey,
+				});
 				throw new NodeOperationError(
 					this.context.getNode(),
 					`API Key is required. Please configure your ${credentialType} credentials.`,
 					{ itemIndex }
 				);
 			}
+
+			// Log credentials info (without sensitive data)
+			const credentialKeys = Object.keys(credentials as unknown as Record<string, unknown>);
+			this.context.logger?.info('[MediaGenExecutor] Credentials loaded successfully', {
+				credentialType,
+				credentialKeys,
+				hasApiKey: true,
+				hasBaseUrl: !!(credentials as { baseUrl?: string })?.baseUrl,
+				baseUrl: (credentials as { baseUrl?: string })?.baseUrl || 'default',
+			});
 
 			return credentials;
 		} catch (error) {
@@ -388,23 +408,139 @@ export abstract class BasePlatformStrategy implements PlatformStrategy {
 		params: Record<string, unknown>,
 		timeout: number
 	): Promise<INodeExecutionData> {
+		const config = this.getConfig();
+
 		// Build request
 		const request = this.buildRequest(context, itemIndex, params, credentials);
 
-		// Execute HTTP request
-		const response = await context.helpers.httpRequest({
-			method: request.method as IHttpRequestMethods,
+		// Log request details (with sensitive data masked)
+		const sanitizedBody = this.sanitizeRequestBody(request.body);
+		context.logger?.info(`[${config.provider.toUpperCase()}] Sending API Request`, {
+			method: request.method,
 			url: request.url,
-			body: request.body as Record<string, unknown> | undefined,
-			headers: request.headers,
+			headers: this.sanitizeHeaders(request.headers),
+			body: sanitizedBody,
 			timeout,
+		});
+
+		// Execute HTTP request
+		let response: unknown;
+		try {
+			response = await context.helpers.httpRequest({
+				method: request.method as IHttpRequestMethods,
+				url: request.url,
+				body: request.body as Record<string, unknown> | undefined,
+				headers: request.headers,
+				timeout,
+			});
+		} catch (error) {
+			// Log error details
+			context.logger?.error(`[${config.provider.toUpperCase()}] API Request Failed`, {
+				error: error instanceof Error ? error.message : String(error),
+				method: request.method,
+				url: request.url,
+				body: sanitizedBody,
+				status: (error as { statusCode?: number })?.statusCode,
+			});
+			throw error;
+		}
+
+		// Log response details
+		const sanitizedResponse = this.sanitizeResponse(response);
+		context.logger?.info(`[${config.provider.toUpperCase()}] API Response Received`, {
+			responseType: typeof response,
+			hasData: response !== null && response !== undefined,
+			preview: this.getPreview(sanitizedResponse),
 		});
 
 		// Parse response
 		const parsed = this.parseResponse(response);
 
+		// Log parsed result
+		context.logger?.info(`[${config.provider.toUpperCase()}] Response Parsed`, {
+			hasImageUrl: !!parsed.imageUrl,
+			hasVideoUrl: !!parsed.videoUrl,
+			hasAudioUrl: !!parsed.audioUrl,
+			hasBase64: !!parsed.base64Data,
+			metadata: parsed.metadata,
+		});
+
 		// Build result
 		return this.buildResult(parsed, params);
+	}
+
+	/**
+	 * Sanitize request body for logging (remove sensitive data)
+	 */
+	private sanitizeRequestBody(body: unknown): unknown {
+		if (!body) return body;
+		if (typeof body === 'string') {
+			// Truncate long strings
+			return body.length > 500 ? body.substring(0, 500) + '...(truncated)' : body;
+		}
+		if (typeof body === 'object') {
+			const sanitized: Record<string, unknown> = {};
+			for (const [key, value] of Object.entries(body as Record<string, unknown>)) {
+				if (typeof value === 'string' && value.length > 500) {
+					sanitized[key] = value.substring(0, 500) + '...(truncated)';
+				} else {
+					sanitized[key] = value;
+				}
+			}
+			return sanitized;
+		}
+		return body;
+	}
+
+	/**
+	 * Sanitize headers for logging (remove sensitive data)
+	 */
+	private sanitizeHeaders(headers: Record<string, string> | undefined): Record<string, string> | undefined {
+		if (!headers) return headers;
+		const sanitized: Record<string, string> = {};
+		for (const [key, value] of Object.entries(headers)) {
+			if (key.toLowerCase() === 'authorization') {
+				// Mask authorization header
+				sanitized[key] = value.substring(0, 20) + '***MASKED***';
+			} else {
+				sanitized[key] = value;
+			}
+		}
+		return sanitized;
+	}
+
+	/**
+	 * Sanitize response for logging
+	 */
+	private sanitizeResponse(response: unknown): unknown {
+		if (!response) return response;
+		if (typeof response === 'string') {
+			return response.length > 1000 ? response.substring(0, 1000) + '...(truncated)' : response;
+		}
+		if (typeof response === 'object') {
+			const str = JSON.stringify(response);
+			return str.length > 1000 ? str.substring(0, 1000) + '...(truncated)' : str;
+		}
+		return response;
+	}
+
+	/**
+	 * Get preview of response for logging
+	 */
+	private getPreview(response: unknown): string {
+		if (!response) return 'null/undefined';
+		if (typeof response === 'string') {
+			return response.length > 200 ? response.substring(0, 200) + '...' : response;
+		}
+		if (typeof response === 'object') {
+			try {
+				const str = JSON.stringify(response);
+				return str.length > 200 ? str.substring(0, 200) + '...' : str;
+			} catch {
+				return '[Object]';
+			}
+		}
+		return String(response);
 	}
 
 	/**

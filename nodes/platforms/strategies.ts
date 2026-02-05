@@ -533,6 +533,141 @@ export class NanoBananaStrategy extends BasePlatformStrategy {
 }
 
 /**
+ * Suno platform strategy
+ */
+export class SunoStrategy extends BasePlatformStrategy {
+	getConfig(): PlatformConfig {
+		return {
+			operation: 'suno',
+			credentialType: 'sunoApi',
+			provider: 'suno',
+			mediaType: 'audio',
+		};
+	}
+
+	extractParams(context: IExecuteFunctions, itemIndex: number): Record<string, unknown> {
+		const prompt = context.getNodeParameter('sunoPrompt', itemIndex) as string;
+		const title = this.getParam(context, 'sunoTitle', itemIndex, '');
+		const tags = this.getParam(context, 'sunoTags', itemIndex, '');
+		const makeInstrumental = this.getParam(context, 'sunoMakeInstrumental', itemIndex, false);
+
+		// Log extracted parameters
+		context.logger?.info('[Suno] Extracted parameters', {
+			promptLength: prompt.length,
+			promptPreview: prompt.length > 100 ? prompt.substring(0, 100) + '...' : prompt,
+			title,
+			tags,
+			makeInstrumental,
+			model: 'chirp-crow',
+		});
+
+		return {
+			operation: 'suno' as const,
+			model: 'chirp-crow',
+			prompt: prompt.trim(),
+			title: title || undefined,
+			tags: tags || undefined,
+			makeInstrumental,
+		};
+	}
+
+	buildCacheParams(context: IExecuteFunctions, itemIndex: number): Record<string, unknown> {
+		const tags = this.getParam(context, 'sunoTags', itemIndex, '');
+		const makeInstrumental = this.getParam(context, 'sunoMakeInstrumental', itemIndex, false);
+
+		return {
+			model: 'chirp-crow',
+			tags,
+			makeInstrumental,
+		};
+	}
+
+	protected buildRequest(
+		context: IExecuteFunctions,
+		_itemIndex: number,
+		params: Record<string, unknown>,
+		credentials: Credentials
+	): { method: string; url: string; body?: unknown; headers?: Record<string, string> } {
+		const request = RequestBuilders.buildSunoRequest(
+			context,
+			_itemIndex,
+			params as any,
+			credentials
+		) as IHttpRequestOptions as any;
+
+		// Log request details
+		context.logger?.info('[Suno] Built request', {
+			method: request.method,
+			url: request.url,
+			hasBody: !!request.body,
+			bodyKeys: request.body ? Object.keys(request.body as Record<string, unknown>) : [],
+			hasHeaders: !!request.headers,
+		});
+
+		return request;
+	}
+
+	protected parseResponse(response: unknown): ParsedMediaResponse {
+		// Log raw response before parsing
+		const context = (this as any).context;
+		context?.logger?.info('[Suno] Parsing response', {
+			responseType: typeof response,
+			responseKeys: response && typeof response === 'object' ? Object.keys(response as Record<string, unknown>) : 'N/A',
+		});
+
+		const parsed = ResponseParsers.parseSunoResponse(response);
+
+		// Log parsed result
+		context?.logger?.info('[Suno] Parsed response result', {
+			hasAudioUrl: !!parsed.audioUrl,
+			hasMetadata: !!parsed.metadata,
+			metadata: parsed.metadata,
+		});
+
+		return parsed;
+	}
+
+	protected buildResult(
+		parsed: ParsedMediaResponse,
+		_params: Record<string, unknown>
+	): INodeExecutionData {
+		const config = this.getConfig();
+
+		if (parsed.metadata?.status && parsed.metadata.status !== 'succeeded') {
+			return ResponseHandler.buildSuccessResponse(
+				{
+					model: 'chirp-crow',
+					taskId: parsed.metadata.taskId as string,
+					status: parsed.metadata.status as string,
+					async: true,
+					provider: config.provider,
+					mediaType: config.mediaType,
+				},
+				{
+					provider: config.provider,
+					mediaType: config.mediaType,
+					...parsed.metadata,
+				}
+			);
+		}
+
+		return ResponseHandler.buildSuccessResponse(
+			{
+				model: 'chirp-crow',
+				audioUrl: parsed.audioUrl,
+				provider: config.provider,
+				mediaType: config.mediaType,
+			},
+			{
+				provider: config.provider,
+				mediaType: config.mediaType,
+				...parsed.metadata,
+			}
+		);
+	}
+}
+
+/**
  * Strategy registry
  *
  * Provides a single point to register and retrieve platform strategies.
@@ -575,4 +710,5 @@ export function initializeStrategies(): void {
 	StrategyRegistry.register('sora', new SoraStrategy());
 	StrategyRegistry.register('veo', new VeoStrategy());
 	StrategyRegistry.register('nanoBanana', new NanoBananaStrategy());
+	StrategyRegistry.register('suno', new SunoStrategy());
 }

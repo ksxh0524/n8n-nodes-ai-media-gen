@@ -210,3 +210,19 @@ export async function pollReplicateTask(options: Omit<PollingOptions, 'headers' 
 		failureStatuses: ['failed', 'canceled'],
 	});
 }
+
+/**
+ * Polls a task with Suno-specific configuration
+ *
+ * Suno uses specific status codes, so this is a specialized version.
+ *
+ * @param options - Polling configuration
+ * @returns Task status response
+ */
+export async function pollSunoTask(options: Omit<PollingOptions, 'headers' | 'onSuccessStatus' | 'failureStatuses'>): Promise<TaskStatusResponse> {
+	return pollTask({
+		...options,
+		onSuccessStatus: ['succeeded'],
+		failureStatuses: ['failed', 'cancelled'],
+	});
+}

@@ -211,6 +211,43 @@ export interface GeminiResponse {
 }
 
 // ============================================================================
+// Suno Platform
+// ============================================================================
+
+/**
+ * Suno platform parameters
+ */
+export interface SunoParams {
+	operation: 'suno';
+	model: 'chirp-crow';
+	prompt: string;
+	title?: string;
+	tags?: string;
+	makeInstrumental?: boolean;
+}
+
+/**
+ * Suno request body
+ */
+export interface SunoRequestBody {
+	prompt: string;
+	mv: string;
+	title?: string;
+	tags?: string;
+	make_instrumental?: boolean;
+}
+
+/**
+ * Suno task response
+ */
+export interface SunoTaskResponse {
+	task_id: string;
+	status: 'queued' | 'processing' | 'succeeded' | 'failed';
+	audio_url?: string;
+	error?: string;
+}
+
+// ============================================================================
 // Union Types
 // ============================================================================
 
@@ -222,12 +259,13 @@ export type PlatformParams =
 	| DoubaoParams
 	| SoraParams
 	| VeoParams
-	| NanoBananaParams;
+	| NanoBananaParams
+	| SunoParams;
 
 /**
  * Platform operation names
  */
-export type PlatformOperation = 'modelscope' | 'nanoBanana' | 'sora' | 'veo';
+export type PlatformOperation = 'modelscope' | 'nanoBanana' | 'sora' | 'veo' | 'suno';
 
 /**
  * API response types (union)
@@ -286,6 +324,7 @@ export type Credentials =
 export interface ParsedMediaResponse {
 	imageUrl?: string;
 	videoUrl?: string;
+	audioUrl?: string;
 	base64Data?: string;
 	metadata?: Record<string, unknown>;
 }

@@ -69,6 +69,15 @@ export class AIMediaGen implements INodeType {
 					},
 				},
 			},
+			{
+				name: 'sunoApi',
+				required: true,
+				displayOptions: {
+					show: {
+						operation: ['suno'],
+					},
+				},
+			},
 		],
 		properties: [
 		{
@@ -101,6 +110,11 @@ export class AIMediaGen implements INodeType {
 					name: 'Veo',
 					value: 'veo',
 					description: 'Google Veo - Text/Image to Video Generation',
+				},
+				{
+					name: 'Suno',
+					value: 'suno',
+					description: 'Suno AI - Text to Music Generation',
 				},
 			],
 			default: 'modelscope',
@@ -792,6 +806,59 @@ export class AIMediaGen implements INodeType {
 			required: true,
 			description: 'Choose how to receive the generated video',
 		},
+		// Suno - Title
+		{
+			displayName: 'Title',
+			name: 'sunoTitle',
+			type: 'string',
+			default: '',
+			displayOptions: { show: { operation: ['suno'] } },
+			description: 'Song title (optional)',
+		},
+		// Suno - Tags
+		{
+			displayName: 'Style Tags',
+			name: 'sunoTags',
+			type: 'string',
+			default: '',
+			placeholder: 'pop, upbeat, romantic',
+			displayOptions: { show: { operation: ['suno'] } },
+			description: 'Music style/genre tags',
+		},
+		// Suno - Prompt
+		{
+			displayName: 'Prompt / Lyrics',
+			name: 'sunoPrompt',
+			type: 'string',
+			typeOptions: { rows: 8 },
+			default: '',
+			required: true,
+			displayOptions: { show: { operation: ['suno'] } },
+			description: 'Song lyrics or music description',
+		},
+		// Suno - Instrumental
+		{
+			displayName: 'Instrumental Only',
+			name: 'sunoMakeInstrumental',
+			type: 'boolean',
+			default: false,
+			displayOptions: { show: { operation: ['suno'] } },
+			description: 'Generate music without vocals',
+		},
+		// Suno - Output Mode
+		{
+			displayName: 'Output Mode',
+			name: 'sunoOutputMode',
+			type: 'options',
+			required: true,
+			options: [
+				{ name: 'URL Only', value: 'url', description: 'Return audio URL only' },
+				{ name: 'Binary Data', value: 'binary', description: 'Download and include audio file' },
+			],
+			default: 'url',
+			displayOptions: { show: { operation: ['suno'] } },
+			description: 'Choose how to receive the generated audio',
+		},
 		// Prompt - shown for all models
 		{
 			displayName: 'Prompt',
@@ -1016,6 +1083,8 @@ export class AIMediaGen implements INodeType {
 					model = this.getNodeParameter('soraModel', i) as string;
 				} else if (operation === 'veo') {
 					model = this.getNodeParameter('veoModel', i) as string;
+				} else if (operation === 'suno') {
+					model = 'chirp-crow';
 				} else {
 					model = this.getNodeParameter('model', i) as string;
 				}

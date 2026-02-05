@@ -5,6 +5,7 @@ import type {
 	SoraParams,
 	VeoParams,
 	NanoBananaParams,
+	SunoParams,
 	Credentials,
 } from '../types/platforms';
 
@@ -290,6 +291,56 @@ export class RequestBuilders {
 			body,
 			headers: {
 				'Content-Type': 'application/json',
+			},
+		};
+	}
+
+	/**
+	 * Builds Suno API request
+	 *
+	 * @param _context - n8n execution context
+	 * @param _itemIndex - Current item index
+	 * @param params - Suno parameters
+	 * @param credentials - API credentials
+	 * @returns HTTP request options
+	 */
+	static buildSunoRequest(
+		context: IExecuteFunctions,
+		_itemIndex: number,
+		params: SunoParams,
+		credentials: Credentials
+	): IHttpRequestOptions {
+		const { prompt, title, tags, makeInstrumental } = params;
+
+		const body: Record<string, unknown> = {
+			prompt: prompt.trim(),
+			mv: 'chirp-crow',
+		};
+
+		if (title) body.title = title;
+		if (tags) body.tags = tags;
+		if (makeInstrumental) body.make_instrumental = true;
+
+		const baseUrl = (credentials as { baseUrl?: string }).baseUrl || 'https://api.sunoservice.org';
+
+		// Log request building details
+		context.logger?.debug('[Suno RequestBuilder] Building request', {
+			baseUrl,
+			endpoint: '/suno/submit/music',
+			promptLength: prompt.length,
+			title,
+			tags,
+			makeInstrumental,
+			model: 'chirp-crow',
+		});
+
+		return {
+			method: 'POST' as const,
+			url: `${baseUrl}/suno/submit/music`,
+			body,
+			headers: {
+				'Content-Type': 'application/json',
+				Authorization: `Bearer ${credentials.apiKey}`,
 			},
 		};
 	}
