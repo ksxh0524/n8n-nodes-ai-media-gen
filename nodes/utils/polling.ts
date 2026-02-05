@@ -249,8 +249,8 @@ export async function pollSunoTask(options: Omit<PollingOptions, 'headers' | 'on
 				pollCount,
 				elapsed: `${Math.floor(elapsed / 1000)}s`,
 			});
-			// Wait 5s before retry on error
-			await new Promise(resolve => setTimeout(resolve, 5000));
+			// Wait 10s before retry on error
+			await new Promise(resolve => setTimeout(resolve, 10000));
 			continue;
 		}
 
@@ -276,18 +276,17 @@ export async function pollSunoTask(options: Omit<PollingOptions, 'headers' | 'on
 
 		// Check if still processing
 		if (sunoStatus === 'IN_PROGRESS' || sunoStatus === 'processing' || sunoStatus === 'streaming') {
-			// Wait before next poll - adaptive interval
-			const waitTime = elapsed < 30000 ? 5000 : (elapsed < 120000 ? 10000 : 15000);
-			await new Promise(resolve => setTimeout(resolve, waitTime));
+			// Wait 10 seconds before next poll
+			await new Promise(resolve => setTimeout(resolve, 10000));
 			continue;
 		}
 
-		// Unknown status - wait 5s before retry
+		// Unknown status - wait 10s before retry
 		context.logger?.warn(`[${logPrefix}] Unknown status: ${sunoStatus}`, {
 			taskId,
 			pollCount,
 		});
-		await new Promise(resolve => setTimeout(resolve, 5000));
+		await new Promise(resolve => setTimeout(resolve, 10000));
 	}
 
 	// Timeout
