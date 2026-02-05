@@ -1,4 +1,4 @@
-import type { IExecuteFunctions, INodeExecutionData, IHttpRequestOptions, IHttpRequestMethods } from 'n8n-workflow';
+import type { IExecuteFunctions, INodeExecutionData, IHttpRequestOptions } from 'n8n-workflow';
 
 import { BasePlatformStrategy, type PlatformConfig } from '../utils/mediaGenExecutor';
 import { MediaGenError } from '../utils/errors';
@@ -599,6 +599,7 @@ export class SunoStrategy extends BasePlatformStrategy {
 
 		// Import required modules
 		const { pollSunoTask } = await import('../utils/polling');
+		const { makeHttpRequest } = await import('../utils/httpRequest');
 
 		// Build initial request
 		const request = this.buildRequest(context, itemIndex, params, credentials);
@@ -607,19 +608,34 @@ export class SunoStrategy extends BasePlatformStrategy {
 		console.log('[Suno] Sending initial request');
 		console.log('Method:', request.method);
 		console.log('URL:', request.url);
+		console.log('Body:', JSON.stringify(request.body, null, 2));
+		console.log('Headers:', JSON.stringify(request.headers, null, 2));
+		console.log('Timeout:', timeout);
 
-		// Execute initial HTTP request
+		// Execute initial HTTP request using makeHttpRequest
 		let response: unknown;
 		try {
-			response = await context.helpers.httpRequest({
-				method: request.method as IHttpRequestMethods,
+			console.log('[Suno] Starting httpRequest call...');
+			const startTime = Date.now();
+			response = await makeHttpRequest(context, {
+				method: request.method as 'GET' | 'POST' | 'PUT' | 'DELETE',
 				url: request.url as string,
-				body: request.body as Record<string, unknown> | undefined,
+				body: request.body,
 				headers: request.headers as Record<string, string>,
 				timeout,
+				credentials,
 			});
+			const elapsed = Date.now() - startTime;
+			console.log('[Suno] httpRequest completed in', elapsed, 'ms');
+			console.log('[Suno] Response type:', typeof response);
+			console.log('[Suno] Response keys:', response ? Object.keys(response) : 'null/undefined');
 		} catch (error) {
 			console.error('[Suno] Initial request failed:', error);
+			console.error('[Suno] Error name:', error instanceof Error ? error.name : 'unknown');
+			console.error('[Suno] Error message:', error instanceof Error ? error.message : String(error));
+			if (error && typeof error === 'object' && 'response' in error) {
+				console.error('[Suno] Error response:', (error as any).response);
+			}
 			context.logger?.error(`[${config.provider.toUpperCase()}] API Request Failed`, {
 				error: error instanceof Error ? error.message : String(error),
 				url: request.url,
