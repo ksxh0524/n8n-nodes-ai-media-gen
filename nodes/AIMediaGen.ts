@@ -7,6 +7,7 @@ import {
 import * as CONSTANTS from './utils/constants';
 import { MediaGenExecutor } from './utils/mediaGenExecutor';
 import { initializeStrategies } from './platforms/strategies';
+import { getSunoModelOptions, DEFAULT_SUNO_MODEL } from './constants/sunoModels';
 
 export class AIMediaGen implements INodeType {
 	description: INodeTypeDescription = {
@@ -845,19 +846,15 @@ export class AIMediaGen implements INodeType {
 			displayOptions: { show: { operation: ['suno'] } },
 			description: 'Generate music without vocals',
 		},
-		// Suno - Output Mode
+		// Suno - Model Version
 		{
-			displayName: 'Output Mode',
-			name: 'sunoOutputMode',
+			displayName: 'Model Version',
+			name: 'sunoModel',
 			type: 'options',
-			required: true,
-			options: [
-				{ name: 'URL Only', value: 'url', description: 'Return audio URL only' },
-				{ name: 'Binary Data', value: 'binary', description: 'Download and include audio file' },
-			],
-			default: 'url',
+			default: DEFAULT_SUNO_MODEL,
+			options: getSunoModelOptions(),
 			displayOptions: { show: { operation: ['suno'] } },
-			description: 'Choose how to receive the generated audio',
+			description: 'Suno model version to use',
 		},
 		// Prompt - shown for all models
 		{

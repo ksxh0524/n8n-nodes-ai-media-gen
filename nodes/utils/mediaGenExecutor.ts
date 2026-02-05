@@ -89,9 +89,6 @@ export class MediaGenExecutor {
 	private readonly context: IExecuteFunctions;
 	private readonly enableCache: boolean;
 
-	// Platform strategy registry
-	private static readonly platformStrategies: Map<string, PlatformStrategy> = new Map();
-
 	constructor(context: IExecuteFunctions, enableCache = true) {
 		this.context = context;
 		this.enableCache = enableCache;
@@ -344,18 +341,9 @@ export class MediaGenExecutor {
 	 * Gets platform strategy for operation
 	 */
 	private getPlatformStrategy(operation: string): PlatformStrategy {
-		const strategy = MediaGenExecutor.platformStrategies.get(operation);
-		if (!strategy) {
-			throw new MediaGenError(`Unknown operation: ${operation}`, 'INVALID_OPERATION');
-		}
-		return strategy;
-	}
-
-	/**
-	 * Registers a platform strategy
-	 */
-	static registerStrategy(operation: string, strategy: PlatformStrategy): void {
-		MediaGenExecutor.platformStrategies.set(operation, strategy);
+		// Import StrategyRegistry dynamically to avoid circular dependency
+		const { StrategyRegistry } = require('../platforms/strategies');
+		return StrategyRegistry.get(operation);
 	}
 
 	/**
@@ -415,6 +403,15 @@ export abstract class BasePlatformStrategy implements PlatformStrategy {
 
 		// Log request details (with sensitive data masked)
 		const sanitizedBody = this.sanitizeRequestBody(request.body);
+
+		// Use console.log for guaranteed visibility
+		console.log(`[${config.provider.toUpperCase()}] Sending API Request`);
+		console.log('Method:', request.method);
+		console.log('URL:', request.url);
+		console.log('Headers:', this.sanitizeHeaders(request.headers));
+		console.log('Body:', sanitizedBody);
+		console.log('Timeout:', timeout);
+
 		context.logger?.info(`[${config.provider.toUpperCase()}] Sending API Request`, {
 			method: request.method,
 			url: request.url,
@@ -435,6 +432,12 @@ export abstract class BasePlatformStrategy implements PlatformStrategy {
 			});
 		} catch (error) {
 			// Log error details
+			console.error(`[${config.provider.toUpperCase()}] API Request Failed`);
+			console.error('Error:', error instanceof Error ? error.message : String(error));
+			console.error('Method:', request.method);
+			console.error('URL:', request.url);
+			console.error('Status:', (error as { statusCode?: number })?.statusCode);
+
 			context.logger?.error(`[${config.provider.toUpperCase()}] API Request Failed`, {
 				error: error instanceof Error ? error.message : String(error),
 				method: request.method,

@@ -8,6 +8,7 @@ import type {
 	SunoParams,
 	Credentials,
 } from '../types/platforms';
+import { getSunoModelApiValue } from '../constants/sunoModels';
 
 /**
  * Platform-specific request builders
@@ -310,33 +311,43 @@ export class RequestBuilders {
 		params: SunoParams,
 		credentials: Credentials
 	): IHttpRequestOptions {
-		const { prompt, title, tags, makeInstrumental } = params;
+		const { prompt, title, tags, makeInstrumental, model } = params;
+
+		// Get API value from model key
+		const apiModel = getSunoModelApiValue(model);
 
 		const body: Record<string, unknown> = {
 			prompt: prompt.trim(),
-			mv: 'chirp-crow',
+			mv: apiModel,
+			title: title || '',
+			tags: tags || '',
+			continue_at: 0,
+			continue_clip_id: '',
+			make_instrumental: makeInstrumental || false,
 		};
-
-		if (title) body.title = title;
-		if (tags) body.tags = tags;
-		if (makeInstrumental) body.make_instrumental = true;
 
 		const baseUrl = (credentials as { baseUrl?: string }).baseUrl || 'https://api.sunoservice.org';
 
 		// Log request building details
 		context.logger?.debug('[Suno RequestBuilder] Building request', {
 			baseUrl,
-			endpoint: '/suno/submit/music',
+			endpoint: '/suno/generate',
+			model,
+			apiModel,
 			promptLength: prompt.length,
 			title,
 			tags,
 			makeInstrumental,
-			model: 'chirp-crow',
 		});
+
+		console.log('[Suno RequestBuilder] Building request');
+		console.log('Base URL:', baseUrl);
+		console.log('Full URL:', `${baseUrl}/suno/generate`);
+		console.log('Body keys:', Object.keys(body));
 
 		return {
 			method: 'POST' as const,
-			url: `${baseUrl}/suno/submit/music`,
+			url: `${baseUrl}/suno/generate`,
 			body,
 			headers: {
 				'Content-Type': 'application/json',

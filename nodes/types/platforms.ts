@@ -219,7 +219,7 @@ export interface GeminiResponse {
  */
 export interface SunoParams {
 	operation: 'suno';
-	model: 'chirp-crow';
+	model: string; // Model key, validated against SUNO_MODELS
 	prompt: string;
 	title?: string;
 	tags?: string;
@@ -231,7 +231,7 @@ export interface SunoParams {
  */
 export interface SunoRequestBody {
 	prompt: string;
-	mv: string;
+	mv: string; // API model value (chirp-crow, chirp-bluejay, etc.)
 	title?: string;
 	tags?: string;
 	make_instrumental?: boolean;
@@ -325,6 +325,12 @@ export interface ParsedMediaResponse {
 	imageUrl?: string;
 	videoUrl?: string;
 	audioUrl?: string;
+	audioUrls?: Array<{
+		id: string;
+		audioUrl: string;
+		title?: string;
+		tags?: string;
+	}>;
 	base64Data?: string;
 	metadata?: Record<string, unknown>;
 }

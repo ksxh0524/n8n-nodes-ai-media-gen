@@ -1,4 +1,4 @@
-import type { IExecuteFunctions, INodeExecutionData, IHttpRequestOptions } from 'n8n-workflow';
+import type { IExecuteFunctions, INodeExecutionData, IHttpRequestOptions, IHttpRequestMethods } from 'n8n-workflow';
 
 import { BasePlatformStrategy, type PlatformConfig } from '../utils/mediaGenExecutor';
 import { MediaGenError } from '../utils/errors';
@@ -6,6 +6,7 @@ import { ResponseHandler } from '../utils/index';
 import { RequestBuilders } from './requestBuilders';
 import { ResponseParsers } from './responseParsers';
 import type { ParsedMediaResponse, Credentials } from '../types/platforms';
+import { DEFAULT_SUNO_MODEL } from '../constants/sunoModels';
 
 /**
  * ModelScope platform strategy
@@ -550,6 +551,7 @@ export class SunoStrategy extends BasePlatformStrategy {
 		const title = this.getParam(context, 'sunoTitle', itemIndex, '');
 		const tags = this.getParam(context, 'sunoTags', itemIndex, '');
 		const makeInstrumental = this.getParam(context, 'sunoMakeInstrumental', itemIndex, false);
+		const model = this.getParam(context, 'sunoModel', itemIndex, DEFAULT_SUNO_MODEL);
 
 		// Log extracted parameters
 		context.logger?.info('[Suno] Extracted parameters', {
@@ -558,12 +560,12 @@ export class SunoStrategy extends BasePlatformStrategy {
 			title,
 			tags,
 			makeInstrumental,
-			model: 'chirp-crow',
+			model,
 		});
 
 		return {
 			operation: 'suno' as const,
-			model: 'chirp-crow',
+			model,
 			prompt: prompt.trim(),
 			title: title || undefined,
 			tags: tags || undefined,
@@ -574,12 +576,310 @@ export class SunoStrategy extends BasePlatformStrategy {
 	buildCacheParams(context: IExecuteFunctions, itemIndex: number): Record<string, unknown> {
 		const tags = this.getParam(context, 'sunoTags', itemIndex, '');
 		const makeInstrumental = this.getParam(context, 'sunoMakeInstrumental', itemIndex, false);
+		const model = this.getParam(context, 'sunoModel', itemIndex, DEFAULT_SUNO_MODEL);
 
 		return {
-			model: 'chirp-crow',
+			model,
 			tags,
 			makeInstrumental,
 		};
+	}
+
+	/**
+	 * Override executeRequest to add polling and audio download logic
+	 */
+	async executeRequest(
+		context: IExecuteFunctions,
+		itemIndex: number,
+		credentials: Credentials,
+		params: Record<string, unknown>,
+		timeout: number
+	): Promise<INodeExecutionData> {
+		const config = this.getConfig();
+
+		// Import required modules
+		const { pollSunoTask } = await import('../utils/polling');
+
+		// Build initial request
+		const request = this.buildRequest(context, itemIndex, params, credentials);
+
+		// Log request details
+		console.log('[Suno] Sending initial request');
+		console.log('Method:', request.method);
+		console.log('URL:', request.url);
+
+		// Execute initial HTTP request
+		let response: unknown;
+		try {
+			response = await context.helpers.httpRequest({
+				method: request.method as IHttpRequestMethods,
+				url: request.url as string,
+				body: request.body as Record<string, unknown> | undefined,
+				headers: request.headers as Record<string, string>,
+				timeout,
+			});
+		} catch (error) {
+			console.error('[Suno] Initial request failed:', error);
+			context.logger?.error(`[${config.provider.toUpperCase()}] API Request Failed`, {
+				error: error instanceof Error ? error.message : String(error),
+				url: request.url,
+			});
+			throw error;
+		}
+
+		// Parse initial response
+		const parsed = this.parseResponse(response);
+		console.log('[Suno] Parsed response:', {
+			hasTaskId: !!parsed.metadata?.taskId,
+			hasAudioUrl: !!parsed.audioUrl,
+			hasAudioUrls: !!parsed.audioUrls,
+			audioUrlsCount: parsed.audioUrls?.length || 0,
+			metadata: parsed.metadata
+		});
+
+		// If we already have audio URLs, handle them
+		if (parsed.audioUrls && parsed.audioUrls.length > 0) {
+			return this.handleMultipleAudioResponse(context, itemIndex, parsed, params);
+		}
+
+		// Legacy: single audio URL
+		if (parsed.audioUrl) {
+			return this.handleAudioResponse(context, itemIndex, parsed, params);
+		}
+
+		// If need polling (has taskId but not audio URL yet)
+		if (parsed.metadata?.taskId && parsed.metadata.async) {
+			const taskId = parsed.metadata.taskId as string;
+			console.log('[Suno] Task submitted, polling for completion. Song ID:', taskId);
+
+			// Poll for task completion using /suno/fetch/{songid}
+			try {
+				const pollResult = await pollSunoTask({
+					context,
+					taskId,
+					credentials,
+					statusEndpoint: '/suno/fetch',
+					timeoutMs: 300000, // 5 minutes max
+					logPrefix: 'Suno',
+				});
+
+				console.log('[Suno] Poll completed:', pollResult);
+
+				// Parse the final poll result
+				const finalParsed = this.parseResponse(pollResult);
+
+				// If we got audio URLs from polling
+				if (finalParsed.audioUrls && finalParsed.audioUrls.length > 0) {
+					return this.handleMultipleAudioResponse(context, itemIndex, finalParsed, params);
+				}
+
+				// Legacy: single audio URL
+				if (finalParsed.audioUrl) {
+					return this.handleAudioResponse(context, itemIndex, finalParsed, params);
+				}
+
+				// Still no audio URL, return current status
+				return this.buildResult(finalParsed, params);
+			} catch (pollError) {
+				console.error('[Suno] Polling failed:', pollError);
+				// Return initial response on polling failure
+				return this.buildResult(parsed, params);
+			}
+		}
+
+		// No audio URL - return task info
+		console.warn('[Suno] No audio URL in response, returning task info');
+		return this.buildResult(parsed, params);
+	}
+
+	/**
+	 * Handle response with multiple audio URLs
+	 * Downloads binary for each song and returns array of songs in a single item
+	 */
+	private async handleMultipleAudioResponse(
+		context: IExecuteFunctions,
+		_itemIndex: number,
+		parsed: ParsedMediaResponse,
+		params: Record<string, unknown>
+	): Promise<INodeExecutionData> {
+		if (!parsed.audioUrls || parsed.audioUrls.length === 0) {
+			console.error('[Suno] handleMultipleAudioResponse called but no audioUrls available');
+			return this.buildResult(parsed, params);
+		}
+
+		console.log('[Suno] Got', parsed.audioUrls.length, 'songs');
+
+		const config = this.getConfig();
+
+		// Process all songs - always download binary AND keep URL
+		const songs: Array<{
+			id: string;
+			audioUrl: string;
+			binaryData: { data: string; mimeType: string; fileName: string };
+			title?: string;
+			tags?: string;
+		}> = [];
+
+		for (let i = 0; i < parsed.audioUrls.length; i++) {
+			const song = parsed.audioUrls[i];
+			console.log(`[Suno] Processing song ${i + 1}/${parsed.audioUrls.length}:`, {
+				id: song.id,
+				title: song.title,
+			});
+
+			// Download binary data
+			let binaryData: { data: string; mimeType: string; fileName: string };
+			try {
+				const audioBuffer = await context.helpers.httpRequest({
+					method: 'GET',
+					url: song.audioUrl,
+					encoding: 'arraybuffer',
+					timeout: 60000,
+				}) as Buffer;
+
+				console.log(`[Suno] Downloaded song ${i + 1}, size:`, audioBuffer.byteLength);
+
+				// Detect MIME type
+				let mimeType = 'audio/mpeg';
+				let extension = 'mp3';
+				if (song.audioUrl.includes('.wav')) {
+					mimeType = 'audio/wav';
+					extension = 'wav';
+				} else if (song.audioUrl.includes('.m4a')) {
+					mimeType = 'audio/mp4';
+					extension = 'm4a';
+				}
+
+				const base64 = audioBuffer.toString('base64');
+				const fileName = song.title
+					? `${song.title.replace(/[^a-zA-Z0-9]/g, '_')}_${i + 1}.${extension}`
+					: `suno_${song.id}_${i + 1}.${extension}`;
+
+				binaryData = {
+					data: base64,
+					mimeType,
+					fileName,
+				};
+			} catch (error) {
+				console.error(`[Suno] Failed to download song ${i + 1}:`, error);
+				// Create empty binary data on failure
+				binaryData = {
+					data: '',
+					mimeType: 'audio/mpeg',
+					fileName: `error_${song.id}.mp3`,
+				};
+			}
+
+			songs.push({
+				id: song.id,
+				audioUrl: song.audioUrl,
+				binaryData,
+				title: song.title,
+				tags: song.tags,
+			});
+		}
+
+		console.log('[Suno] Returning', songs.length, 'songs in single item');
+
+		// Build response with all songs
+		return ResponseHandler.buildSuccessResponse(
+			{
+				model: params.model as string,
+				songs,
+				provider: config.provider,
+				mediaType: config.mediaType,
+			},
+			{
+				provider: config.provider,
+				mediaType: config.mediaType,
+				...parsed.metadata,
+				songCount: songs.length,
+			}
+		);
+	}
+
+	/**
+	 * Handle response with audio URL
+	 * Always downloads binary AND returns URL
+	 */
+	private async handleAudioResponse(
+		context: IExecuteFunctions,
+		_itemIndex: number,
+		parsed: ParsedMediaResponse,
+		params: Record<string, unknown>
+	): Promise<INodeExecutionData> {
+		const config = this.getConfig();
+
+		// Type guard: ensure audioUrl exists
+		if (!parsed.audioUrl) {
+			console.error('[Suno] handleAudioResponse called but no audioUrl available');
+			return this.buildResult(parsed, params);
+		}
+
+		const audioUrl: string = parsed.audioUrl;
+		console.log('[Suno] Audio URL obtained:', audioUrl);
+		console.log('[Suno] Downloading audio file...');
+
+		// Always download binary data
+		try {
+			// Download audio file using n8n's httpRequest with arraybuffer encoding
+			const audioBuffer = await context.helpers.httpRequest({
+				method: 'GET',
+				url: audioUrl,
+				encoding: 'arraybuffer',
+				timeout: 60000,
+			}) as Buffer;
+
+			console.log('[Suno] Audio file downloaded, size:', audioBuffer.byteLength);
+
+			// Detect MIME type
+			let mimeType = 'audio/mpeg';
+			let extension = 'mp3';
+			if (audioUrl.includes('.wav')) {
+				mimeType = 'audio/wav';
+				extension = 'wav';
+			} else if (audioUrl.includes('.m4a')) {
+				mimeType = 'audio/mp4';
+				extension = 'm4a';
+			}
+
+			const base64 = audioBuffer.toString('base64');
+
+			const binaryData = {
+				data: base64,
+				mimeType,
+				fileName: `suno-${Date.now()}.${extension}`,
+			};
+
+			console.log('[Suno] Binary data prepared:', {
+				mimeType,
+				fileName: binaryData.fileName,
+				dataSize: base64.length,
+			});
+
+			// Return with BOTH audioUrl AND binaryData
+			return ResponseHandler.buildSuccessResponse(
+				{
+					model: params.model as string,
+					audioUrl,
+					binaryData,
+					provider: config.provider,
+					mediaType: config.mediaType,
+				},
+				{
+					provider: config.provider,
+					mediaType: config.mediaType,
+					...parsed.metadata,
+				}
+			);
+		} catch (error) {
+			console.error('[Suno] Failed to download audio:', error);
+			context.logger?.warn('[Suno] Audio download failed, returning URL only', {
+				error: error instanceof Error ? error.message : String(error),
+			});
+			// Return URL only on download failure
+			return this.buildResult(parsed, params);
+		}
 	}
 
 	protected buildRequest(
@@ -632,11 +932,13 @@ export class SunoStrategy extends BasePlatformStrategy {
 		_params: Record<string, unknown>
 	): INodeExecutionData {
 		const config = this.getConfig();
+		const model = _params.model as string;
 
+		// If still processing, return task status
 		if (parsed.metadata?.status && parsed.metadata.status !== 'succeeded') {
 			return ResponseHandler.buildSuccessResponse(
 				{
-					model: 'chirp-crow',
+					model,
 					taskId: parsed.metadata.taskId as string,
 					status: parsed.metadata.status as string,
 					async: true,
@@ -651,10 +953,11 @@ export class SunoStrategy extends BasePlatformStrategy {
 			);
 		}
 
+		// Return with audio URL if available
 		return ResponseHandler.buildSuccessResponse(
 			{
-				model: 'chirp-crow',
-				audioUrl: parsed.audioUrl,
+				model,
+				audioUrl: parsed.audioUrl || undefined,
 				provider: config.provider,
 				mediaType: config.mediaType,
 			},
