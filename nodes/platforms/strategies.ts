@@ -659,7 +659,7 @@ export class SunoStrategy extends BasePlatformStrategy {
 					taskId,
 					credentials,
 					statusEndpoint: '/suno/fetch',
-					timeoutMs: 300000, // 5 minutes max
+					timeoutMs: 600000, // 10 minutes max
 					logPrefix: 'Suno',
 				});
 

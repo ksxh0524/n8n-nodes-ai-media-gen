@@ -15,7 +15,7 @@ export const NODE_VERSION = 1.0;
  */
 export const DEFAULTS = {
 	MAX_RETRIES: 3,
-	TIMEOUT_MS: 60000,
+	TIMEOUT_MS: 300000, // 5 minutes
 	CACHE_TTL_SECONDS: 3600,
 } as const;
 

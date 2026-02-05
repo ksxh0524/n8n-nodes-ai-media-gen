@@ -214,15 +214,81 @@ export async function pollReplicateTask(options: Omit<PollingOptions, 'headers' 
 /**
  * Polls a task with Suno-specific configuration
  *
- * Suno uses specific status codes, so this is a specialized version.
+ * Suno uses specific response format: { code: "success", data: { status: "SUCCESS" } }
+ * This function adapts the response format before calling pollTask
  *
  * @param options - Polling configuration
  * @returns Task status response
  */
-export async function pollSunoTask(options: Omit<PollingOptions, 'headers' | 'onSuccessStatus' | 'failureStatuses'>): Promise<TaskStatusResponse> {
-	return pollTask({
-		...options,
-		onSuccessStatus: ['succeeded'],
-		failureStatuses: ['failed', 'cancelled'],
-	});
+export async function pollSunoTask(options: Omit<PollingOptions, 'headers' | 'onSuccessStatus' | 'failureStatuses'>): Promise<any> {
+	const { context, credentials, taskId, statusEndpoint, timeoutMs = 600000, logPrefix } = options;
+
+	const startTime = Date.now();
+	let pollCount = 0;
+	const maxPolls = 120;
+
+	while (Date.now() - startTime < timeoutMs && pollCount < maxPolls) {
+		pollCount++;
+		const elapsed = Date.now() - startTime;
+
+		// Build status URL
+		const baseUrl = credentials.baseUrl || '';
+		const statusUrl = `${baseUrl}${statusEndpoint}/${taskId}`;
+
+		// Make status request
+		let response: any;
+		try {
+			response = await makeHttpRequest(context, {
+				method: 'GET',
+				url: statusUrl,
+				credentials,
+				timeout: 10000,
+			});
+		} catch (error) {
+			context.logger?.warn(`[${logPrefix}] Poll request failed`, {
+				error: error instanceof Error ? error.message : String(error),
+				pollCount,
+				elapsed: `${Math.floor(elapsed / 1000)}s`,
+			});
+			// Continue polling on network errors
+			continue;
+		}
+
+		// Adapt Suno response format: { code: "success", data: { status: "SUCCESS" } }
+		// Extract status from data.status
+		const sunoStatus = response?.data?.status || response?.status;
+
+		// Log progress
+		console.log(`[${logPrefix}] Progress: ${sunoStatus} (${pollCount}, ${Math.floor(elapsed / 1000)}s)`);
+
+		// Check for success
+		if (sunoStatus === 'SUCCESS' || sunoStatus === 'success') {
+			return response; // Return full response for parsing by responseParsers
+		}
+
+		// Check for failure
+		if (sunoStatus === 'FAILED' || sunoStatus === 'failed') {
+			throw new MediaGenError(
+				`Task failed: ${response?.data?.fail_reason || sunoStatus}`,
+				'TASK_FAILED'
+			);
+		}
+
+		// Check if still processing
+		if (sunoStatus === 'IN_PROGRESS' || sunoStatus === 'processing' || sunoStatus === 'streaming') {
+			continue;
+		}
+
+		// Unknown status
+		context.logger?.warn(`[${logPrefix}] Unknown status: ${sunoStatus}`, {
+			taskId,
+			pollCount,
+		});
+	}
+
+	// Timeout
+	throw new MediaGenError(
+		`Polling timeout after ${Math.floor((Date.now() - startTime) / 1000)}s`,
+		'TIMEOUT'
+	);
 }
