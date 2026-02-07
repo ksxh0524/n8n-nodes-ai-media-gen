@@ -1,4 +1,5 @@
 import type { IExecuteFunctions } from 'n8n-workflow';
+import * as CONSTANTS from './constants';
 import { MediaGenError } from './errors';
 import { makeHttpRequest } from './httpRequest';
 
@@ -14,7 +15,7 @@ export interface PollingOptions {
 	taskId: string;
 	/** Status endpoint path (will be appended to baseUrl) */
 	statusEndpoint: string;
-	/** Maximum timeout in milliseconds (default: 600000 / 10 minutes) */
+	/** Maximum timeout in milliseconds (default: 300000 / 5 minutes) */
 	timeoutMs?: number;
 	/** Status values that indicate success */
 	onSuccessStatus: string[];
@@ -212,81 +213,119 @@ export async function pollReplicateTask(options: Omit<PollingOptions, 'headers' 
 }
 
 /**
- * Polls a task with Suno-specific configuration
- *
- * Suno uses specific response format: { code: "success", data: { status: "SUCCESS" } }
- * This function adapts the response format before calling pollTask
- *
- * @param options - Polling configuration
- * @returns Task status response
+ * Suno-specific response interface
  */
-export async function pollSunoTask(options: Omit<PollingOptions, 'headers' | 'onSuccessStatus' | 'failureStatuses'>): Promise<any> {
-	const { context, credentials, taskId, statusEndpoint, timeoutMs = 600000, logPrefix } = options;
+interface SunoFetchResponse {
+	code: string;
+	message: string;
+	data: {
+		task_id: string;
+		status: 'IN_PROGRESS' | 'SUCCESS' | 'FAILED';
+		fail_reason: string;
+		data: Array<{
+			id: string;
+			title: string;
+			tags: string;
+			duration: number;
+			audio_url: string;
+			video_url: string;
+			image_url: string;
+			state: string;
+			status: string;
+		}>;
+	};
+}
 
+/**
+ * Polls a Suno music generation task
+ *
+ * Suno has a specific API structure with different status codes.
+ * This function polls the fetch endpoint until songs are ready.
+ *
+ * @param context - n8n execution context
+ * @param credentials - Credentials with API key and optional baseUrl
+ * @param taskId - Task ID to poll
+ * @param timeoutMs - Maximum timeout in milliseconds (must be provided by caller)
+ * @returns Suno fetch response with song data
+ * @throws MediaGenError on timeout or task failure
+ *
+ * @example
+ * ```typescript
+ * const result = await pollSunoTask(
+ *   context,
+ *   { apiKey: 'sk-...', baseUrl: 'https://api.sunoservice.org' },
+ *   'task-123',
+ *   300000
+ * );
+ * ```
+ */
+export async function pollSunoTask(
+	context: IExecuteFunctions,
+	credentials: { apiKey: string; baseUrl?: string },
+	taskId: string,
+	timeoutMs: number
+): Promise<SunoFetchResponse> {
 	const startTime = Date.now();
-	let pollCount = 0;
+	const baseUrl = credentials.baseUrl || CONSTANTS.SUNO.DEFAULT_BASE_URL;
+	const pollInterval = CONSTANTS.SUNO.POLL_INTERVAL_MS;
+
+	context.logger?.info('[Suno] Starting polling', {
+		taskId,
+		timeout: `${Math.floor(timeoutMs / 1000)}s`,
+	});
 
 	while (Date.now() - startTime < timeoutMs) {
-		pollCount++;
 		const elapsed = Date.now() - startTime;
 
-		// Build status URL
-		const baseUrl = credentials.baseUrl || '';
-		const statusUrl = `${baseUrl}${statusEndpoint}/${taskId}`;
-
-		// Make status request
-		let response: any;
 		try {
-			response = await makeHttpRequest(context, {
+			const response = await makeHttpRequest(context, {
 				method: 'GET',
-				url: statusUrl,
+				url: `${baseUrl}${CONSTANTS.SUNO.FETCH_ENDPOINT}/${taskId}`,
 				credentials,
-				timeout: 10000,
-			});
-		} catch (error) {
-			context.logger?.warn(`[${logPrefix}] Poll request failed`, {
-				error: error instanceof Error ? error.message : String(error),
-				pollCount,
+				timeout: pollInterval,
+			}) as SunoFetchResponse;
+
+			// Log progress
+			context.logger?.debug('[Suno] Poll status', {
+				status: response.data.status,
 				elapsed: `${Math.floor(elapsed / 1000)}s`,
 			});
-			// Wait 10s before retry on error
-			await (context.helpers as any).wait(10000);
-			continue;
+
+			// Check for completion
+			if (response.data.status === CONSTANTS.SUNO.STATUS.SUCCESS) {
+				context.logger?.info('[Suno] Generation completed', {
+					taskId,
+					songCount: response.data.data.length,
+					duration: `${Math.floor(elapsed / 1000)}s`,
+				});
+				return response;
+			}
+
+			// Check for failure
+			if (response.data.status === CONSTANTS.SUNO.STATUS.FAILED) {
+				throw new MediaGenError(
+					`Generation failed: ${response.data.fail_reason || 'Unknown error'}`,
+					'GENERATION_FAILED'
+				);
+			}
+
+			// Still in progress, wait before next poll
+			await new Promise(resolve => setTimeout(resolve, pollInterval));
+		} catch (error) {
+			// If it's a MediaGenError, re-throw it
+			if (error instanceof MediaGenError) {
+				throw error;
+			}
+
+			// Log network errors but continue polling
+			context.logger?.warn('[Suno] Poll request failed', {
+				error: error instanceof Error ? error.message : String(error),
+				elapsed: `${Math.floor(elapsed / 1000)}s`,
+			});
+
+			// Wait before retry
+			await new Promise(resolve => setTimeout(resolve, pollInterval));
 		}
-
-		// Adapt Suno response format: { code: "success", data: { status: "SUCCESS" } }
-		// Extract status from data.status
-		const sunoStatus = response?.data?.status || response?.status;
-
-		// Log progress
-		console.log(`[${logPrefix}] Progress: ${sunoStatus} (${pollCount}, ${Math.floor(elapsed / 1000)}s)`);
-
-		// Check for success
-		if (sunoStatus === 'SUCCESS' || sunoStatus === 'success') {
-			return response; // Return full response for parsing by responseParsers
-		}
-
-		// Check for failure
-		if (sunoStatus === 'FAILED' || sunoStatus === 'failed') {
-			throw new MediaGenError(
-				`Task failed: ${response?.data?.fail_reason || sunoStatus}`,
-				'TASK_FAILED'
-			);
-		}
-
-		// Check if still processing
-		if (sunoStatus === 'IN_PROGRESS' || sunoStatus === 'processing' || sunoStatus === 'streaming') {
-			// Wait 10 seconds before next poll using n8n helper
-			await (context.helpers as any).wait(10000);
-			continue;
-		}
-
-		// Unknown status - wait 10s before retry
-		context.logger?.warn(`[${logPrefix}] Unknown status: ${sunoStatus}`, {
-			taskId,
-			pollCount,
-		});
-		await (context.helpers as any).wait(10000);
 	}
 
 	// Timeout

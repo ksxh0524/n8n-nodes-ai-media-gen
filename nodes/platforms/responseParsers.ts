@@ -213,208 +213,6 @@ export class ResponseParsers {
 	}
 
 	/**
-	 * Parses Suno response
-	 *
-	 * @param response - Raw API response
-	 * @returns Parsed media response
-	 */
-	static parseSunoResponse(response: unknown): ParsedMediaResponse {
-		// Log raw response
-		console.log('[Suno ResponseParser] Raw response:', JSON.stringify(response, null, 2));
-
-		if (!response || typeof response !== 'object') {
-			console.error('[Suno ResponseParser] Invalid response - not an object');
-			throw new MediaGenError('Invalid Suno response', 'API_ERROR');
-		}
-
-		const resp = response as Record<string, unknown>;
-
-		// Log response keys
-		console.log('[Suno ResponseParser] Response keys:', Object.keys(resp));
-
-		// Case 1: /suno/generate direct response
-		// Format: { id: "task-id", status: "submitted", clips: [{ id, status, audio_url, ... }] }
-		if (resp.clips && Array.isArray(resp.clips) && resp.clips.length > 0 && resp.id) {
-			const clips = resp.clips as Array<Record<string, unknown>>;
-			const taskId = resp.id as string; // Use top-level id for polling
-			console.log('[Suno ResponseParser] Got /suno/generate response with', clips.length, 'clips');
-
-			const firstClip = clips[0];
-			const songId = firstClip.id as string;
-			const status = firstClip.status as string;
-			const audioUrl = firstClip.audio_url as string;
-			const title = firstClip.title as string;
-
-			console.log('[Suno ResponseParser] Task info:', {
-				taskId,
-				songId,
-				status,
-				title,
-				hasAudioUrl: !!audioUrl,
-				audioUrl: audioUrl ? audioUrl.substring(0, 50) + '...' : '',
-			});
-
-			// If song is still processing (submitted, streaming, queued, processing)
-			if (status === 'submitted' || status === 'streaming' || status === 'queued' || status === 'processing' || status === 'pending') {
-				console.log('[Suno ResponseParser] Song is still processing:', status);
-				return {
-					metadata: {
-						taskId, // Use top-level id for polling
-						status: 'processing',
-						async: true,
-					},
-				};
-			}
-
-			// If song failed
-			if (status === 'failed' || status === 'error') {
-				throw new MediaGenError(
-					firstClip.error_message as string || 'Suno generation failed',
-					'MUSIC_GENERATION_FAILED'
-				);
-			}
-
-			// If song completed successfully with audio URL
-			if ((status === 'complete' || status === 'success' || status === 'succeeded') && audioUrl) {
-				console.log('[Suno ResponseParser] Song completed with audio URL:', audioUrl);
-				return {
-					audioUrl,
-					metadata: {
-						taskId,
-						status: 'succeeded',
-					},
-				};
-			}
-		}
-
-		// Case 2: /suno/fetch/{songid} response (polling)
-		// Format: { code: "success", data: { task_id, status: "SUCCESS", progress: "100%", data: [{ id, status: "complete", audio_url, ... }] } }
-		if (resp.code && resp.data && typeof resp.data === 'object') {
-			const code = resp.code as string;
-			const data = resp.data as Record<string, unknown>;
-			console.log('[Suno ResponseParser] Got /suno/fetch response, code:', code);
-
-			// Check for error response
-			if (code === 'error' || code === 'fail') {
-				throw new MediaGenError(
-					resp.message as string || 'Suno API returned error',
-					'API_ERROR'
-				);
-			}
-
-			// Only proceed if code is "success"
-			if (code !== 'success') {
-				console.log('[Suno ResponseParser] Unexpected code:', code, '- treating as async');
-				return {
-					metadata: {
-						async: true,
-					},
-				};
-			}
-
-			// Check outer status - if still processing, return async
-			const outerStatus = data.status as string;
-			console.log('[Suno ResponseParser] Outer status:', outerStatus);
-
-			if (outerStatus !== 'SUCCESS' && outerStatus !== 'success' && outerStatus !== 'succeeded') {
-				console.log('[Suno ResponseParser] Task still processing, outer status:', outerStatus);
-				return {
-					metadata: {
-						taskId: data.task_id as string,
-						status: outerStatus,
-						async: true,
-					},
-				};
-			}
-
-			// Check if data array exists
-			if (data.data && Array.isArray(data.data)) {
-				const songs = data.data as Array<Record<string, unknown>>;
-				console.log('[Suno ResponseParser] Got', songs.length, 'songs from /suno/fetch');
-
-				if (songs.length > 0) {
-					// Check if any song is still processing
-					const processingSongs = songs.filter(song => {
-						const status = song.status as string;
-						const state = song.state as string;
-						return (
-							status === 'streaming' ||
-							status === 'queued' ||
-							status === 'processing' ||
-							status === 'pending' ||
-							state === 'processing' ||
-							state === 'pending'
-						);
-					});
-
-					if (processingSongs.length > 0) {
-						// At least one song is still processing
-						return {
-							metadata: {
-								taskId: data.task_id as string,
-								status: 'processing',
-								async: true,
-							},
-						};
-					}
-
-					// Check if any song failed
-					const failedSongs = songs.filter(song => {
-						const status = song.status as string;
-						const state = song.state as string;
-						return status === 'failed' || status === 'error' || state === 'failed';
-					});
-
-					if (failedSongs.length > 0) {
-						throw new MediaGenError(
-							failedSongs[0].error_message as string || 'Suno generation failed',
-							'MUSIC_GENERATION_FAILED'
-						);
-					}
-
-					// Collect all completed songs with audio URLs
-					const completedSongs = songs.filter(song => {
-						const status = song.status as string;
-						const state = song.state as string;
-						const audioUrl = song.audio_url as string;
-						return (
-							audioUrl &&
-							(status === 'complete' || status === 'success' || status === 'succeeded' || state === 'succeeded')
-						);
-					});
-
-					if (completedSongs.length > 0) {
-						console.log('[Suno ResponseParser] Found', completedSongs.length, 'completed songs');
-
-						// Return all songs with their metadata
-						return {
-							audioUrls: completedSongs.map(song => ({
-								id: song.id as string,
-								audioUrl: song.audio_url as string,
-								title: song.title as string,
-								tags: song.tags as string,
-							})),
-							metadata: {
-								taskId: data.task_id as string,
-								status: 'succeeded',
-								count: completedSongs.length,
-							},
-						};
-					}
-				}
-			}
-		}
-
-		// Fallback - mark for polling
-		console.log('[Suno ResponseParser] Response unclear, marking as async');
-		return {
-			metadata: {
-				async: true,
-			},
-		};
-	}
-
-	/**
 	 * Generic response parser for unknown platforms
 	 *
 	 * Tries multiple strategies to extract media data
@@ -523,5 +321,33 @@ export class ResponseParsers {
 				);
 			}
 		}
+	}
+
+	/**
+	 * Parses Suno generate response
+	 *
+	 * @param response - Raw API response
+	 * @returns Parsed media response
+	 * @throws MediaGenError if response is invalid
+	 */
+	static parseSunoResponse(response: unknown): ParsedMediaResponse {
+		if (!response || typeof response !== 'object') {
+			throw new MediaGenError('Invalid Suno response', 'API_ERROR');
+		}
+
+		const resp = response as Record<string, unknown>;
+
+		// Check for task ID (async response)
+		if (resp.id && resp.status) {
+			return {
+				metadata: {
+					taskId: resp.id as string,
+					async: true,
+					status: resp.status as string,
+				},
+			};
+		}
+
+		throw new MediaGenError('Invalid Suno response: missing task ID', 'API_ERROR');
 	}
 }

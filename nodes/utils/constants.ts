@@ -226,3 +226,39 @@ export const DEFAULT_TIMEOUTS = {
 	VIDEO_DOWNLOAD: 120000,       // 2 minutes
 	AUDIO_DOWNLOAD: 60000,        // 1 minute
 } as const;
+
+/**
+ * Suno music generation constants
+ */
+export const SUNO = {
+	// Model information
+	MODEL_VERSION: 'chirp-crow',
+	MODEL_DISPLAY_NAME: 'v5',
+	MODEL_NAME: 'suno-v5',
+
+	// API endpoints
+	GENERATE_ENDPOINT: '/suno/generate',
+	FETCH_ENDPOINT: '/suno/fetch',
+
+	// Default base URL
+	DEFAULT_BASE_URL: 'https://api.sunoservice.org',
+
+	// Polling configuration (in milliseconds)
+	POLL_INTERVAL_MS: 10000,      // Check every 10 seconds
+
+	// Status values
+	STATUS: {
+		IN_PROGRESS: 'IN_PROGRESS',
+		SUCCESS: 'SUCCESS',
+		FAILED: 'FAILED',
+	} as const,
+
+	// Output modes
+	OUTPUT_MODE: {
+		URL: 'url',
+		BINARY: 'binary',
+	} as const,
+
+	// Song count
+	SONGS_PER_GENERATION: 2,
+} as const;

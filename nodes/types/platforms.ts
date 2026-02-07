@@ -210,42 +210,6 @@ export interface GeminiResponse {
 	}>;
 }
 
-// ============================================================================
-// Suno Platform
-// ============================================================================
-
-/**
- * Suno platform parameters
- */
-export interface SunoParams {
-	operation: 'suno';
-	model: string; // Model key, validated against SUNO_MODELS
-	prompt: string;
-	title?: string;
-	tags?: string;
-	makeInstrumental?: boolean;
-}
-
-/**
- * Suno request body
- */
-export interface SunoRequestBody {
-	prompt: string;
-	mv: string; // API model value (chirp-crow, chirp-bluejay, etc.)
-	title?: string;
-	tags?: string;
-	make_instrumental?: boolean;
-}
-
-/**
- * Suno task response
- */
-export interface SunoTaskResponse {
-	task_id: string;
-	status: 'queued' | 'processing' | 'succeeded' | 'failed';
-	audio_url?: string;
-	error?: string;
-}
 
 // ============================================================================
 // Union Types
@@ -312,7 +276,8 @@ export interface OpenAiCredentials {
 export type Credentials =
 	| ModelScopeCredentials
 	| GooglePalmCredentials
-	| OpenAiCredentials;
+	| OpenAiCredentials
+	| SunoCredentials;
 
 // ============================================================================
 // Parsed Response Types
@@ -330,6 +295,15 @@ export interface ParsedMediaResponse {
 		audioUrl: string;
 		title?: string;
 		tags?: string;
+	}>;
+	songs?: Array<{
+		id: string;
+		audioUrl: string;
+		videoUrl: string;
+		title: string;
+		tags: string;
+		duration: number;
+		imageUrl?: string;
 	}>;
 	base64Data?: string;
 	metadata?: Record<string, unknown>;
@@ -353,4 +327,89 @@ export interface TaskStatusResponse {
 	image_url?: string;
 	error?: string;
 	metadata?: Record<string, unknown>;
+}
+
+// ============================================================================
+// Suno Platform
+// ============================================================================
+
+/**
+ * Suno platform parameters
+ */
+export interface SunoParams {
+	operation: 'suno';
+	prompt: string;
+	title?: string;
+	tags?: string;
+}
+
+/**
+ * Suno API credentials
+ */
+export interface SunoCredentials {
+	apiKey: string;
+	baseUrl?: string;
+}
+
+/**
+ * Suno generate request body
+ */
+export interface SunoGenerateRequest {
+	prompt: string;
+	mv: string;
+	title?: string;
+	tags?: string;
+}
+
+/**
+ * Suno generate response (returns task ID)
+ */
+export interface SunoGenerateResponse {
+	clips: Array<{
+		id: string;
+		status: string;
+		audio_url: string;
+		video_url: string;
+		title: string;
+		tags: string;
+	}>;
+	id: string; // Task ID for polling
+	status: string;
+}
+
+/**
+ * Suno fetch response (polling result)
+ */
+export interface SunoFetchResponse {
+	code: string;
+	message: string;
+	data: {
+		task_id: string;
+		status: 'IN_PROGRESS' | 'SUCCESS' | 'FAILED';
+		fail_reason: string;
+		data: Array<{
+			id: string;
+			title: string;
+			tags: string;
+			duration: number;
+			audio_url: string;
+			video_url: string;
+			image_url: string;
+			state: string;
+			status: string;
+		}>;
+	};
+}
+
+/**
+ * Song data from Suno fetch response
+ */
+export interface SunoSongData {
+	id: string;
+	title: string;
+	tags: string;
+	duration: number;
+	audio_url: string;
+	video_url: string;
+	image_url: string;
 }

@@ -1,14 +1,13 @@
 import type { IExecuteFunctions, IHttpRequestOptions } from 'n8n-workflow';
+import * as CONSTANTS from '../utils/constants';
 import type {
 	ModelScopeParams,
 	DoubaoParams,
 	SoraParams,
 	VeoParams,
 	NanoBananaParams,
-	SunoParams,
 	Credentials,
 } from '../types/platforms';
-import { getSunoModelApiValue } from '../constants/sunoModels';
 
 /**
  * Platform-specific request builders
@@ -306,48 +305,30 @@ export class RequestBuilders {
 	 * @returns HTTP request options
 	 */
 	static buildSunoRequest(
-		context: IExecuteFunctions,
+		_context: IExecuteFunctions,
 		_itemIndex: number,
-		params: SunoParams,
+		params: { prompt: string; title?: string; tags?: string },
 		credentials: Credentials
 	): IHttpRequestOptions {
-		const { prompt, title, tags, makeInstrumental, model } = params;
-
-		// Get API value from model key
-		const apiModel = getSunoModelApiValue(model);
+		const { prompt, title, tags } = params;
+		const baseUrl = (credentials as { baseUrl?: string }).baseUrl || CONSTANTS.SUNO.DEFAULT_BASE_URL;
 
 		const body: Record<string, unknown> = {
 			prompt: prompt.trim(),
-			mv: apiModel,
-			title: title || '',
-			tags: tags || '',
-			continue_at: 0,
-			continue_clip_id: '',
-			make_instrumental: makeInstrumental || false,
+			mv: CONSTANTS.SUNO.MODEL_VERSION,
 		};
 
-		const baseUrl = (credentials as { baseUrl?: string }).baseUrl || 'https://api.sunoservice.org';
+		if (title && title.trim()) {
+			body.title = title.trim();
+		}
 
-		// Log request building details
-		context.logger?.debug('[Suno RequestBuilder] Building request', {
-			baseUrl,
-			endpoint: '/suno/generate',
-			model,
-			apiModel,
-			promptLength: prompt.length,
-			title,
-			tags,
-			makeInstrumental,
-		});
-
-		console.log('[Suno RequestBuilder] Building request');
-		console.log('Base URL:', baseUrl);
-		console.log('Full URL:', `${baseUrl}/suno/generate`);
-		console.log('Body keys:', Object.keys(body));
+		if (tags && tags.trim()) {
+			body.tags = tags.trim();
+		}
 
 		return {
 			method: 'POST' as const,
-			url: `${baseUrl}/suno/generate`,
+			url: `${baseUrl}${CONSTANTS.SUNO.GENERATE_ENDPOINT}`,
 			body,
 			headers: {
 				'Content-Type': 'application/json',

@@ -1,7 +1,4 @@
-import type {
-	ICredentialType,
-	INodeProperties,
-} from 'n8n-workflow';
+import { ICredentialType, INodeProperties } from 'n8n-workflow';
 
 export class sunoApi implements ICredentialType {
 	name = 'sunoApi';
@@ -26,8 +23,7 @@ export class sunoApi implements ICredentialType {
 			default: 'https://api.sunoservice.org',
 			required: false,
 			placeholder: 'https://api.sunoservice.org',
-			description:
-				'Custom base URL for third-party proxy services (optional)',
+			description: 'Custom base URL for Suno API (optional)',
 		},
 	];
 }

@@ -32,7 +32,6 @@ export {
 	pollModelScopeTask,
 	pollSoraTask,
 	pollReplicateTask,
-	pollSunoTask,
 	type PollingOptions,
 	type TaskStatusResponse,
 } from './polling';

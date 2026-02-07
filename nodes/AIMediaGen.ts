@@ -7,7 +7,6 @@ import {
 import * as CONSTANTS from './utils/constants';
 import { MediaGenExecutor } from './utils/mediaGenExecutor';
 import { initializeStrategies } from './platforms/strategies';
-import { getSunoModelOptions, DEFAULT_SUNO_MODEL } from './constants/sunoModels';
 
 export class AIMediaGen implements INodeType {
 	description: INodeTypeDescription = {
@@ -807,54 +806,50 @@ export class AIMediaGen implements INodeType {
 			required: true,
 			description: 'Choose how to receive the generated video',
 		},
-		// Suno - Title
+		// Suno - Song Title
 		{
-			displayName: 'Title',
+			displayName: 'Song Title',
 			name: 'sunoTitle',
 			type: 'string',
 			default: '',
-			displayOptions: { show: { operation: ['suno'] } },
-			description: 'Song title (optional)',
+			placeholder: 'Optional: Give your song a title',
+			description: 'Optional title for the generated song',
+			displayOptions: {
+				show: {
+					operation: ['suno'],
+				},
+			},
 		},
-		// Suno - Tags
+		// Suno - Style Tags
 		{
 			displayName: 'Style Tags',
 			name: 'sunoTags',
 			type: 'string',
 			default: '',
-			placeholder: 'pop, upbeat, romantic',
-			displayOptions: { show: { operation: ['suno'] } },
-			description: 'Music style/genre tags',
+			placeholder: 'e.g., pop, upbeat, summer',
+			description: 'Comma-separated style tags for the music (optional)',
+			displayOptions: {
+				show: {
+					operation: ['suno'],
+				},
+			},
 		},
 		// Suno - Prompt
 		{
-			displayName: 'Prompt / Lyrics',
+			displayName: 'Prompt',
 			name: 'sunoPrompt',
 			type: 'string',
-			typeOptions: { rows: 8 },
+			typeOptions: {
+				rows: 5,
+			},
 			default: '',
 			required: true,
-			displayOptions: { show: { operation: ['suno'] } },
-			description: 'Song lyrics or music description',
-		},
-		// Suno - Instrumental
-		{
-			displayName: 'Instrumental Only',
-			name: 'sunoMakeInstrumental',
-			type: 'boolean',
-			default: false,
-			displayOptions: { show: { operation: ['suno'] } },
-			description: 'Generate music without vocals',
-		},
-		// Suno - Model Version
-		{
-			displayName: 'Model Version',
-			name: 'sunoModel',
-			type: 'options',
-			default: DEFAULT_SUNO_MODEL,
-			options: getSunoModelOptions(),
-			displayOptions: { show: { operation: ['suno'] } },
-			description: 'Suno model version to use',
+			description: 'Describe the music you want to generate (e.g., "An upbeat pop song about summer adventures")',
+			displayOptions: {
+				show: {
+					operation: ['suno'],
+				},
+			},
 		},
 		// Prompt - shown for all models
 		{
@@ -964,8 +959,8 @@ export class AIMediaGen implements INodeType {
 				},
 			},
 		},
-			// Options
-			{
+		// Options
+		{
 				displayName: 'Options',
 				name: 'options',
 				type: 'collection',
@@ -1017,11 +1012,29 @@ export class AIMediaGen implements INodeType {
 							},
 						},
 					},
-				],
-			},
-		],
-	};
-
+				{
+					displayName: 'Test Mode',
+					name: 'testMode',
+					type: 'boolean',
+					default: false,
+					description: 'Enable test mode to return mock data without making real API calls',
+				},
+				{
+					displayName: 'Test Task ID',
+					name: 'testId',
+					type: 'string',
+					default: 'test-mock-data-id',
+					placeholder: 'Enter a test ID for mock data identification',
+					description: 'Test ID to identify mock data responses (only used in test mode)',
+					displayOptions: {
+						show: {
+							testMode: [true],
+						},
+					},
+				},
+			],
+		},
+	];
 	/**
 	 * Executes the AI media generation node
 	 *
@@ -1036,6 +1049,24 @@ export class AIMediaGen implements INodeType {
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
 		const items = this.getInputData();
 		const results: INodeExecutionData[] = [];
+
+		// Check if test mode is enabled
+		let testMode = false;
+		let testId = 'test-mock-data-id';
+		try {
+			testMode = this.getNodeParameter('options.testMode', CONSTANTS.INDICES.FIRST_ITEM) as boolean;
+			if (testMode) {
+				testId = this.getNodeParameter('options.testId', CONSTANTS.INDICES.FIRST_ITEM) as string;
+			}
+		} catch (error) {
+			// Test mode not configured, use default
+		}
+
+		// If test mode is enabled, return mock data
+		if (testMode) {
+			this.logger?.info('Test mode enabled, returning mock data', { testId });
+			return [await this.getMockData(testId, items.length)];
+		}
 
 		// Initialize platform strategies (once per node execution)
 		initializeStrategies();
@@ -1081,7 +1112,7 @@ export class AIMediaGen implements INodeType {
 				} else if (operation === 'veo') {
 					model = this.getNodeParameter('veoModel', i) as string;
 				} else if (operation === 'suno') {
-					model = 'chirp-crow';
+					model = CONSTANTS.SUNO.MODEL_NAME;
 				} else {
 					model = this.getNodeParameter('model', i) as string;
 				}
@@ -1106,5 +1137,123 @@ export class AIMediaGen implements INodeType {
 
 
 		return [this.helpers.constructExecutionMetaData(results, { itemData: { item: 0 } })];
+	}
+
+	/**
+	 * Generates mock data for test mode
+	 *
+	 * @param testId - Test ID to identify the mock response
+	 * @param itemCount - Number of mock items to generate
+	 * @returns Array of mock execution data
+	 */
+	private async getMockData(testId: string, itemCount: number): Promise<INodeExecutionData[]> {
+		const mockResults: INodeExecutionData[] = [];
+
+		// Generate mock data for each item
+		for (let i = 0; i < itemCount; i++) {
+			const mockData: INodeExecutionData = {
+				json: {
+					testMode: true,
+					testId,
+					timestamp: new Date().toISOString(),
+					message: 'This is mock data from test mode - no API call was made',
+				},
+			};
+
+			// Add different mock data based on testId prefix
+			if (testId.includes('suno')) {
+				// Suno mock data
+				mockData.json = {
+					...mockData.json,
+					model: CONSTANTS.SUNO.MODEL_NAME,
+					provider: 'suno',
+					mediaType: 'audio',
+					songCount: 2,
+					songs: [
+						{
+							id: `mock-song-1-${testId}`,
+							audioUrl: 'https://mock-suno-api.song1.mp3',
+							videoUrl: 'https://mock-suno-api.video1.mp4',
+							title: 'Mock Song 1 (Test Mode)',
+							tags: 'mock, test, demo',
+							duration: 180.5,
+							imageUrl: 'https://mock-suno-api.cover1.jpg',
+						},
+						{
+							id: `mock-song-2-${testId}`,
+							audioUrl: 'https://mock-suno-api.song2.mp3',
+							videoUrl: 'https://mock-suno-api.video2.mp4',
+							title: 'Mock Song 2 (Test Mode)',
+							tags: 'mock, test, demo',
+							duration: 165.3,
+							imageUrl: 'https://mock-suno-api.cover2.jpg',
+						},
+					],
+				};
+			} else if (testId.includes('sora')) {
+				// Sora mock data
+				mockData.json = {
+					...mockData.json,
+					model: 'sora-2',
+					provider: 'sora',
+					mediaType: 'video',
+					videoUrl: `https://mock-sora-api/video-${testId}.mp4`,
+					taskId: `mock-task-${testId}`,
+					status: 'SUCCESS',
+				};
+			} else if (testId.includes('veo')) {
+				// Veo mock data
+				mockData.json = {
+					...mockData.json,
+					model: 'veo-2.0',
+					provider: 'veo',
+					mediaType: 'video',
+					videoUrl: `https://mock-veo-api/video-${testId}.mp4`,
+					taskId: `mock-task-${testId}`,
+					status: 'COMPLETED',
+				};
+			} else if (testId.includes('modelscope')) {
+				// ModelScope mock data
+				mockData.json = {
+					...mockData.json,
+					model: 'Tongyi-MAI/Z-Image',
+					provider: 'modelScope',
+					mediaType: 'image',
+					imageUrl: `https://mock-modelscope-api/image-${testId}.png`,
+					taskId: `mock-task-${testId}`,
+				};
+			} else if (testId.includes('doubao')) {
+				// Doubao mock data
+				mockData.json = {
+					...mockData.json,
+					model: 'doubao-seedream-4-5-251128',
+					provider: 'doubao',
+					mediaType: 'image',
+					imageUrl: `https://mock-doubao-api/image-${testId}.png`,
+				};
+			} else if (testId.includes('nano')) {
+				// Nano Banana mock data
+				mockData.json = {
+					...mockData.json,
+					model: 'nano-banana-2',
+					provider: 'nanoBanana',
+					mediaType: 'image',
+					imageUrl: `data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==`, // 1x1 transparent PNG
+				};
+			} else {
+				// Generic mock data
+				mockData.json = {
+					...mockData.json,
+					model: 'mock-model',
+					provider: 'mock-provider',
+					mediaType: 'unknown',
+					data: `Mock data for test ID: ${testId}`,
+				};
+			}
+
+			mockResults.push(mockData);
+		}
+
+		return mockResults;
 	}
 }
